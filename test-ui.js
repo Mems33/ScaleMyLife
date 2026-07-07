@@ -1,0 +1,429 @@
+/* End-to-end UI smoke test: load index.html in jsdom and click through everything */
+var fs = require('fs');
+var path = require('path');
+var { JSDOM } = require('jsdom');
+
+var html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
+var core = fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8');
+// inline core.js so it loads under the https test origin
+html = html.replace('<script src="core.js"></script>', '<script>' + core + '</script>');
+
+var passed = 0, failed = 0;
+function ok(cond, name) {
+  if (cond) { passed++; console.log('  ✓ ' + name); }
+  else { failed++; console.log('  ✗ FAIL: ' + name); }
+}
+
+var errors = [];
+var dom = new JSDOM(html, {
+  url: 'https://localhost/liferpg/',
+  runScripts: 'dangerously',
+  resources: 'usable',
+  pretendToBeVisual: true,
+  beforeParse: function (window) {
+    window.confirm = function () { return true; };
+    window.prompt = function () { return 'French'; };
+    window.onerror = function (msg) { errors.push(String(msg)); };
+    // jsdom lacks URL.createObjectURL
+    window.URL.createObjectURL = function () { return 'blob:mock'; };
+  }
+});
+
+setTimeout(function () {
+  var w = dom.window, d = w.document;
+
+  console.log('\nBoot & onboarding');
+  ok(errors.length === 0, 'no JS errors on load' + (errors.length ? ' -> ' + errors[0] : ''));
+  ok(!!d.querySelector('#modal.show'), 'tutorial modal shows on first run');
+  ok(d.querySelector('.tdots') !== null, 'tutorial step dots visible');
+  ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'skip button offered');
+  w.tut(1); w.tut(2); w.tut(3);
+  ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last step leads to hero creation');
+  w.tutSkip();
+  ok(d.querySelector('#obName') !== null, 'skip lands on character creation');
+  d.querySelector('#obName').value = 'Alp';
+  w.createHero();
+  ok(w.state && w.state.hero.name === 'Alp', 'hero created');
+  ok(d.querySelector('#hud').textContent.indexOf('Alp') >= 0, 'HUD shows hero name');
+  ok(d.querySelector('#hud').textContent.indexOf('LV.1') >= 0, 'HUD shows level 1');
+  ok(w.localStorage.getItem('liferpg.save.v1') !== null, 'save written to localStorage');
+  ok(d.querySelectorAll('.skillcard').length === 5, '5 skill cards rendered');
+
+  console.log('\nToday tab (default home)');
+  ok(w.tab === 'today', 'app opens on the Today tab');
+  ok(d.querySelector('.todayhead') !== null, 'today header renders');
+  ok(d.querySelector('#view').textContent.indexOf('Daily quests') >= 0 && d.querySelector('#view').textContent.indexOf('Habits to check') >= 0, 'dailies and habit checks merged in one view');
+  ok(d.querySelector('.chestchip') !== null, 'chest chip visible on today');
+  var th = w.state.habits.find(function (x) { return x.type === 'good'; });
+  w.doHabit(th.id);
+  ok(d.querySelector('#view .hd.on') !== null, 'habit check from today lights a dot');
+
+  console.log('\nQuests tab');
+  w.go('quests');
+  ok(d.querySelectorAll('#view .item').length >= 2, 'seed quests visible');
+  d.querySelector('#qTitle').value = 'Test the app';
+  d.querySelector('#qDiff').value = 'epic';
+  w.addQuest();
+  var found = null;
+  d.querySelectorAll('#view .item .title').forEach(function (t) { if (t.textContent === 'Test the app') found = t; });
+  ok(!!found, 'new quest appears in list');
+  var q = w.state.quests.find(function (x) { return x.title === 'Test the app'; });
+  var xpBefore = w.state.hero.xp, lvBefore = w.state.hero.level;
+  w.doQuest(q.id);
+  ok(w.state.hero.level > lvBefore || w.state.hero.xp > xpBefore, 'quest completion granted XP');
+  ok(d.querySelectorAll('#toasts .toast').length > 0 || d.querySelector('#overlay.show'), 'feedback shown (toast or level-up)');
+  if (d.querySelector('#overlay.show')) { w.closeOverlay(); }
+  ok(!d.querySelector('#overlay.show'), 'overlay closes');
+
+  // goals
+  d.querySelector('#gTitle').value = 'Ship v1';
+  w.addGoal();
+  ok(d.querySelector('#view').textContent.indexOf('Ship v1') >= 0, 'main quest card rendered');
+  var g = w.state.goals[0];
+  var coinsB = w.state.hero.coins;
+  w.doGoal(g.id);
+  ok(w.state.hero.coins === coinsB + 150 || w.state.hero.coins > coinsB, 'goal completion paid coins');
+
+  console.log('\nHabits tab');
+  w.go('habits');
+  ok(d.querySelector('#view').textContent.indexOf('Grow') >= 0, 'habits tab renders');
+  var good = w.state.habits.filter(function (h) { return h.type === 'good'; })[1];
+  w.doHabit(good.id);
+  ok(good.streak === 1, 'good habit checked, streak 1');
+  ok(d.querySelector('#view').textContent.indexOf('✓ today') >= 0, 'UI marks habit done today');
+  var bad = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  var hpB = w.state.hero.hp;
+  w.slip(bad.id);
+  ok(w.state.hero.hp === Math.max(0, hpB - 12) || w.state.hero.hp === 25, 'slip damaged HP');
+  d.querySelector('#hbTitle').value = 'Snoozing alarm';
+  w.addHabit('bad');
+  ok(w.state.habits.some(function (h) { return h.title === 'Snoozing alarm'; }), 'new monster added');
+
+  console.log('\nMarket tab');
+  w.go('market');
+  w.state.hero.coins = 200; w.render();
+  var buyable = w.state.shop.find(function (i) { return i.tab === 'market'; });
+  var cB = w.state.hero.coins;
+  w.buy(buyable.id);
+  ok(w.state.hero.coins === cB - buyable.price, 'purchase deducted coins');
+  w.shopTab = 'hotel'; w.render();
+  ok(d.querySelector('#view').textContent.indexOf('restores') >= 0, 'hotel items show HP restore');
+  w.state.hero.hp = 40;
+  var nap = w.state.shop.find(function (i) { return i.tab === 'hotel'; });
+  w.buy(nap.id);
+  ok(w.state.hero.hp > 40, 'hotel purchase healed HP');
+  w.state.hero.coins = 0; w.render();
+  var anyBuy = d.querySelector('#view .btn.buy[disabled]');
+  ok(!!anyBuy, 'buy buttons disabled when broke');
+  w.state.hero.coins = 100;
+
+  console.log('\nJournal tab');
+  w.go('journal');
+  w.pendingMood = 'good';
+  d.querySelector('#jNote').value = 'built my own life rpg';
+  w.saveJournal();
+  ok(!!w.state.journal[w.RPG.todayKey()], 'journal entry saved');
+  ok(d.querySelector('#view').textContent.indexOf('saved ✓') >= 0, 'journal shows saved state');
+  d.querySelector('#slHours').value = '8';
+  w.pendingQuality = 4;
+  var hpJ = w.state.hero.hp;
+  w.saveSleep();
+  ok(!!w.state.sleep[w.RPG.todayKey()], 'sleep logged');
+  ok(w.state.hero.hp >= hpJ, 'sleep healed or kept HP');
+
+  console.log('\nAdventure log (in stats tab)');
+  w.go('stats');
+  var logText = d.querySelector('#view').textContent;
+  ok(logText.indexOf('TODAY') >= 0, 'log grouped by day');
+  ok(logText.indexOf('Test the app') >= 0, 'quest completion in adventure log');
+  ok(logText.indexOf('Bought') >= 0, 'purchase in adventure log');
+
+  console.log('\nSkills & settings');
+  w.openSkillModal();
+  ok(!!d.querySelector('#modal.show') && d.querySelector('#skName') !== null, 'skill modal opens');
+  d.querySelector('#skName').value = 'French';
+  d.querySelector('#skIcon').value = '🇫🇷';
+  w.saveSkill();
+  var fr = w.state.skills.find(function (s) { return s.name === 'French'; });
+  ok(!!fr && fr.icon === '🇫🇷', 'life area created with custom emoji');
+  w.openSettings();
+  ok(!!d.querySelector('#modal.show'), 'settings modal opens');
+  w.closeModal();
+  w.openCharacter();
+  d.querySelector('#chName').value = 'Mehmet';
+  w.saveCharacter();
+  ok(w.state.hero.name === 'Mehmet', 'hero renamed via character modal');
+
+  console.log('\nPersistence across reload');
+  var saved = w.localStorage.getItem('liferpg.save.v1');
+  var reloaded = JSON.parse(saved);
+  ok(reloaded.hero.name === 'Mehmet' && reloaded.quests.length === w.state.quests.length, 'full state persisted');
+
+
+  console.log('\nFocus tab (pomodoro)');
+  w.go('focus');
+  ok(d.querySelector('#view').textContent.indexOf('Focus') >= 0, 'focus tab renders');
+  ok(d.querySelector('#view').textContent.indexOf('50 / 10') >= 0, 'mode chips visible');
+  d.querySelector('#fLabel').value = 'essay draft';
+  w.focusMode = { work: 25, brk: 5 };
+  w.render();
+  d.querySelector('#fLabel').value = 'essay draft';
+  w.startFocus();
+  ok(!!w.state.activeFocus && w.state.activeFocus.work === 25 && w.state.activeFocus.brk === 5, 'pomodoro started from UI');
+  ok(d.querySelector('#countdown') !== null, 'countdown visible');
+  ok(d.querySelector('.phase.work') !== null, 'work phase banner shown');
+  // fast-forward into break
+  w.state.activeFocus.phaseEnd = Date.now() - 10;
+  w.checkFocus();
+  ok(w.state.activeFocus.phase === 'break', 'ticker flipped to break');
+  ok(d.querySelector('.campfire') !== null, 'campfire break animation renders');
+  ok(d.querySelector('.phase.brk') !== null, 'break banner shown');
+  // skip break back to work
+  w.skipBreak();
+  ok(w.state.activeFocus.phase === 'work', 'skip break returns to work');
+  // add more worked time and stop & collect
+  w.state.activeFocus.workedMs = 40 * 60000;
+  w.stopFocus();
+  ok(w.state.activeFocus === null, 'stop clears session');
+  ok(w.state.counters.focusMin >= 40, 'worked minutes credited on stop (' + w.state.counters.focusMin + ')');
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+
+  console.log('\nDaily chest (v2)');
+  w.go('quests');
+  ok(d.querySelector('.chestchip') !== null, 'chest chip visible');
+  var today = w.RPG.todayKey();
+  w.state.quests.filter(function (q) { return q.recurring; }).forEach(function (q) {
+    if (q.doneOn !== today) w.doQuest(q.id);
+  });
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(w.A.chestStatus(w.state).eligible === true, 'chest eligible after all dailies');
+  ok(d.querySelector('.chestchip.ready') !== null, 'chest chip glows ready');
+  w.claimChest();
+  ok(w.state.counters.chests === 1, 'chest claimed from UI');
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(d.querySelector('.chestchip.claimed') !== null, 'chest chip shows claimed');
+
+  console.log('\nPresets (v2)');
+  var qCount = w.state.quests.length;
+  w.usePreset('quest', 0);
+  ok(w.state.quests.length === qCount + 1, 'quest preset one-tap adds');
+  w.usePreset('quest', 0);
+  ok(w.state.quests.length === qCount + 1, 'duplicate preset ignored');
+  w.go('market');
+  var sCount = w.state.shop.length;
+  w.usePreset('shop', 0);
+  ok(w.state.shop.length === sCount + 1 || w.state.shop.some(function(i){return i.title==='Gaming: 1 hour';}), 'shop preset adds gaming reward');
+  w.go('habits');
+  var hCount = w.state.habits.length;
+  w.usePreset('bad', 0);
+  ok(w.state.habits.some(function (h) { return h.title === 'Instagram before 1 PM'; }), 'monster preset added');
+
+  console.log('\nStats tab (v2)');
+  w.go('stats');
+  var sv = d.querySelector('#view').textContent;
+  ok(sv.indexOf('Week in review') >= 0, 'week review renders');
+  ok(d.querySelectorAll('.chart .col').length === 7, '7-day XP chart renders');
+  ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'all achievements shown');
+  ok(d.querySelectorAll('.ach.unlocked').length >= 1, 'at least one achievement unlocked (first_blood)');
+  ok(sv.indexOf('Adventure log') >= 0 && sv.indexOf('Focus session') >= 0, 'log includes focus session');
+
+  console.log('\nSound toggle (v2)');
+  w.openSettings();
+  var before = w.state.settings.sound;
+  w.toggleSound();
+  ok(w.state.settings.sound === !before, 'sound toggles and persists');
+  w.closeModal();
+
+  console.log('\nQuest layout (main-first)');
+  w.go('quests');
+  var panels = d.querySelectorAll('#view .panel');
+  ok(panels[0] && panels[0].textContent.indexOf('Main quests') >= 0, 'main quests panel is first');
+  d.querySelector('#gTitle').value = 'Pass code de la route';
+  w.addGoal();
+  var goal = w.state.goals.find(function (g) { return g.title === 'Pass code de la route'; });
+  ok(d.querySelector('.goal') !== null, 'goal card rendered');
+  d.querySelector('#step_' + goal.id).value = 'Serie de tests 1';
+  w.addStep(goal.id);
+  ok(w.state.quests.some(function (q) { return q.main === goal.id && q.title === 'Serie de tests 1'; }), 'step added inside goal card');
+  ok(d.querySelector('.step') !== null, 'nested step visible in goal card');
+  var step = w.state.quests.find(function (q) { return q.main === goal.id; });
+  w.doQuest(step.id);
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(d.querySelector('.goal .pct').textContent.indexOf('1 / 1') >= 0, 'goal progress updates from step');
+  ok(d.querySelector('#view').textContent.indexOf('Export due dates') >= 0, 'ICS export button present');
+  // ICS export with a due-dated quest
+  w.state.quests.push({ id: 'icsq', title: 'Due thing', diff: 'easy', skillId: null, due: '2026-08-01', recurring: false, main: null, doneOn: null, createdOn: w.RPG.todayKey() });
+  var icsStr = w.RPG.buildICS(w.state);
+  ok(icsStr && icsStr.indexOf('Due thing') > 0, 'buildICS reachable from app with due quests');
+
+  console.log('\nRank-up celebration');
+  var lvBeforeRank = w.state.hero.level;
+  w.state.hero.level = 4;
+  w.state.hero.xp = w.RPG.xpForLevel(4) - 1;
+  var rq2 = w.A.addQuest(w.state, { title: 'rank trigger', diff: 'easy' });
+  w.doQuest(rq2.id);
+  ok(w.state.hero.level === 5, 'crossed into level 5');
+  var ovl = d.querySelector('#overlay.show');
+  ok(ovl && ovl.textContent.indexOf('RANK UP') >= 0, 'rank-up overlay shows');
+  ok(d.querySelector('.rankbig') !== null && d.querySelector('.rankbig').textContent === 'D', 'big rank letter D displayed');
+  w.closeOverlay();
+
+  console.log('\nCharacter customization');
+  w.openCharacter();
+  ok(!!d.querySelector('#modal.show'), 'character modal opens');
+  d.querySelector('#chName').value = 'Mehmet';
+  d.querySelector('#chTitle').value = 'Essay Slayer';
+  d.querySelector('#chCustomAv').value = '🚀';
+  w.saveCharacter();
+  ok(w.state.hero.name === 'Mehmet' && w.state.hero.title === 'Essay Slayer' && w.state.hero.avatar === '🚀', 'name, title, custom emoji saved');
+  ok(d.querySelector('#hud').textContent.indexOf('Essay Slayer') >= 0, 'title shown in HUD');
+  w.openCharacter();
+  w.setTheme('synthwave');
+  ok(w.state.settings.theme === 'synthwave', 'theme persisted');
+  ok(d.documentElement.style.getPropertyValue('--gold') === '#ff5fa2', 'theme CSS variables applied');
+  w.setTheme('dungeon');
+  w.saveCharacter();
+
+  console.log('\nBranding');
+  ok(d.title === 'ScaleMyLife', 'page titled ScaleMyLife');
+  ok(d.querySelector('.logo').textContent.indexOf('SCALE') >= 0, 'logo bar present');
+
+  console.log('\nHeader, bars & tab hierarchy');
+  ok(d.querySelector('.logo').textContent.indexOf('SCALE MY LIFE') >= 0, 'title centered header present');
+  ok(d.querySelector('.logo').textContent.indexOf('\u2694') < 0, 'swords removed from title');
+  ok(d.querySelector('.logo .gear') !== null, 'settings gear lives in header');
+  ok(d.querySelector('#hud .gear') === null, 'gear no longer overlaps HUD level display');
+  ok(d.querySelectorAll('.tabs button').length === 7, 'seven tabs incl. TODAY');
+  ok(d.querySelectorAll('.tabs button.pri').length === 3, 'today/quests/habits marked primary by color');
+  ok(d.querySelector('.tabs button.big') === null, 'no size-based tab tiers anymore');
+  ok(d.querySelector('.tabs button').textContent.indexOf('TODAY') >= 0, 'TODAY is the first tab');
+
+  console.log('\nHabit dots & records');
+  w.go('habits');
+  ok(d.querySelector('.hdots') !== null, '7-day dot chain renders');
+  ok(d.querySelector('.hd.on') !== null, 'today\'s check-in shows as a lit dot');
+  var mon = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  ok(d.querySelector('#view').textContent.indexOf('best:') >= 0, 'monster best record shown');
+
+  console.log('\nBlack market rework');
+  w.go('market');
+  w.shopTab = 'black'; w.render();
+  ok(d.querySelector('#view').textContent.indexOf('costs coins AND HP') >= 0, 'new black market blurb');
+  ok(d.querySelector('#sDmg') !== null, 'HP-cost input in black tab form');
+  w.usePreset('shop', 0);
+  var sinItem = w.state.shop.find(function (i) { return i.tab === 'black' && i.dmg > 0; });
+  ok(!!sinItem, 'black preset carries HP cost');
+  w.state.hero.coins = 500;
+  var hpB2 = w.state.hero.hp = 60;
+  w.render();
+  w.buy(sinItem.id);
+  ok(w.state.hero.hp === hpB2 - sinItem.dmg, 'black purchase damaged HP in UI flow');
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(d.querySelector('#view').textContent.indexOf('costs −') >= 0, 'HP cost displayed on item');
+  w.shopTab = 'market'; w.render();
+
+  console.log('\nAgenda & promote');
+  w.go('quests');
+  function dOffU(n) { var dt = new Date(); dt.setDate(dt.getDate() + n); return w.RPG.todayKey(dt); }
+  w.A.addQuest(w.state, { title: 'Overdue task', diff: 'easy', due: dOffU(-1) });
+  w.A.addQuest(w.state, { title: 'Later task', diff: 'easy', due: dOffU(12) });
+  w.render();
+  ok(d.querySelector('#view').textContent.indexOf('Deadlines') >= 0, 'deadlines panel renders');
+  ok(d.querySelector('.ag.overdue') !== null, 'overdue task highlighted');
+  ok(d.querySelector('#view').textContent.indexOf('OVERDUE') >= 0 && d.querySelector('#view').textContent.indexOf('LATER') >= 0, 'urgency groups shown');
+  var loose = w.A.addQuest(w.state, { title: 'Promote me', diff: 'normal' });
+  w.render();
+  w.promoteQ(loose.id);
+  ok(w.state.goals.some(function (g) { return g.title === 'Promote me'; }), 'side quest promoted to main quest from UI');
+  ok(d.querySelector('#view').textContent.indexOf('Promote me') >= 0, 'promoted goal visible in main quests');
+  w.go('today');
+  ok(d.querySelector('#view').textContent.indexOf('Due now') >= 0, 'today tab surfaces overdue work');
+
+  console.log('\nWeekly-target habits UI');
+  w.go('habits');
+  ok(d.querySelector('#hgTarget') !== null, 'frequency select in habit form');
+  d.querySelector('#hgTitle').value = 'Gym session';
+  d.querySelector('#hgTarget').value = '3';
+  w.addHabit('good');
+  var gymH = w.state.habits.find(function (h) { return h.title === 'Gym session'; });
+  ok(gymH.target === 3, 'weekly target saved from form');
+  w.doHabit(gymH.id);
+  ok(d.querySelector('#view').textContent.indexOf('1/3 this wk') >= 0, 'week progress shown on habit row');
+
+  console.log('\nWounded & shield UI');
+  w.state.hero.hp = 5;
+  var mon2 = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  w.slip(mon2.id);
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(w.state.hero.woundedOn === w.RPG.todayKey(), 'KO wounds the hero');
+  ok(d.querySelector('#hud').textContent.indexOf('wounded') >= 0, 'wounded status in HUD');
+  w.go('today');
+  ok(d.querySelector('.woundbar') !== null, 'today tab explains the wound');
+  w.state.hero.woundedOn = null;
+  w.go('market');
+  w.usePreset('shop', 0); // streak shield preset
+  var shieldItem = w.state.shop.find(function (i) { return i.special === 'shield'; });
+  ok(!!shieldItem, 'streak shield stocked from preset');
+  w.state.hero.coins = 300; w.render();
+  w.buy(shieldItem.id);
+  ok(w.state.hero.shields === 1, 'shield equipped via UI');
+  ok(d.querySelector('#hud').textContent.indexOf(String.fromCodePoint(0x1F6E1)) >= 0, 'shield icon in HUD');
+
+  console.log('\nTutorial replay');
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Tutorial') >= 0, 'tutorial replay in settings');
+  w.tut(0);
+  ok(d.querySelector('.tdots') !== null, 'tutorial replays');
+  w.tut(3);
+  ok(d.querySelector('#modal').textContent.indexOf('Done') >= 0, 'replay ends with Done when hero exists');
+  w.tutSkip();
+  ok(d.querySelector('#modal.show') === null, 'tutorial closes back to app');
+
+  console.log('\nWeekly boss UI');
+  w.go('quests');
+  ok(d.querySelector('.boss') !== null, 'boss strip renders above main quests');
+  ok(d.querySelector('#view .boss') === d.querySelector('#view').firstElementChild, 'boss strip is the first element');
+  d.querySelector('#bossTitle').value = 'Slay the essay';
+  w.setBoss();
+  ok(w.state.boss && w.state.boss.title === 'Slay the essay', 'boss named from UI');
+  ok(d.querySelector('#view').textContent.indexOf('WEEKLY BOSS') >= 0, 'active boss displayed');
+  w.go('today');
+  ok(d.querySelector('.bosschip') !== null, 'boss chip on today tab');
+  w.go('quests');
+  w.slayBoss(); // confirm mocked true
+  ok(w.state.counters.bosses === 1 && w.state.boss === null, 'boss slain from UI');
+  var ovl2 = d.querySelector('#overlay.show');
+  ok(ovl2 && ovl2.textContent.indexOf('BOSS SLAIN') >= 0, 'kill screen shows');
+  w.closeOverlay();
+
+  console.log('\nTitle unlocks');
+  w.openCharacter();
+  ok(d.querySelector('.titlechips') !== null, 'unlocked title chips in character modal');
+  var chipBtn = d.querySelector('.titlechips button');
+  ok(!!chipBtn, 'at least one earned title available');
+  var dragon = w.state.achievements.some(function (u) { return u.id === 'boss_1'; });
+  ok(dragon && d.querySelector('.titlechips').textContent.indexOf('Dragonheart') >= 0, 'Dragonheart wearable after boss kill');
+  w.wearTitle('boss_1');
+  ok(d.querySelector('#chTitle').value === 'Dragonheart', 'tapping a chip fills the title');
+  w.saveCharacter();
+  ok(w.state.hero.title === 'Dragonheart', 'earned title equipped');
+  ok(d.querySelector('#hud').textContent.indexOf('Dragonheart') >= 0, 'title shows in HUD');
+
+  console.log('\nPWA wiring');
+  ok(d.querySelector('link[rel=manifest]') !== null, 'manifest linked');
+  ok(d.querySelector('meta[name=theme-color]') !== null, 'theme color set');
+  ok(d.querySelector('link[rel=apple-touch-icon]') !== null, 'apple touch icon set');
+  var fs2 = require('fs');
+  ok(fs2.existsSync(__dirname + '/manifest.json') && fs2.existsSync(__dirname + '/sw.js'), 'manifest & service worker files exist');
+  var man = JSON.parse(fs2.readFileSync(__dirname + '/manifest.json', 'utf8'));
+  ok(man.name === 'ScaleMyLife' && man.display === 'standalone' && man.icons.length === 2, 'manifest well-formed');
+  ok(fs2.existsSync(__dirname + '/icon-192.png') && fs2.existsSync(__dirname + '/icon-512.png'), 'icons exist');
+  var appSrc = fs2.readFileSync(__dirname + '/index.html', 'utf8');
+  ok(appSrc.indexOf("serviceWorker' in navigator") > 0 && appSrc.indexOf("location.protocol==='https:'") > 0, 'SW registers only when hosted');
+
+  console.log('\nRuntime errors during session: ' + errors.length);
+  ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
+
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed ? 1 : 0);
+}, 600);
