@@ -34,7 +34,16 @@ Work earns coins, coins buy pleasures. A solid day (dailies + habits + 2 focus b
 
 ## Files
 
-`index.html` (app) · `core.js` (engine) · `test.js` + `test-ui.js` (185 tests; UI one needs `npm i jsdom`)
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-ui.js` (296 tests)
+
+## Development
+
+```
+npm install   # dev dependency: jsdom (for the UI tests)
+npm test      # runs test.js (engine) + test-ui.js (full UI flow in jsdom)
+```
+
+No build step — the app is plain static files. `npm start` serves it locally.
 
 ## Tuning
 

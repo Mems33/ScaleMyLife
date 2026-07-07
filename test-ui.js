@@ -5,8 +5,10 @@ var { JSDOM } = require('jsdom');
 
 var html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 var core = fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8');
-// inline core.js so it loads under the https test origin
+var app = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
+// inline core.js and app.js so they load under the https test origin
 html = html.replace('<script src="core.js"></script>', '<script>' + core + '</script>');
+html = html.replace('<script src="app.js"></script>', '<script>' + app + '</script>');
 
 var passed = 0, failed = 0;
 function ok(cond, name) {
@@ -418,7 +420,7 @@ setTimeout(function () {
   var man = JSON.parse(fs2.readFileSync(__dirname + '/manifest.json', 'utf8'));
   ok(man.name === 'ScaleMyLife' && man.display === 'standalone' && man.icons.length === 2, 'manifest well-formed');
   ok(fs2.existsSync(__dirname + '/icon-192.png') && fs2.existsSync(__dirname + '/icon-512.png'), 'icons exist');
-  var appSrc = fs2.readFileSync(__dirname + '/index.html', 'utf8');
+  var appSrc = fs2.readFileSync(__dirname + '/app.js', 'utf8');
   ok(appSrc.indexOf("serviceWorker' in navigator") > 0 && appSrc.indexOf("location.protocol==='https:'") > 0, 'SW registers only when hosted');
 
   console.log('\nRuntime errors during session: ' + errors.length);
