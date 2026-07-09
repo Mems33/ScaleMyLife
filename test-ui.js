@@ -7,8 +7,10 @@ var html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 var core = fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8');
 var app = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
 var grad = fs.readFileSync(path.join(__dirname, 'gradient.js'), 'utf8');
+var cloud = fs.readFileSync(path.join(__dirname, 'cloud.js'), 'utf8');
 // inline scripts so they load under the https test origin
 html = html.replace('<script src="gradient.js"></script>', '<script>' + grad + '</script>');
+html = html.replace('<script src="cloud.js"></script>', '<script>' + cloud + '</script>');
 html = html.replace('<script src="core.js"></script>', '<script>' + core + '</script>');
 html = html.replace('<script src="app.js"></script>', '<script>' + app + '</script>');
 
@@ -609,6 +611,64 @@ setTimeout(function () {
   ok(w.tourStep === 1, 'tour advances a step');
   w.endTour();
   ok(d.querySelector('#tour.show') === null, 'tour closes cleanly');
+
+  console.log('\nCloud sync UI (v7)');
+  ok(typeof w.SMLCloud === 'object', 'cloud client loads in the page');
+  ok(w.SMLCloud.configured() === false, 'cloud starts unconfigured (no key baked in yet)');
+  w.openSettings();
+  var setTxt = d.querySelector('#modal').textContent;
+  ok(setTxt.indexOf('Cloud sync') >= 0 && d.querySelector('#cKey') !== null, 'settings offers the one-time key field when unconfigured');
+  ok(setTxt.indexOf('Reminders OFF') >= 0, 'reminders toggle present (off by default)');
+  w.closeModal();
+  w.SMLCloud.setKey('sb_publishable_test');
+  w.openSettings();
+  ok(d.querySelector('#cEmail') !== null && d.querySelector('#cPw') !== null, 'with a key set, sign-in form appears');
+  w.closeModal();
+  w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.go('today');
+  ok(d.querySelector('.nudgebar') !== null, 'cloud nudge banner shows for unsynced progress');
+  d.querySelector('.nudgebar .ghost').click();
+  ok(w.state.settings.cloudNudgeOff === true && d.querySelector('.nudgebar') === null, 'nudge dismisses and stays dismissed');
+  ok(w.state.updatedAt && w.state.updatedAt.length > 10, 'persist stamps updatedAt for sync conflict resolution');
+
+  console.log('\nUndo (v7)');
+  var uq = w.A.addQuest(w.state, { title: 'Undo me', diff: 'easy' });
+  w.render();
+  var nQuests = w.state.quests.length;
+  w.delQuest(uq.id);
+  ok(w.state.quests.length === nQuests - 1, 'delete is immediate (no confirm dialog)');
+  ok(d.querySelector('.toast.undo') !== null, 'undo toast appears');
+  w.doUndo(d.querySelector('.toast.undo button'));
+  ok(w.state.quests.length === nQuests && w.state.quests.some(function (q) { return q.title === 'Undo me'; }), 'undo restores the deleted quest');
+  var mon7 = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  var hpU = w.state.hero.hp = 90;
+  var slipsBefore = mon7.slips;
+  w.slip(mon7.id);
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  var undoBtns = d.querySelectorAll('.toast.undo button');
+  w.doUndo(undoBtns[undoBtns.length - 1]);
+  ok(w.state.hero.hp === hpU && mon7.slips === slipsBefore || w.state.habits.find(function (h) { return h.id === mon7.id; }).slips === slipsBefore, 'a misclicked slip can be undone');
+
+  console.log('\nFocus → main quest + HUD glance (v7)');
+  var fgUI = w.A.addGoal(w.state, { title: 'UI goal' });
+  w.go('focus');
+  ok(d.querySelector('#fGoal') !== null, 'focus form offers the main-quest selector');
+  var tg = Date.now();
+  w.A.startFocus(w.state, { work: 25, brk: 0, goalId: fgUI.id, now: tg });
+  w.A.tickFocus(w.state, tg + 25 * 60000 + 5); w.A.stopFocus(w.state, tg + 25 * 60000 + 5);
+  ok(fgUI.focusMin === 25, 'session banked on the goal from the UI flow');
+  w.go('quests');
+  ok(d.querySelector('#view').textContent.indexOf('invested') >= 0, 'goal card shows invested deep-work time');
+  w.go('today');
+  ok(d.querySelector('#hud .glance') !== null, 'HUD shows the today-at-a-glance line');
+
+  console.log('\nDaylight theme (v7)');
+  w.setTheme('daylight');
+  ok(w.state.settings.theme === 'daylight', 'daylight theme selected');
+  ok(d.body.classList.contains('light'), 'body switches to light mode');
+  ok(d.documentElement.style.getPropertyValue('--ink') === '#2c2536', 'light ink colour applied');
+  w.setTheme('dungeon');
+  ok(!d.body.classList.contains('light'), 'dark themes remove light mode');
+  w.closeModal();
 
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');

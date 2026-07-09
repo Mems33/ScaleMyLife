@@ -27,7 +27,9 @@ var THEMES={
   synthwave:{name:'Synthwave',bg:'#170b22',panel:'#221030',panel2:'#2c1440',line:'#45215e',accent:'#ff5fa2'},
   forest:   {name:'Forest',   bg:'#0d1712',panel:'#14231b',panel2:'#1a2f23',line:'#28492f',accent:'#7bd88f'},
   crimson:  {name:'Crimson',  bg:'#1a0d12',panel:'#26141b',panel2:'#321a23',line:'#4a2532',accent:'#ff7854'},
-  ocean:    {name:'Ocean',    bg:'#0a1220',panel:'#101c30',panel2:'#15263f',line:'#22395c',accent:'#59c2ff'}
+  ocean:    {name:'Ocean',    bg:'#0a1220',panel:'#101c30',panel2:'#15263f',line:'#22395c',accent:'#59c2ff'},
+  daylight: {name:'Daylight', bg:'#f3efe6',panel:'#fdfbf5',panel2:'#efe9db',line:'#dcd2bd',accent:'#a4700c',
+             ink:'#2c2536',muted:'#71687f',light:true}
 };
 var MUSIC={
   none:{name:'🔇 No music',id:null},
@@ -41,6 +43,8 @@ function applyTheme(){
   var r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel);
   r.setProperty('--panel2',t.panel2); r.setProperty('--line',t.line); r.setProperty('--gold',t.accent);
+  r.setProperty('--ink',t.ink||'#e8e4ff'); r.setProperty('--muted',t.muted||'#8f88b8');
+  document.body.classList.toggle('light',!!t.light);
   if(window.SMLGradient) window.SMLGradient.setColors();
 }
 /* Legend mode: at rank S/SS the whole interface shifts to a refined, gilded look */
@@ -50,7 +54,33 @@ function applyLegend(){
   w.classList.toggle('legend', code==='S'||code==='SS');
   w.classList.toggle('ss', code==='SS');
 }
-function persist(){ RPG.save(state, localStorage); }
+function persist(){
+  state.updatedAt=new Date().toISOString();
+  RPG.save(state, localStorage);
+  scheduleCloudPush();
+}
+
+/* ---------- cloud sync (Supabase via cloud.js) ---------- */
+var cloudPushTimer=null;
+function cloudOn(){ return typeof SMLCloud!=='undefined' && SMLCloud.configured() && !!SMLCloud.session(); }
+function scheduleCloudPush(){
+  if(!cloudOn()) return;
+  clearTimeout(cloudPushTimer);
+  cloudPushTimer=setTimeout(function(){ SMLCloud.push(state); }, 4000); // debounced; fails soft offline
+}
+/* on boot with a live session: adopt the cloud save if it is newer than this device */
+function cloudBootPull(){
+  if(!cloudOn() || !state) return;
+  SMLCloud.pull().then(function(r){
+    if(!r.ok || !r.exists || !r.data || !r.data.hero) return;
+    if((r.data.updatedAt||'') > (state.updatedAt||'')){
+      localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state)); // safety copy
+      state=RPG.migrate(r.data);
+      persist(); applyTheme(); render();
+      toast('☁️ <span class="p">Newer cloud save loaded</span>');
+    }
+  });
+}
 function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 /* ---------- sound ---------- */
@@ -65,16 +95,17 @@ function beep(freq,when,dur,type,vol){
     o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+dur);
   }catch(e){}
 }
+function buzz(p){ try{ if(state&&state.settings.sound&&navigator.vibrate) navigator.vibrate(p); }catch(e){} }
 var SND={
-  earn:function(){ beep(660,0,.09); beep(880,.09,.12); },
-  levelup:function(){ [523,659,784,1047].forEach(function(f,i){ beep(f,i*.12,.22,'square',.07); }); },
-  rankup:function(){ [392,523,659,784,1047,1319,1568].forEach(function(f,i){ beep(f,i*.13,.3,'square',.08); }); },
-  dmg:function(){ beep(120,0,.28,'sawtooth',.09); beep(90,.1,.25,'sawtooth',.07); },
-  buy:function(){ beep(880,0,.08,'triangle',.08); beep(1320,.08,.14,'triangle',.08); },
-  chest:function(){ [660,880,1174,1568].forEach(function(f,i){ beep(f,i*.09,.14,'triangle',.08); }); },
-  ach:function(){ [784,988,1175].forEach(function(f,i){ beep(f,i*.1,.18,'square',.06); }); },
-  brk:function(){ [880,660,523].forEach(function(f,i){ beep(f,i*.15,.3,'triangle',.07); }); },
-  resume:function(){ [523,784,1047].forEach(function(f,i){ beep(f,i*.1,.18,'triangle',.08); }); }
+  earn:function(){ beep(660,0,.09); beep(880,.09,.12); buzz(12); },
+  levelup:function(){ [523,659,784,1047].forEach(function(f,i){ beep(f,i*.12,.22,'square',.07); }); buzz([20,40,20,40,90]); },
+  rankup:function(){ [392,523,659,784,1047,1319,1568].forEach(function(f,i){ beep(f,i*.13,.3,'square',.08); }); buzz([30,50,30,50,30,50,120]); },
+  dmg:function(){ beep(120,0,.28,'sawtooth',.09); beep(90,.1,.25,'sawtooth',.07); buzz([60,40,80]); },
+  buy:function(){ beep(880,0,.08,'triangle',.08); beep(1320,.08,.14,'triangle',.08); buzz(15); },
+  chest:function(){ [660,880,1174,1568].forEach(function(f,i){ beep(f,i*.09,.14,'triangle',.08); }); buzz([15,25,15,25,40]); },
+  ach:function(){ [784,988,1175].forEach(function(f,i){ beep(f,i*.1,.18,'square',.06); }); buzz([10,30,25]); },
+  brk:function(){ [880,660,523].forEach(function(f,i){ beep(f,i*.15,.3,'triangle',.07); }); buzz(25); },
+  resume:function(){ [523,784,1047].forEach(function(f,i){ beep(f,i*.1,.18,'triangle',.08); }); buzz(25); }
 };
 
 /* ---------- visual fx ---------- */
@@ -196,6 +227,17 @@ function closeOverlay(){ $('#overlay').className=''; render(); }
 /* ---------- rendering ---------- */
 function skillName(id){ var s=state.skills.find(function(k){return k.id===id;}); return s? s.icon+' '+s.name : null; }
 
+/* today at a glance: xp, coins earned and focus minutes logged since midnight */
+function todayGlance(){
+  var today=RPG.todayKey(), xp=0, coins=0, min=0;
+  state.log.forEach(function(e){ if(e.day!==today) return; xp+=e.xp||0; if(e.coins>0) coins+=e.coins; min+=e.min||0; });
+  if(!xp&&!coins&&!min) return '';
+  var bits=[];
+  if(xp) bits.push('<b style="color:var(--xp)">+'+xp+'xp</b>');
+  if(coins) bits.push('<b style="color:var(--gold)">+'+coins+'\ud83d\udcb0</b>');
+  if(min) bits.push('<b style="color:var(--blue)">'+fmtHm(min)+' \u23f3</b>');
+  return '<div class="nextrank glance" title="Earned today">today '+bits.join(' \u00b7 ')+'</div>';
+}
 function renderHUD(){
   var h=state.hero, need=RPG.xpForLevel(h.level), r=RPG.rankFor(h.level), nr=RPG.nextRank(h.level);
   var col=RANK_COLORS[r.code]||'var(--gold)';
@@ -216,6 +258,7 @@ function renderHUD(){
     '<div class="side"><div class="lvl">LV.'+h.level+'</div>'+
       '<div class="coin" id="coinCounter">💰 '+h.coins+'</div>'+
       '<div class="flame">🔥 '+h.streak+' day'+(h.streak===1?'':'s')+((h.shields||0)>0?' <span title="Streak Shield active">🛡</span>':'')+'</div>'+
+      todayGlance()+
       buff+
       (h.woundedOn===RPG.todayKey()?'<div class="nextrank" style="color:var(--hp)">🩸 wounded · ×0.5 XP</div>':'')+
       (nr?'<div class="nextrank">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank" style="color:var(--gold);cursor:pointer" onclick="openAscend()">✦ MAX — Ascend ▶</div>')+'</div>';
@@ -324,7 +367,7 @@ function goalCard(g){
     '<button class="btn ghost" onclick="delGoal(\''+g.id+'\')">✕</button></div></div>'+
     (g.note?'<div class="hint">'+esc(g.note)+'</div>':'')+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
-    '<div class="pct">'+p.done+' / '+p.total+' steps · '+pct+'%</div>'+
+    '<div class="pct">'+p.done+' / '+p.total+' steps · '+pct+'%'+((g.focusMin||0)>0?' · <span style="color:var(--blue)">⏳ '+fmtHm(g.focusMin)+' invested</span>':'')+'</div>'+
     '<div class="steps">'+stepHtml+'</div>'+
     '<div class="stepadd"><input id="step_'+g.id+'" placeholder="Add a step to this main quest…">'+
     '<select id="stepd_'+g.id+'"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
@@ -438,6 +481,9 @@ function renderToday(){
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
     (wounded?'<div class="woundbar">🩸 <b>Wounded</b> — XP halved today. Rest at the Hotel or log good sleep to recover.</div>':'')+
+    (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> — your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
+      '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
+      '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
     (due.length?'<div class="panel" style="border-color:var(--orange);margin-bottom:14px"><h3 style="color:var(--orange)">🔥 Due now</h3>'+
       due.map(function(it){
         return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
@@ -597,6 +643,7 @@ function renderFocus(){
       '<div class="form" style="max-width:460px;margin:0 auto;border:none;padding-top:0">'+
       '<input id="fLabel" placeholder="What are you working on? (e.g. Essay draft)">'+
       '<div class="row"><select id="fSkill">'+skillOptions()+'</select>'+
+      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest"><option value="">— main quest —</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'">🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
       '<input id="fWork" type="number" min="5" max="180" placeholder="work min" style="max-width:100px">'+
       '<input id="fBrk" type="number" min="0" max="60" placeholder="break" style="max-width:80px"></div>'+
       '<div class="flabel" style="text-align:left">Study music / background</div>'+
@@ -611,7 +658,7 @@ function renderFocus(){
 function startFocus(){
   var w=Number($('#fWork').value)||focusMode.work;
   var b=$('#fBrk').value===''?focusMode.brk:Number($('#fBrk').value);
-  A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,label:$('#fLabel').value});
+  A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,goalId:($('#fGoal')||{}).value||null,label:$('#fLabel').value});
   persist(); render();
 }
 function stopFocus(){
@@ -620,6 +667,7 @@ function stopFocus(){
   if(r.tooShort){ toast('<span class="h">Stopped at '+r.minutes+' min — under 5, nothing earned</span>','dmg'); return; }
   SND.chest(); confetti(); fx(r);
   toast('⏳ <span class="p">'+r.minutes+' min of real work collected</span>');
+  if(r.goalTitle) toast('🏆 <span class="c">'+fmtHm(r.minutes)+' banked on “'+esc(r.goalTitle)+'”</span>');
   afterAction();
 }
 function skipBreak(){ var ev=A.skipBreak(state); persist(); render(); if(ev&&ev.healed) toast('<span class="hg">+'+ev.healed+' HP — rested</span>'); SND.resume(); }
@@ -629,8 +677,8 @@ function checkFocus(){
   var ev=A.tickFocus(state);
   if(ev){
     persist(); render();
-    if(ev.event==='break'){ SND.brk(); toast('🏕 <span style="color:var(--orange)">Break time — rest at the campfire</span>'); }
-    else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('⚔ <span class="p">Back to work — cycle '+state.activeFocus.cycles+'</span>'); }
+    if(ev.event==='break'){ SND.brk(); toast('🏕 <span style="color:var(--orange)">Break time — rest at the campfire</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🏕 Break time — stretch, water, look far away.'); }
+    else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('⚔ <span class="p">Back to work — cycle '+state.activeFocus.cycles+'</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','⚔ Break over — back to the quest.'); }
     return;
   }
   if(tab==='focus'){
@@ -832,8 +880,29 @@ function afterAction(){
 }
 
 /* ---------- action handlers ---------- */
+/* ---------- undo (replaces scary confirm() on destructive taps) ---------- */
+var undoSnap=null;
+function withUndo(label, fn){
+  undoSnap=JSON.stringify(state);
+  fn(); persist(); render();
+  var t=document.createElement('div'); t.className='toast undo';
+  t.innerHTML='<span>'+label+'</span><button onclick="doUndo(this)">↩ Undo</button>';
+  $('#toasts').appendChild(t);
+  setTimeout(function(){ t.remove(); },6000);
+}
+function doUndo(btn){
+  if(!undoSnap) return;
+  state=RPG.migrate(JSON.parse(undoSnap)); undoSnap=null;
+  persist(); applyTheme(); render();
+  if(btn&&btn.parentElement) btn.parentElement.remove();
+  toast('<span class="p">↩ Restored</span>');
+}
+
 function doQuest(id){ var r=A.completeQuest(state,id); persist(); render(); fx(r); afterAction(); }
-function delQuest(id){ if(confirm('Delete this quest?')){ A.deleteQuest(state,id); persist(); render(); } }
+function delQuest(id){
+  var q=state.quests.find(function(x){return x.id===id;});
+  withUndo('🗑 Quest deleted'+(q?': '+esc(q.title):''), function(){ A.deleteQuest(state,id); });
+}
 function promoteQ(id){
   var g=A.promoteQuest(state,id);
   if(g){ persist(); render(); toast('⬆️ <span class="c">Promoted to MAIN QUEST</span>'); SND.ach(); }
@@ -858,16 +927,29 @@ function doGoal(id){
   if(p.total>0 && p.done<p.total && !confirm('Steps are at '+p.done+'/'+p.total+'. Complete the main quest anyway?')) return;
   var r=A.completeGoal(state,id); persist(); render(); if(r){ confetti(); fx(r); } afterAction();
 }
-function delGoal(id){ if(confirm('Delete this main quest? Its steps become loose side quests.')){ A.deleteGoal(state,id); persist(); render(); } }
+function delGoal(id){
+  var g=state.goals.find(function(x){return x.id===id;});
+  withUndo('🗑 Main quest deleted'+(g?': '+esc(g.title):'')+' (steps kept as side quests)', function(){ A.deleteGoal(state,id); });
+}
 function doHabit(id){ var r=A.doHabit(state,id); persist(); render(); fx(r); afterAction(); }
-function slip(id){ var r=A.slipHabit(state,id); persist(); render(); fx(r); afterAction(); }
+function slip(id){
+  undoSnap=JSON.stringify(state); // misclicks happen — honesty still wins
+  var r=A.slipHabit(state,id); persist(); render(); fx(r); afterAction();
+  var t=document.createElement('div'); t.className='toast undo';
+  t.innerHTML='<span>👾 Slip logged</span><button onclick="doUndo(this)">↩ Misclick? Undo</button>';
+  $('#toasts').appendChild(t);
+  setTimeout(function(){ t.remove(); },6000);
+}
 function addHabit(type){
   var el=$(type==='good'?'#hgTitle':'#hbTitle'), t=el.value.trim(); if(!t) return;
   A.addHabit(state,{title:t,type:type,skillId:type==='good'?($('#hgSkill').value||null):null,
     target:type==='good'?Number(($('#hgTarget')||{}).value||7):7});
   persist(); render();
 }
-function delHabit(id){ if(confirm('Delete this habit?')){ A.deleteHabit(state,id); persist(); render(); } }
+function delHabit(id){
+  var h=state.habits.find(function(x){return x.id===id;});
+  withUndo('🗑 '+(h&&h.type==='bad'?'Monster':'Habit')+' deleted'+(h?': '+esc(h.title):''), function(){ A.deleteHabit(state,id); });
+}
 function buy(id){
   var r=A.buy(state,id);
   if(r&&r.fail==='coins'){ toast('<span class="h">Not enough coins — go earn them</span>','dmg'); return; }
@@ -883,7 +965,10 @@ function addShop(){
   var limEl=$('#sLimit'), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
   A.addShopItem(state,{title:t,price:p,tab:shopTab,hp:hp,dmg:dmg,limit:lim}); persist(); render();
 }
-function delShop(id){ if(confirm('Remove this reward?')){ A.deleteShopItem(state,id); persist(); render(); } }
+function delShop(id){
+  var it=state.shop.find(function(x){return x.id===id;});
+  withUndo('🗑 Reward removed'+(it?': '+esc(it.title):''), function(){ A.deleteShopItem(state,id); });
+}
 function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ chestScreen(r); flyCoins(r.coins); } afterAction(); }
 function saveJournal(){
   var mood=pendingMood||((state.journal[RPG.todayKey()]||{}).mood);
@@ -1016,7 +1101,9 @@ function openSettings(){
     '<button class="btn" onclick="closeModal();startTour()">🎯 Interactive tour</button></div>'+
     '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button></div>'+
     '<div class="setrow">'+
-    '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button></div>'+
+    '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
+    '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button></div>'+
+    cloudSection()+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
     '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
     '<input type="file" id="importFile" accept=".json" style="display:none" onchange="importSave(this)">'+
@@ -1025,6 +1112,108 @@ function openSettings(){
     '<div class="hint">Data lives in this browser (localStorage). Export a JSON backup from time to time.</div></div>';
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
+function toggleReminders(){
+  if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
+  if(typeof Notification==='undefined'){ toast('<span class="h">Notifications not supported in this browser</span>','dmg'); return; }
+  Notification.requestPermission().then(function(p){
+    if(p==='granted'){ state.settings.reminders=true; persist(); openSettings(); toast('🔔 <span class="p">Reminders on — evening nudge + focus alerts</span>'); }
+    else toast('<span class="h">Permission denied — enable notifications in your browser settings</span>','dmg');
+  });
+}
+
+function cloudNudgeDue(){
+  return typeof SMLCloud!=='undefined' && !SMLCloud.session() && !state.settings.cloudNudgeOff &&
+    (state.hero.level>=3 || state.hero.streak>=3);
+}
+
+/* ---------- reminders (Notification API — fires while the app is open) ---------- */
+function notifyNow(title, body){
+  try{ if(typeof Notification!=='undefined' && Notification.permission==='granted') new Notification(title,{body:body,icon:'icon-192.png',tag:'sml'}); }catch(e){}
+}
+function checkReminders(){
+  if(!state || !state.settings.reminders) return;
+  if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
+  var today=RPG.todayKey();
+  if(new Date().getHours()>=18 && state.remindedOn!==today){
+    state.remindedOn=today;
+    var c=A.chestStatus(state), j=state.journal[today];
+    if(c.total>0 && c.done<c.total) notifyNow('ScaleMyLife','🎁 '+(c.total-c.done)+' dail'+((c.total-c.done)===1?'y':'ies')+' left before the chest closes for today.');
+    else if(!j) notifyNow('ScaleMyLife','📔 One honest line before the day ends? Mood log pays +15xp.');
+    var b=state.boss;
+    if(b && !b.doneOn && A.bossDaysLeft(state)===1) notifyNow('ScaleMyLife','🐲 The weekly boss escapes tomorrow: '+b.title);
+    persist();
+  }
+}
+
+/* ---------- cloud sync UI ---------- */
+function cloudSection(){
+  if(typeof SMLCloud==='undefined') return '';
+  if(!SMLCloud.configured()){
+    return '<div class="flabel">☁️ Cloud sync</div>'+
+      '<div class="hint">One free account = your save on every device. Paste your Supabase <b>publishable key</b> once to enable (Dashboard → Settings → API keys).</div>'+
+      '<div class="setrow" style="margin-top:6px"><input id="cKey" placeholder="sb_publishable_… or anon key"><button class="btn" onclick="cloudSaveKey()">Enable</button></div>';
+  }
+  var sess=SMLCloud.session();
+  if(!sess){
+    return '<div class="flabel">☁️ Cloud sync</div>'+
+      '<div class="hint">Your save currently lives only in this browser. Sign in and it follows you everywhere.</div>'+
+      '<input id="cEmail" type="email" placeholder="email" style="margin-top:6px">'+
+      '<input id="cPw" type="password" placeholder="password (8+ characters)" style="margin-top:6px">'+
+      '<div class="setrow" style="margin-top:8px"><button class="btn go" onclick="cloudSignIn()">Sign in</button>'+
+      '<button class="btn" onclick="cloudSignUp()">Create account</button></div>'+
+      '<div class="hint" id="cMsg"></div>';
+  }
+  var ls=SMLCloud.lastSync();
+  return '<div class="flabel">☁️ Cloud sync</div>'+
+    '<div class="hint">Synced as <b>'+esc(sess.user.email||'')+'</b>'+(ls?' · last sync '+new Date(ls).toLocaleString():'')+'</div>'+
+    '<div class="setrow" style="margin-top:6px"><button class="btn go" onclick="cloudSyncNow()">⟳ Sync now</button>'+
+    '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
+    '<div class="hint" id="cMsg"></div>';
+}
+function cloudMsg(t,bad){ var el=$('#cMsg'); if(el) el.innerHTML=bad?'<span class="h">'+esc(t)+'</span>':'<span class="p">'+esc(t)+'</span>'; }
+function cloudSaveKey(){
+  var k=($('#cKey').value||'').trim(); if(!k) return;
+  SMLCloud.setKey(k); openSettings();
+  toast('☁️ <span class="p">Cloud sync enabled — now create your account</span>');
+}
+function cloudSignUp(){
+  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
+  if(!e||p.length<8){ cloudMsg('Enter an email and a password of at least 8 characters', true); return; }
+  cloudMsg('Creating account…');
+  SMLCloud.signUp(e,p).then(function(r){
+    if(!r.ok){ cloudMsg(r.error,true); return; }
+    if(r.needsConfirm){ cloudMsg('Almost there — confirm the email we sent you, then press Sign in.'); return; }
+    afterCloudSignIn();
+  });
+}
+function cloudSignIn(){
+  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
+  if(!e||!p){ cloudMsg('Enter your email and password', true); return; }
+  cloudMsg('Signing in…');
+  SMLCloud.signIn(e,p).then(function(r){
+    if(!r.ok){ cloudMsg(r.error,true); return; }
+    afterCloudSignIn();
+  });
+}
+/* after an explicit sign-in: if a cloud save exists, let the user pick a side */
+function afterCloudSignIn(){
+  SMLCloud.pull().then(function(r){
+    if(r.ok && r.exists && r.data && r.data.hero){
+      var lv=r.data.hero.level||1, when=(r.data.updatedAt||'').slice(0,10);
+      if(confirm('A cloud save exists ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', saved '+when:'')+').\n\nOK — load the cloud save on this device\nCancel — keep this device’s progress and overwrite the cloud')){
+        localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state));
+        state=RPG.migrate(r.data);
+      }
+    }
+    persist(); applyTheme(); render(); openSettings();
+    toast('☁️ <span class="p">Cloud sync is on</span>'); SND.ach();
+  });
+}
+function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out — save stays on this device'); }); }
+function cloudSyncNow(){
+  cloudMsg('Syncing…');
+  SMLCloud.push(state).then(function(r){ openSettings(); cloudMsg(r.ok?'Synced ✓':(r.error||'Sync failed'), !r.ok); });
+}
 function closeModal(){ $('#modal').className='modal'; }
 
 /* ---------- edit modals ---------- */
@@ -1209,10 +1398,11 @@ function createHero(){
   persist(); applyTheme(); closeModal(); render(); confetti();
   setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
 }
-function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); } else { renderHUDShell(); tut(0); } }
+function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); cloudBootPull(); } else { renderHUDShell(); tut(0); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);
+setInterval(function(){ if(state) checkReminders(); }, 30000);
 
 boot();
 if('serviceWorker' in navigator && location.protocol==='https:'){

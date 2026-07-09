@@ -4,7 +4,7 @@
   "description": "Your life as an RPG — local-first PWA. Quests, habits, focus and rewards.",
   "private": true,
   "scripts": {
-    "test": "node test.js && node test-ui.js",
+    "test": "node test.js && node test-cloud.js && node test-ui.js",
     "test:core": "node test.js",
     "test:ui": "node test-ui.js",
     "start": "npx serve ."
