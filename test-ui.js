@@ -6,7 +6,9 @@ var { JSDOM } = require('jsdom');
 var html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 var core = fs.readFileSync(path.join(__dirname, 'core.js'), 'utf8');
 var app = fs.readFileSync(path.join(__dirname, 'app.js'), 'utf8');
-// inline core.js and app.js so they load under the https test origin
+var grad = fs.readFileSync(path.join(__dirname, 'gradient.js'), 'utf8');
+// inline scripts so they load under the https test origin
+html = html.replace('<script src="gradient.js"></script>', '<script>' + grad + '</script>');
 html = html.replace('<script src="core.js"></script>', '<script>' + core + '</script>');
 html = html.replace('<script src="app.js"></script>', '<script>' + app + '</script>');
 
@@ -548,6 +550,15 @@ setTimeout(function () {
   ok(w.state.settings.escalate === false, 'surge can be toggled off in the market');
   ok(w.RPG.buyPrice(w.state, gm) === 60, 'with surge off the price is flat again');
   w.toggleEscalate();
+
+  console.log('\nWebGL gradient background (v5)');
+  ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
+  ok(typeof w.SMLGradient === 'object' && typeof w.SMLGradient.setColors === 'function', 'gradient controller exposed on window');
+  ok(d.querySelector('#bg').style.display === 'none', 'gradient degrades gracefully without WebGL (canvas hidden -> CSS aurora fallback)');
+  var threw = false; try { w.SMLGradient.setColors(); w.applyTheme(); } catch (e) { threw = true; }
+  ok(!threw, 'setColors / applyTheme are safe no-ops when WebGL is unavailable');
+  var swSrc = fs2.readFileSync(__dirname + '/sw.js', 'utf8');
+  ok(swSrc.indexOf('gradient.js') > 0, 'gradient.js is precached by the service worker');
 
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));

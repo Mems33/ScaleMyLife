@@ -46,9 +46,13 @@ The **Stats** tab now does more than count XP:
 
 Plus the existing weekly XP chart, mood strip, achievements and adventure log.
 
+## Look & feel
+
+Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shader gradient** (`gradient.js`) drifts slowly behind the app — a self-contained, dependency-free take on the "mesh gradient" look, tinted live by your chosen theme. It's a progressive enhancement: if WebGL is missing it hides itself and a CSS aurora fallback takes over, it renders a single static frame under `prefers-reduced-motion`, pauses when the tab is hidden, and runs at ~30fps with a capped pixel-ratio to stay light on phones. Surfaces use translucent "machined" panels with soft inset highlights and coloured hover glows; blur is reserved for fixed overlays (never large scrolling content) to keep mobile smooth.
+
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-ui.js` (391 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-ui.js` (426 tests).
 
 ## Development
 

@@ -28,6 +28,7 @@ function applyTheme(){
   var r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel);
   r.setProperty('--panel2',t.panel2); r.setProperty('--line',t.line); r.setProperty('--gold',t.accent);
+  if(window.SMLGradient) window.SMLGradient.setColors();
 }
 /* Legend mode: at rank S/SS the whole interface shifts to a refined, gilded look */
 function applyLegend(){
