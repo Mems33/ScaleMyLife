@@ -423,6 +423,97 @@ setTimeout(function () {
   var appSrc = fs2.readFileSync(__dirname + '/app.js', 'utf8');
   ok(appSrc.indexOf("serviceWorker' in navigator") > 0 && appSrc.indexOf("location.protocol==='https:'") > 0, 'SW registers only when hosted');
 
+  console.log('\nSkill mastery tiers (v3)');
+  w.state.skills[0].level = 6;
+  w.render();
+  ok(d.querySelector('.skillcard .tier') !== null, 'mastery tier chip shows on a leveled life area');
+  ok(d.querySelector('#skillsRow').textContent.indexOf('Expert') >= 0, 'Expert tier label at Lv.6');
+
+  console.log('\nMonster menace (v3)');
+  w.go('habits');
+  var mMon = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  w.state.hero.hp = 100;
+  w.slip(mMon.id);
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  ok(w.RPG.menaceOf(mMon) > 1, 'slipping raises the monster\'s menace');
+  ok(d.querySelector('#view').textContent.indexOf('menace') >= 0, 'menace shown on the monster row');
+  ok(d.querySelector('.menacebar') !== null, 'menace meter renders');
+
+  console.log('\nScheduled dailies (v3)');
+  w.go('quests');
+  ok(d.querySelector('.daysrow') !== null, 'weekday scheduler in the quest form');
+  var wdNow = new Date().getDay(), wdOther = (wdNow + 3) % 7;
+  w.pendingDays = [wdOther];
+  d.querySelector('#qTitle').value = 'Gym day';
+  d.querySelector('#qRec').checked = true;
+  w.addQuest();
+  var sched = w.state.quests.find(function (q) { return q.title === 'Gym day'; });
+  ok(sched && Array.isArray(sched.days) && sched.days.indexOf(wdOther) >= 0, 'quest saved with a weekday schedule');
+  ok(w.pendingDays.length === 0, 'pending days reset after add');
+  w.render();
+  ok(d.querySelector('#view').textContent.indexOf('not today') >= 0, 'off-day daily shows "not today"');
+  ok(d.querySelector('.chip.sched') !== null, 'schedule chip rendered on the row');
+
+  console.log('\nInsights & weekly review (v3)');
+  w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('Insights') >= 0, 'insights panel renders');
+  ok(d.querySelector('.review') !== null, 'weekly review box renders');
+  ok(d.querySelector('.rv.suggest') !== null, 'next-week suggestion shown');
+  for (var ii = 0; ii < 8; ii++) {
+    var idk = (function (n) { var dd = new Date(); dd.setDate(dd.getDate() - n); return w.RPG.todayKey(dd); })(ii);
+    if (ii % 2 === 0) { w.state.journal[idk] = { mood: 'great', note: '' }; w.state.sleep[idk] = { hours: 8, quality: 4 }; w.state.log.push({ t: new Date().toISOString(), day: idk, icon: '⏳', text: 'f', xp: 70, coins: 0, hp: 0, min: 60 }); }
+    else { w.state.journal[idk] = { mood: 'awful', note: '' }; w.state.sleep[idk] = { hours: 5, quality: 2 }; }
+  }
+  w.render();
+  ok(d.querySelector('.insight') !== null, 'insight cards appear once there is enough data');
+
+  console.log('\nFocus Elixir & chest loot (v3)');
+  w.state.inventory.potion = 1; w.go('today');
+  ok(d.querySelector('.quick button.potion') !== null, 'potion quick action shows when held');
+  w.usePotion();
+  ok(w.state.inventory.potion === 0 && w.RPG.buffXpMult(w.state) > 1, 'using the elixir consumes it and boosts XP');
+  ok(d.querySelector('.buffpill') !== null, 'buff pill appears in the HUD');
+  w.chestScreen({ xp: 25, coins: 30, loot: { type: 'frame', frame: { id: 'ember', name: 'Ember', color: '#ff7854', glow: '#ff9d47' } } });
+  ok(d.querySelector('.lootline') !== null && d.querySelector('#overlay').textContent.indexOf('Ember') >= 0, 'chest overlay reveals rare frame loot');
+  w.closeOverlay();
+
+  console.log('\nAscension / prestige (v3)');
+  w.state.hero.level = 41; w.render();
+  ok(w.RPG.ascendReady(w.state), 'ascend available at level 41');
+  w.openAscend();
+  ok(d.querySelector('.boonpick') !== null, 'ascension boon picker opens');
+  w.doAscend('scholar');
+  if (d.querySelector('#overlay.show')) { ok(d.querySelector('#overlay').textContent.indexOf('ASCENDED') >= 0, 'ascension celebration shows'); w.closeOverlay(); }
+  else { ok(false, 'ascension celebration shows'); }
+  ok(w.state.hero.ascension === 1 && w.state.hero.level === 1, 'ascended: season 1, level reset to 1');
+  ok(w.state.hero.boons.scholar === 1, 'permanent boon recorded');
+  w.openCharacter();
+  ok(d.querySelector('.boonchips') !== null, 'boons shown in the character screen');
+  w.closeModal();
+
+  console.log('\nAvatar frames (v3)');
+  w.state.cosmetics.frames = ['gilded'];
+  w.openCharacter();
+  ok(d.querySelector('.framepick') !== null, 'frame picker shows owned frames');
+  w.setFrame('gilded');
+  ok(w.state.hero.frame === 'gilded', 'frame equipped');
+  ok(d.querySelector('.hud .avatar.framed') !== null, 'HUD avatar shows the frame');
+  w.closeModal();
+
+  console.log('\nLegend mode (v3)');
+  w.state.hero.level = 40; w.render();
+  ok(d.querySelector('#wrap').classList.contains('legend'), 'rank S enters Legend mode');
+  w.state.hero.level = 60; w.render();
+  ok(d.querySelector('#wrap').classList.contains('ss'), 'rank SS adds the SS class');
+  w.state.hero.level = 3; w.render();
+  ok(!d.querySelector('#wrap').classList.contains('legend'), 'dropping below S exits Legend mode');
+
+  console.log('\nOnboarding paths (v3)');
+  w.onboarding();
+  ok(d.querySelector('.pathpick') !== null, 'path picker rendered in onboarding');
+  ok(d.querySelector('#modal').textContent.indexOf('Student') >= 0, 'named paths listed');
+  w.closeModal();
+
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
 

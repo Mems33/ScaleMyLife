@@ -330,6 +330,87 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .flabel{font-size:12px;color:var(--muted);margin:8px 0 3px;text-transform:uppercase;letter-spacing:1px}
 .hint{font-size:12px;color:var(--muted);margin-top:4px}
 
+/* ---------- v3: prestige, loot, insights, scheduling ---------- */
+/* HUD season marker + potion buff pill */
+.season{font-family:var(--px);font-size:8px;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:3px 6px;background:color-mix(in srgb,var(--gold) 10%,transparent)}
+.buffpill{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--skill);border:1px solid color-mix(in srgb,var(--skill) 50%,var(--line));border-radius:12px;padding:2px 9px;background:color-mix(in srgb,var(--skill) 12%,transparent)}
+.hud .avatar.framed{animation:framepulse 2.6s infinite}
+@keyframes framepulse{50%{filter:brightness(1.12)}}
+
+/* skill mastery tier */
+.skillcard .tier{display:inline-block;margin-top:6px;font-family:var(--mono);font-size:9.5px;font-weight:700;color:var(--gold);
+  border:1px solid color-mix(in srgb,var(--gold) 40%,var(--line));border-radius:10px;padding:1px 7px;background:color-mix(in srgb,var(--gold) 8%,transparent)}
+
+/* monster menace */
+.menaceTag{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--orange);border:1px solid var(--orange);border-radius:10px;padding:1px 6px;margin-left:6px}
+.menaceTag.hot{color:var(--hp);border-color:var(--hp);animation:menacepulse 1.4s infinite}
+@keyframes menacepulse{50%{box-shadow:0 0 8px color-mix(in srgb,var(--hp) 50%,transparent)}}
+.menacebar{height:5px;background:#0d0b18;border:1px solid var(--line);border-radius:4px;overflow:hidden;margin-top:6px;max-width:220px}
+.menacebar>i{display:block;height:100%;background:linear-gradient(90deg,var(--orange),var(--hp))}
+.menacebar>i.hot{background:var(--hp)}
+
+/* scheduled dailies */
+.chip.sched{color:var(--blue);border-color:color-mix(in srgb,var(--blue) 50%,transparent);background:color-mix(in srgb,var(--blue) 10%,transparent)}
+.chip.muted{color:var(--muted);border-color:var(--line);background:none}
+.item.dormant{opacity:.55}
+.daysrow{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.daysrow .plabel{font-size:11px;color:#5c5684}
+.dow{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);font-size:12px;font-weight:700}
+.dow.on{border-color:var(--blue);color:var(--ink);background:color-mix(in srgb,var(--blue) 15%,transparent)}
+
+/* today potion quick action */
+.quick button.potion{color:var(--skill);border-color:color-mix(in srgb,var(--skill) 50%,var(--line));background:color-mix(in srgb,var(--skill) 12%,transparent)}
+
+/* chest loot reveal */
+.lootline{font-family:var(--mono);font-size:14px;color:var(--ink);margin:10px auto 2px;max-width:360px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;background:color-mix(in srgb,var(--gold) 8%,transparent)}
+.lootline.gold{color:var(--gold);box-shadow:0 0 16px color-mix(in srgb,var(--gold) 25%,transparent)}
+
+/* insights + weekly review */
+.insight{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--line);border-left:3px solid var(--skill);border-radius:7px;background:var(--panel2);margin-bottom:8px;font-size:14px}
+.insight .ic{font-size:18px;flex-shrink:0}
+.review{display:grid;gap:7px;margin-bottom:14px}
+.rv{display:flex;gap:10px;align-items:baseline;padding:8px 11px;border:1px solid var(--line);border-radius:7px;background:var(--panel2)}
+.rv .k{font-family:var(--mono);font-size:12px;color:var(--muted);min-width:132px;font-weight:700}
+.rv .v{font-size:14px;font-weight:600}
+.rv.suggest{border-color:color-mix(in srgb,var(--gold) 45%,var(--line));background:color-mix(in srgb,var(--gold) 6%,transparent)}
+.rv.suggest .v{color:var(--gold)}
+
+/* character: frames, boons, ascend */
+.framepick,.boonchips{display:flex;gap:7px;flex-wrap:wrap;margin:6px 0}
+.framepick button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:14px;padding:5px 12px;font-size:12px;font-weight:700}
+.framepick button.on{outline:2px solid var(--gold);outline-offset:1px}
+.boonchip{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 45%,var(--line));border-radius:14px;padding:4px 11px;background:color-mix(in srgb,var(--gold) 8%,transparent)}
+.ascendbox{border:1px solid var(--gold);border-radius:10px;padding:12px 14px;margin-top:12px;display:flex;flex-direction:column;gap:6px;background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 9%,transparent),transparent)}
+.ascendbox b{color:var(--gold);font-size:14px}
+.ascendbox span{font-size:13px;color:var(--muted)}
+.btn.ascend{background:linear-gradient(180deg,var(--gold),color-mix(in srgb,var(--gold) 70%,#000));border-color:var(--gold);color:#231a00;margin-top:4px}
+.boonpick{display:grid;gap:8px;margin:10px 0}
+.boonpick button{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;align-items:center;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:11px 13px;color:var(--ink)}
+.boonpick button:hover{border-color:var(--gold)}
+.boonpick .bi{font-size:22px;grid-row:span 2}
+.boonpick b{font-size:14px;color:var(--gold);align-self:end}
+.boonpick small{font-size:12px;color:var(--muted);grid-column:2;align-self:start}
+
+/* onboarding path picker */
+.pathpick{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.pathpick button{display:flex;flex-direction:column;gap:3px;text-align:left;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:10px 12px;color:var(--ink)}
+.pathpick button.on{border-color:var(--gold);box-shadow:0 0 10px color-mix(in srgb,var(--gold) 20%,transparent)}
+.pathpick .pi{font-size:20px}
+.pathpick b{font-size:13px}
+.pathpick small{font-size:11px;color:var(--muted);line-height:1.3}
+
+/* ---------- Legend mode: refined gilded interface at rank S / SS ---------- */
+.wrap.legend .logo b{filter:drop-shadow(0 0 20px color-mix(in srgb,var(--gold) 70%,transparent))}
+.wrap.legend .hud{border-color:color-mix(in srgb,var(--gold) 55%,var(--line));
+  box-shadow:0 0 0 2px var(--bg),0 0 0 4px color-mix(in srgb,var(--gold) 45%,var(--line)),0 16px 46px rgba(0,0,0,.5),0 0 44px color-mix(in srgb,var(--gold) 12%,transparent);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 7%,var(--panel)),var(--panel))}
+.wrap.legend .hud .name{text-shadow:0 0 16px color-mix(in srgb,var(--gold) 40%,transparent)}
+.wrap.legend .lvl{color:var(--gold)}
+.wrap.legend .hud .avatar{animation:aura 3s infinite}
+@keyframes aura{50%{box-shadow:inset 0 0 0 3px var(--bg),0 0 24px color-mix(in srgb,var(--gold) 55%,transparent)}}
+.wrap.ss .logo::after{background:linear-gradient(90deg,transparent,var(--gold) 20%,#ff5fa2 50%,var(--gold) 80%,transparent);height:3px;box-shadow:0 0 14px color-mix(in srgb,#ff5fa2 40%,transparent)}
+.wrap.ss .hud{border-color:color-mix(in srgb,#ff5fa2 45%,var(--gold))}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}
@@ -370,5 +451,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
   .statgrid{grid-template-columns:repeat(3,1fr)}
   .achgrid{grid-template-columns:1fr 1fr}
   .todayhead .hi{font-size:11px}
+  .pathpick{grid-template-columns:1fr}
+  .rv{flex-wrap:wrap;gap:2px 10px}
+  .rv .k{min-width:0}
 }
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}

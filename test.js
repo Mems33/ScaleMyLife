@@ -433,5 +433,183 @@ delete mg3.boss; delete mg3.counters.bosses;
 mg3 = RPG.migrate(mg3);
 ok('boss' in mg3 && mg3.counters.bosses === 0, 'migration adds boss slot & counter');
 
+section('Skill mastery perks');
+var sp = RPG.newState('SP');
+var mind = sp.skills[0];
+mind.level = 3; // Adept tier: +10% XP on tagged actions
+var qp = A.addQuest(sp, { title: 'study', diff: 'hard', skillId: mind.id });
+var rp = A.completeQuest(sp, qp.id);
+ok(rp.xp === Math.round(60 * RPG.streakMult(sp.hero.streak) * 1.10), 'Adept skill (Lv3) adds +10% XP to its quests (' + rp.xp + ')');
+ok(RPG.skillTier(3).name === 'Adept' && RPG.skillTier(6).name === 'Expert' && RPG.skillTier(10).name === 'Master', 'tier names by level');
+mind.level = 10; // Master tier: +30% XP, +10% coins
+var qp2 = A.addQuest(sp, { title: 'study2', diff: 'hard', skillId: mind.id });
+var rp2 = A.completeQuest(sp, qp2.id);
+ok(rp2.xp === Math.round(60 * 1 * 1.30), 'Master skill (Lv10) adds +30% XP');
+ok(rp2.coins === 33, 'Master skill adds +10% coins (30 -> 33)');
+var qUn = A.addQuest(sp, { title: 'untagged', diff: 'hard' });
+var rUn = A.completeQuest(sp, qUn.id);
+ok(rUn.xp === 60 && rUn.coins === 30, 'untagged quests get no skill perk');
+
+section('Prestige / ascension');
+var pr = RPG.newState('PR');
+ok(RPG.ascendReady(pr) === false, 'cannot ascend below level 40');
+ok(RPG.ascend(pr, 'scholar') === null, 'ascend blocked when not ready');
+pr.hero.level = 41; pr.hero.title = 'Route Master'; pr.hero.badges.push({ code: 'S', name: 'Master', on: '2026-01-01' });
+var ar = RPG.ascend(pr, 'scholar');
+ok(ar && pr.hero.ascension === 1 && pr.hero.level === 1 && pr.hero.xp === 0, 'ascend resets to Lv1, season 1');
+ok(pr.hero.boons.scholar === 1 && pr.counters.ascensions === 1, 'boon + counter recorded');
+ok(pr.hero.title === 'Route Master' && pr.hero.badges.length === 1, 'ascension keeps titles & badges (legacy preserved)');
+ok(RPG.ascend(pr, 'nonsense') === null, 'invalid boon id rejected');
+var qpr = A.addQuest(pr, { title: 'x', diff: 'hard' });
+var rpr = A.completeQuest(pr, qpr.id);
+ok(rpr.xp === Math.round(60 * 1 * 1.08), 'scholar boon adds +8% XP (' + rpr.xp + ')');
+var pv = RPG.newState('PV'); pv.hero.level = 41;
+RPG.ascend(pv, 'vigor');
+ok(RPG.maxHpOf(pv) === 120 && pv.hero.hp === 120, 'vigor boon raises max HP to 120 and refills');
+var pc = RPG.newState('PC'); pc.hero.level = 41; RPG.ascend(pc, 'coinfind');
+var qc = A.addQuest(pc, { title: 'x', diff: 'hard' }); var rc = A.completeQuest(pc, qc.id);
+ok(rc.coins === Math.round(30 * 1.08), 'coinfind boon adds +8% coins (' + rc.coins + ')');
+var pw = RPG.newState('PW'); pw.hero.level = 41; RPG.ascend(pw, 'warden');
+var bw = A.addHabit(pw, { title: 'm', type: 'bad' });
+var sw = A.slipHabit(pw, bw.id);
+ok(sw.hp === -Math.round(12 * 1 * 0.8), 'warden softens the monster hit by 20% (' + sw.hp + ')');
+
+section('Focus Elixir (potion buff)');
+var pp = RPG.newState('PP');
+ok(RPG.usePotion(pp) === null, 'no potion to use');
+pp.inventory.potion = 1;
+var up = RPG.usePotion(pp);
+ok(up && pp.inventory.potion === 0, 'potion consumed');
+ok(Math.abs(RPG.buffXpMult(pp) - 2) < 1e-9, 'buff doubles XP today');
+var qb = A.addQuest(pp, { title: 'x', diff: 'hard' });
+var rb = A.completeQuest(pp, qb.id);
+ok(rb.xp === Math.round(60 * 1 * 2), 'quest under elixir pays double XP (' + rb.xp + ')');
+pp.hero.buffs[0].until = '2000-01-01'; // simulate the day rolling over
+pp.lastSeenDay = '2000-01-01';
+RPG.dailyReset(pp);
+ok(pp.hero.buffs.length === 0 && Math.abs(RPG.buffXpMult(pp) - 1) < 1e-9, 'buff expires on a new day');
+
+section('Monster menace scaling');
+var mm = RPG.newState('MM'); mm.hero.hp = 100;
+var mon = A.addHabit(mm, { title: 'scroll', type: 'bad' });
+ok(RPG.menaceOf(mon) === 1, 'new monster starts at menace 1');
+var ms1 = A.slipHabit(mm, mon.id);
+ok(ms1.hp === -12 && Math.abs(mon.menace - 1.2) < 1e-9, 'first slip hits 12, menace rises to 1.2');
+var ms2 = A.slipHabit(mm, mon.id);
+ok(ms2.hp === -Math.round(12 * 1.2) && Math.abs(mon.menace - 1.4) < 1e-9, 'second slip hits harder (14), menace 1.4');
+mon.lastDoneOn = '2000-01-01'; // pretend it went un-fed yesterday
+mm.lastSeenDay = '2000-01-02';
+RPG.dailyReset(mm);
+ok(Math.abs(mon.menace - 1.3) < 1e-9, 'menace decays 0.1 on a clean day');
+mon.menace = 2.5;
+var msBig = A.slipHabit(mm, mon.id);
+ok(msBig.hp === -Math.round(12 * 2.5) && mon.menace === 2.5, 'menace and damage cap at 2.5');
+
+section('Chest loot table');
+function seqRng(vals) { var i = 0; return function () { return vals[i++ % vals.length]; }; }
+var cl = RPG.newState('CL');
+ok(A.rollChestLoot(cl, 0.5).type === 'coins', 'low roll -> plain coins');
+ok(A.rollChestLoot(cl, 0.70).type === 'jackpot', 'mid roll -> coin jackpot');
+ok(A.rollChestLoot(cl, 0.85).type === 'potion', 'high roll -> Focus Elixir');
+ok(A.rollChestLoot(cl, 0.95).type === 'frame', 'top roll -> cosmetic frame');
+var cc = RPG.newState('CC');
+var cd1 = A.addQuest(cc, { title: 'd', diff: 'easy', recurring: true }); A.completeQuest(cc, cd1.id);
+var rFrame = A.claimChest(cc, seqRng([0, 0.95]));
+ok(rFrame.coins >= 20 && rFrame.coins <= 50, 'base chest coins stay in the 20-50 range');
+ok(rFrame.loot && rFrame.loot.type === 'frame' && cc.cosmetics.frames.length === 1, 'frame loot added to cosmetics');
+var cc2 = RPG.newState('CC2');
+var cd2 = A.addQuest(cc2, { title: 'd', diff: 'easy', recurring: true }); A.completeQuest(cc2, cd2.id);
+var rPot = A.claimChest(cc2, seqRng([0.5, 0.85]));
+ok(rPot.loot.type === 'potion' && cc2.inventory.potion === 1, 'chest can drop a Focus Elixir');
+var cc3 = RPG.newState('CC3');
+var cd3 = A.addQuest(cc3, { title: 'd', diff: 'easy', recurring: true }); A.completeQuest(cc3, cd3.id);
+var beforeJ = cc3.hero.coins;
+var rJack = A.claimChest(cc3, seqRng([0.0, 0.70, 0.0]));
+ok(rJack.loot.type === 'jackpot' && rJack.loot.coins === 40, 'jackpot pays a bonus coin pile');
+ok(cc3.hero.coins === beforeJ + rJack.coins + 40, 'jackpot coins actually credited on top of base');
+
+section('Scheduled (weekday) dailies');
+var sd = RPG.newState('SD');
+var wd = new Date().getDay(), otherWd = (wd + 1) % 7;
+var qToday = A.addQuest(sd, { title: 'today only', diff: 'easy', recurring: true, days: [wd] });
+var qOther = A.addQuest(sd, { title: 'other day', diff: 'easy', recurring: true, days: [otherWd] });
+ok(RPG.questActiveOn(qToday, new Date()) === true, 'quest scheduled for today is active');
+ok(RPG.questActiveOn(qOther, new Date()) === false, 'quest scheduled for another day is dormant');
+A.completeQuest(sd, qToday.id);
+var csd = A.chestStatus(sd);
+ok(csd.total === 1 && csd.eligible === true, 'chest counts only today-scheduled dailies');
+var qEvery = A.addQuest(sd, { title: 'every', diff: 'easy', recurring: true, days: [0, 1, 2, 3, 4, 5, 6] });
+ok(qEvery.days === null, 'a 7-day schedule is stored as every-day (null)');
+
+section('Insights');
+var iv = RPG.newState('IV');
+function dayk(n) { var d = new Date(); d.setDate(d.getDate() - n); return RPG.todayKey(d); }
+for (var di = 0; di < 8; di++) {
+  var dk = dayk(di), ts = new Date().toISOString();
+  if (di % 2 === 0) {
+    iv.journal[dk] = { mood: 'great', note: '' };
+    iv.sleep[dk] = { hours: 8, quality: 4 };
+    iv.log.push({ t: ts, day: dk, icon: '⏳', text: 'Focus session', xp: 70, coins: 0, hp: 0, min: 60 });
+    iv.log.push({ t: ts, day: dk, icon: '⚔️', text: 'Quest cleared', xp: 25, coins: 12, hp: 0, min: 0 });
+  } else {
+    iv.journal[dk] = { mood: 'awful', note: '' };
+    iv.sleep[dk] = { hours: 5, quality: 2 };
+  }
+}
+var ins = RPG.insights(iv);
+ok(ins.enough === true && ins.sampleSize === 8, 'insights need >=6 mood days');
+ok(ins.findings.some(function (f) { return f.kind === 'sleep'; }), 'finds the sleep <-> mood link');
+ok(ins.findings.some(function (f) { return f.kind === 'focus'; }), 'finds the focus <-> mood link');
+ok(ins.findings.some(function (f) { return f.kind === 'quests'; }), 'finds the quests <-> mood link');
+ok(ins.bestSleep && ins.bestSleep > 7, 'derives a best-feel sleep target');
+ok(RPG.insights(RPG.newState('IV2')).enough === false, 'not enough data -> no false insights');
+
+section('Weekly review');
+var wr = RPG.seed(RPG.newState('WR'));
+var wrq = A.addQuest(wr, { title: 'big', diff: 'epic' }); A.completeQuest(wr, wrq.id);
+var wrmon = wr.habits.find(function (h) { return h.type === 'bad'; });
+A.slipHabit(wr, wrmon.id); A.slipHabit(wr, wrmon.id);
+var rev = RPG.weeklyReview(wr);
+ok(rev.bestDay === RPG.todayKey() && rev.bestXp > 0, 'best day of the week identified');
+ok(rev.worstMonster === wrmon.title && rev.worstN === 2, 'worst monster tallied from the week\'s slips');
+ok(rev.suggestion.indexOf(wrmon.title) >= 0, 'suggestion targets the worst monster');
+
+section('Onboarding paths');
+ok(RPG.PATHS.length >= 4, 'multiple onboarding paths offered');
+var stu = RPG.seedPreset(RPG.newState('STU'), 'student');
+ok(stu.skills[0].name === 'Study', 'student path renames the first life area');
+ok(stu.quests.length >= 2 && stu.habits.length >= 3, 'student path seeds a full board');
+ok(stu.shop.some(function (i) { return i.special === 'shield'; }), 'path boards stock a Streak Shield');
+ok(stu.habits.some(function (h) { return h.type === 'bad' && h.menace === 1; }), 'path monsters start at menace 1');
+var gen = RPG.seedPreset(RPG.newState('GEN'), 'general');
+ok(gen.quests.length === 2 && gen.habits.length === 3 && gen.shop.length === 6, 'general path == classic seed');
+
+section('Migration to schema 5');
+var v4 = RPG.newState('V4');
+delete v4.hero.boons; delete v4.hero.ascension; delete v4.hero.buffs; delete v4.hero.frame;
+delete v4.inventory; delete v4.cosmetics; delete v4.counters.ascensions;
+v4.quests.push({ id: 'q4', title: 'q', diff: 'easy', skillId: null, due: null, recurring: true, main: null, doneOn: null, createdOn: RPG.todayKey() });
+v4.habits.push({ id: 'b4', title: 'bad', type: 'bad', skillId: null, streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: 7 });
+v4.schema = 4;
+var st5 = mockStorage(); st5.setItem(RPG.KEY, JSON.stringify(v4));
+var m5 = RPG.load(st5);
+ok(m5.hero.boons && typeof m5.hero.boons === 'object' && m5.hero.ascension === 0, 'migration adds boons & ascension');
+ok(Array.isArray(m5.hero.buffs) && typeof m5.hero.frame === 'string', 'migration adds buffs & frame');
+ok(m5.inventory.potion === 0 && Array.isArray(m5.cosmetics.frames), 'migration adds inventory & cosmetics');
+ok(m5.counters.ascensions === 0, 'migration adds ascension counter');
+ok(m5.quests[m5.quests.length - 1].days === null, 'migration adds days=null to old quests');
+ok(m5.habits.find(function (h) { return h.id === 'b4'; }).menace === 1, 'migration adds menace to old bad habits');
+ok(m5.schema === 5, 'schema bumped to 5');
+
+section('New achievements');
+var na = RPG.newState('NA');
+na.skills[0].level = 10;
+ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'skill_master'; }), 'Grandmaster unlocks at a Lv10 life area');
+na.hero.level = 60;
+ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'legend'; }), 'Living Legend unlocks at rank SS');
+na.hero.ascension = 1;
+ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'ascend_1'; }), 'Reborn unlocks after ascending');
+
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

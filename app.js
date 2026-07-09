@@ -4,6 +4,9 @@ var A = RPG.actions;
 var state = RPG.load(localStorage);
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=3;
 var focusMode={work:50,brk:10};
+var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var pendingDays=[];              // weekday ints picked for a new recurring quest
+var pickedPath='general';        // onboarding path
 
 var RANK_COLORS={E:'#9a94b8',D:'#5aa2ff',C:'#3ddc84',B:'#b07bff',A:'#ff9d47',S:'#f5c542',SS:'#ff5fa2'};
 var THEMES={
@@ -25,6 +28,13 @@ function applyTheme(){
   var r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel);
   r.setProperty('--panel2',t.panel2); r.setProperty('--line',t.line); r.setProperty('--gold',t.accent);
+}
+/* Legend mode: at rank S/SS the whole interface shifts to a refined, gilded look */
+function applyLegend(){
+  var w=$('#wrap'); if(!w||!state) return;
+  var code=RPG.rankFor(state.hero.level).code;
+  w.classList.toggle('legend', code==='S'||code==='SS');
+  w.classList.toggle('ss', code==='SS');
 }
 function persist(){ RPG.save(state, localStorage); }
 function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
@@ -149,11 +159,23 @@ function koScreen(){
 }
 function chestScreen(res){
   SND.chest(); confetti();
+  var loot='';
+  if(res.loot){
+    confetti(true);
+    if(res.loot.type==='jackpot') loot='<div class="lootline gold">💰 <b>COIN JACKPOT</b> — +'+res.loot.coins+' bonus coins!</div>';
+    else if(res.loot.type==='potion') loot='<div class="lootline">🧪 Rare drop: <b>Focus Elixir</b> — quaff it any day for ×2 XP.</div>';
+    else if(res.loot.type==='frame') loot='<div class="lootline" style="color:'+res.loot.frame.color+'">🖼 Rare drop: <b>'+esc(res.loot.frame.name)+' frame</b> — equip it on your avatar.</div>';
+  }
   var o=$('#overlay'); o.className='show';
   o.innerHTML='<div class="levelbox"><div class="big">🎁 DAILY CHEST</div>'+
     '<div class="sub">All dailies cleared. The chest creaks open…</div>'+
     '<div class="sub"><span style="color:var(--xp)">+'+res.xp+' XP</span> &nbsp; <span style="color:var(--gold)">+'+res.coins+' 💰</span></div>'+
+    loot+
     '<button class="btn go" onclick="closeOverlay()">Nice ▶</button></div>';
+}
+function usePotion(){
+  var r=RPG.usePotion(state); persist(); render();
+  if(r){ SND.chest(); sparks('🧪'); toast('🧪 <span class="p">Focus Elixir — XP ×'+r.mult+' for the rest of today</span>'); }
 }
 function closeOverlay(){ $('#overlay').className=''; render(); }
 
@@ -163,26 +185,35 @@ function skillName(id){ var s=state.skills.find(function(k){return k.id===id;});
 function renderHUD(){
   var h=state.hero, need=RPG.xpForLevel(h.level), r=RPG.rankFor(h.level), nr=RPG.nextRank(h.level);
   var col=RANK_COLORS[r.code]||'var(--gold)';
+  var maxHp=RPG.maxHpOf(state);
+  var fr=h.frame?RPG.frameById(h.frame):null;
+  var avStyle=fr?('border-color:'+fr.color+';box-shadow:0 0 12px '+fr.glow+', inset 0 0 8px '+fr.glow):('border-color:'+col);
+  var asc=(h.ascension||0)>0?'<span class="season" title="Season '+h.ascension+' — you have ascended '+h.ascension+' time'+(h.ascension===1?'':'s')+'">✦ S'+h.ascension+'</span>':'';
+  var buffM=RPG.buffXpMult(state);
+  var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active — XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
-    '<div class="avatar" style="border-color:'+col+'" onclick="openCharacter()" title="Customize character">'+h.avatar+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+'">'+r.code+' · '+r.name+'</span></div>'+
+    '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" onclick="openCharacter()" title="Customize character">'+h.avatar+'</div>'+
+    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+'">'+r.code+' · '+r.name+'</span>'+asc+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
-      '<div class="bar hp"><i style="width:'+(h.hp/RPG.MAX_HP*100)+'%"></i><b>HP '+h.hp+' / '+RPG.MAX_HP+'</b></div>'+
+      '<div class="bar hp"><i style="width:'+(h.hp/maxHp*100)+'%"></i><b>HP '+h.hp+' / '+maxHp+'</b></div>'+
     '</div></div>'+
     '<div class="side"><div class="lvl">LV.'+h.level+'</div>'+
       '<div class="coin" id="coinCounter">💰 '+h.coins+'</div>'+
       '<div class="flame">🔥 '+h.streak+' day'+(h.streak===1?'':'s')+((h.shields||0)>0?' <span title="Streak Shield active">🛡</span>':'')+'</div>'+
+      buff+
       (h.woundedOn===RPG.todayKey()?'<div class="nextrank" style="color:var(--hp)">🩸 wounded · ×0.5 XP</div>':'')+
-      (nr?'<div class="nextrank">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank">MAX RANK</div>')+'</div>';
+      (nr?'<div class="nextrank">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank" style="color:var(--gold);cursor:pointer" onclick="openAscend()">✦ MAX — Ascend ▶</div>')+'</div>';
 }
 
 function renderSkills(){
   var html = state.skills.map(function(s){
     var need=RPG.skillXpForLevel(s.level);
+    var tier=RPG.skillTier(s.level);
+    var tierChip=tier.name?'<span class="tier" title="'+tier.name+' — +'+Math.round((tier.xp-1)*100)+'% XP'+(tier.coins>1?', +'+Math.round((tier.coins-1)*100)+'% coins':'')+' on this area’s actions">'+tier.name+'</span>':'';
     return '<div class="skillcard"><div class="t"><span>'+s.icon+' '+esc(s.name)+'</span><small>Lv.'+s.level+'</small></div>'+
-      '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+
+      '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+tierChip+
       '<button class="del" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
   }).join('');
   html += '<button class="addskill" onclick="addSkillPrompt()">+ life area</button>';
@@ -237,13 +268,17 @@ function dupe(list,title){ return list.some(function(x){return x.title===title;}
 
 function questRow(q){
   var today=RPG.todayKey(), done=q.doneOn===today || (!q.recurring && q.doneOn);
+  var activeToday=RPG.questActiveOn(q,new Date());
   var meta=[diffChip(q.diff)];
   if(q.skillId&&skillName(q.skillId)) meta.push('<span class="chip skill">'+skillName(q.skillId)+'</span>');
+  if(q.recurring&&q.days&&q.days.length) meta.push('<span class="chip sched" title="Repeats on selected days">🗓 '+q.days.slice().sort().map(function(n){return DOW[n][0];}).join('')+'</span>');
   if(q.due){ meta.push('<span class="chip '+(q.due<today?'late':'due')+'">'+(q.due<today?'⚠ late ':'due ')+q.due+'</span>'); }
-  return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(q.title)+'</div>'+
+  var action = done ? '<span style="color:var(--good);font-weight:700">✓</span>'
+    : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
+    : '<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>';
+  return '<div class="item'+(done?' done':'')+(q.recurring&&!activeToday?' dormant':'')+'"><div class="grow"><div class="title">'+esc(q.title)+'</div>'+
     '<div class="meta">'+meta.join('')+'</div></div>'+
-    (done?'<span style="color:var(--good);font-weight:700">✓</span>'
-      :'<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>')+
+    action+
     (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">⬆</button>':'')+
     '<button class="btn ghost" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
 }
@@ -282,6 +317,7 @@ function goalCard(g){
 function renderQuests(){
   var today=RPG.todayKey();
   var dailies=state.quests.filter(function(q){return q.recurring;});
+  var chest=A.chestStatus(state);
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
   var goalsOpen=state.goals.filter(function(g){return !g.doneOn;});
   var goalHtml=goalsOpen.map(goalCard).join('') ||
@@ -293,7 +329,7 @@ function renderQuests(){
       '<button class="btn" onclick="addGoal()">+ Main quest</button></div>'+
       '<input id="gNote" placeholder="Why it matters (optional)"></div></div>'+
     '<div class="grid two">'+
-    '<div><div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
+    '<div><div class="panel"><h3>☀️ Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
       (dailies.map(questRow).join('')||'<div class="empty">No dailies. Add a recurring quest — it resets every morning and feeds the chest.</div>')+'</div>'+
     '<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div></div>'+
     '<div class="panel"><h3>🗡 Side quests <span class="cnt">'+sides.length+'</span>'+
@@ -302,9 +338,13 @@ function renderQuests(){
       '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
       '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="qSkill">'+skillOptions()+'</select></div>'+
-      '<div class="row"><input type="date" id="qDue"><label><input type="checkbox" id="qRec"> daily</label></div>'+
+      '<div class="row"><input type="date" id="qDue"><label><input type="checkbox" id="qRec"> repeat</label></div>'+
+      '<div class="daysrow"><span class="plabel">repeat on:</span>'+DOW.map(function(d,i){
+        return '<button type="button" class="dow'+(pendingDays.indexOf(i)>=0?' on':'')+'" onclick="toggleDow('+i+')">'+d[0]+'</button>';
+      }).join('')+'<span class="hint">none selected = every day (needs “repeat” ticked)</span></div>'+
       '<button class="btn wide go" onclick="addQuest()">+ Add quest</button>'+presetChips('quest')+'</div></div></div>';
 }
+function toggleDow(n){ var i=pendingDays.indexOf(n); if(i>=0) pendingDays.splice(i,1); else pendingDays.push(n); render(); }
 
 function bossStrip(){
   var b=state.boss;
@@ -365,7 +405,7 @@ function renderToday(){
   var today=RPG.todayKey();
   var h=new Date().getHours();
   var greet=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
-  var dailies=state.quests.filter(function(q){return q.recurring;});
+  var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,new Date());});
   var habits=state.habits.filter(function(x){return x.type==='good';});
   var todo=habits.filter(function(x){return x.lastDoneOn!==today;});
   var j=state.journal[today], sl=state.sleep[today];
@@ -397,6 +437,7 @@ function renderToday(){
       '<button class="'+(j?'done':'')+'" onclick="go(\'journal\')">'+(j?'📔 Journal ✓':'📔 Log mood · +15xp')+'</button>'+
       '<button class="'+(sl?'done':'')+'" onclick="go(\'journal\')">'+(sl?'🌙 Sleep ✓':'🌙 Log sleep · heals ❤️')+'</button>'+
       '<button onclick="go(\'focus\')">⏳ Start a focus run</button>'+
+      ((state.inventory.potion||0)>0?'<button class="potion" onclick="usePotion()">🧪 Focus Elixir ×'+state.inventory.potion+' · ×2 XP today</button>':'')+
     '</div></div></div>';
 }
 
@@ -436,13 +477,19 @@ function renderHabits(){
     (bad.map(function(h){
       var days=A.cleanDays(h);
       var best=Math.max(h.bestClean||0,days);
-      return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
+      var men=RPG.menaceOf(h);
+      var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
+      var dmg=Math.round(12*men*damp);
+      var menPct=Math.round((men-1)/(2.5-1)*100);
+      var menClass=men>=2?' hot':men>1.3?' warm':'';
+      return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
         '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
         '<span style="color:var(--gold)">best: '+best+'</span>'+
-        '<span>slips: '+h.slips+'</span><span style="color:var(--hp)">slip = −12 ❤️ / −10 💰</span></div></div>'+
+        '<span>slips: '+h.slips+'</span><span style="color:var(--hp)">slip = −'+dmg+' ❤️ / −10 💰</span></div>'+
+        (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
         '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
         '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP — honesty is part of the game.</div>')+
+    }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP — the more you feed a monster, the harder it hits back.</div>')+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
 }
@@ -632,6 +679,26 @@ function renderJournal(){
     }).join('')||'<div class="empty">Your story starts with the first entry.</div>')+'</div></div>';
 }
 
+function insightsPanel(){
+  var iv=RPG.insights(state);
+  var body;
+  if(!iv.enough){
+    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and ScaleMyLife starts showing what actually moves your mood — sleep, focus, slips.</div>';
+  } else if(!iv.findings.length){
+    body='<div class="empty">No strong patterns yet across your good and low days. Keep logging — the signal sharpens with more data.</div>';
+  } else {
+    body=iv.findings.map(function(f){ return '<div class="insight"><span class="ic">'+f.icon+'</span><span>'+esc(f.text)+'</span></div>'; }).join('');
+  }
+  return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights — what moves your mood</h3>'+body+'</div>';
+}
+function reviewBox(){
+  var rev=RPG.weeklyReview(state);
+  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}):'—';
+  return '<div class="review">'+
+    '<div class="rv"><span class="k">🏅 Best day</span><span class="v">'+best+' · '+rev.bestXp+' XP</span></div>'+
+    (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
+    '<div class="rv suggest"><span class="k">🎯 Next week</span><span class="v">'+esc(rev.suggestion)+'</span></div></div>';
+}
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
@@ -664,6 +731,7 @@ function renderStats(){
   }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
 
   $('#view').innerHTML='<div class="panel"><h3>📊 Week in review — for your Friday planning</h3>'+
+    reviewBox()+
     '<div class="statgrid">'+
     '<div class="stat"><div class="v g">'+w.tot.xp+'</div><div class="k">XP earned</div></div>'+
     '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">💰 earned</div></div>'+
@@ -677,6 +745,7 @@ function renderStats(){
     '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
     '<div class="hint" style="text-align:center">mood, last 7 days</div></div>'+
+    insightsPanel()+
     '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
     '<div class="panel" style="margin-top:14px"><h3>📜 Adventure log</h3>'+logHtml+'</div>';
@@ -687,6 +756,7 @@ function render(){
   if(RPG.dailyReset(state) && seenDay){ toast('🌅 <span class="p">New day — dailies are fresh</span>'); }
   seenDay = state.lastSeenDay;
   persist();
+  applyLegend();
   renderHUD(); renderSkills(); renderTabs();
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
 }
@@ -705,8 +775,10 @@ function promoteQ(id){
 }
 function addQuest(){
   var t=$('#qTitle').value.trim(); if(!t) return;
+  var rec=$('#qRec').checked;
   A.addQuest(state,{title:t,diff:$('#qDiff').value,skillId:$('#qSkill').value||null,
-    due:$('#qDue').value||null,recurring:$('#qRec').checked,main:null});
+    due:$('#qDue').value||null,recurring:rec,days:rec?pendingDays.slice():null,main:null});
+  pendingDays=[];
   persist(); render();
 }
 function addStep(goalId){
@@ -794,8 +866,55 @@ function openCharacter(){
       var t=THEMES[k];
       return '<button class="'+(state.settings.theme===k?'on':'')+'" title="'+t.name+'" style="background:'+t.panel+'" onclick="setTheme(\''+k+'\')"><i style="background:'+t.accent+'"></i></button>';
     }).join('')+'</div>'+
+    frameChips()+
+    boonChips()+
+    (RPG.ascendReady(state)?'<div class="ascendbox"><b>♻️ Ready to ascend</b><span>You’re Lv.'+state.hero.level+' — start a new season for a permanent boon.</span><button class="btn ascend" onclick="closeModal();openAscend()">Ascend to Season '+((state.hero.ascension||0)+1)+' ▶</button></div>':'')+
     '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveCharacter()">Save</button>'+
     '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
+}
+function frameChips(){
+  var owned=(state.cosmetics&&state.cosmetics.frames)||[];
+  if(!owned.length) return '<div class="flabel">Avatar frame</div><div class="hint">Win glowing avatar frames as rare loot from daily chests.</div>';
+  return '<div class="flabel">Avatar frame</div><div class="framepick">'+
+    '<button class="'+(!state.hero.frame?'on':'')+'" onclick="setFrame(\'\')">none</button>'+
+    owned.map(function(id){ var f=RPG.frameById(id); if(!f) return '';
+      return '<button class="'+(state.hero.frame===id?'on':'')+'" style="border-color:'+f.color+';box-shadow:0 0 8px '+f.glow+'" onclick="setFrame(\''+id+'\')">'+esc(f.name)+'</button>';
+    }).join('')+'</div>';
+}
+function setFrame(id){ state.hero.frame=id; persist(); renderHUD(); openCharacter(); }
+function boonChips(){
+  var b=(state.hero.boons)||{}; var keys=Object.keys(b).filter(function(k){return b[k]>0;});
+  if(!keys.length) return '';
+  return '<div class="flabel">Ascension boons · Season '+(state.hero.ascension||0)+'</div><div class="boonchips">'+
+    keys.map(function(k){ var bo=RPG.boonById(k); return bo?'<span class="boonchip" title="'+esc(bo.desc)+'">'+bo.icon+' '+esc(bo.name)+(b[k]>1?' ×'+b[k]:'')+'</span>':''; }).join('')+'</div>';
+}
+/* ---------- ascension (prestige) ---------- */
+function openAscend(){
+  if(!RPG.ascendReady(state)){ toast('<span class="h">Reach Lv.'+RPG.ASCEND_LEVEL+' (rank S) to ascend</span>','dmg'); return; }
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>♻️ ASCEND — SEASON '+((state.hero.ascension||0)+1)+'</h2>'+
+    '<div class="hint">You’re Lv.'+state.hero.level+'. Ascending resets your level and rank for a fresh climb — but you keep your coins, quests, habits, streak, titles, badges and cosmetics. In return you choose a <b>permanent boon</b> that stacks every season.</div>'+
+    '<div class="boonpick">'+RPG.BOONS.map(function(bo){
+      var have=(state.hero.boons&&state.hero.boons[bo.id])||0;
+      return '<button onclick="doAscend(\''+bo.id+'\')"><span class="bi">'+bo.icon+'</span><b>'+esc(bo.name)+(have?' · owned ×'+have:'')+'</b><small>'+esc(bo.desc)+'</small></button>';
+    }).join('')+'</div>'+
+    '<div class="setrow"><button class="btn" onclick="closeModal()">Not yet</button></div></div>';
+}
+function doAscend(boonId){
+  if(!confirm('Ascend now? Your level resets to 1, but you keep everything else and gain a permanent boon.')) return;
+  var r=RPG.ascend(state,boonId); persist(); closeModal();
+  if(r){ ascendScreen(r); }
+  render(); afterAction();
+}
+function ascendScreen(r){
+  SND.rankup(); confetti(true); setTimeout(function(){confetti(true);},500); shake();
+  var o=$('#overlay'); o.className='show';
+  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--gold);font-size:64px">♻️</div>'+
+    '<div class="big" style="color:var(--gold)">ASCENDED</div>'+
+    '<div class="rankname" style="color:var(--gold)">SEASON '+r.ascension+'</div>'+
+    '<div class="sub">A new climb begins from Lv.1. Permanent boon gained:</div>'+
+    '<div class="sub"><b>'+r.boon.icon+' '+esc(r.boon.name)+'</b> — '+esc(r.boon.desc)+'</div>'+
+    '<button class="btn go" onclick="closeOverlay()">Begin ▶</button></div>';
 }
 function titleChips(){
   var unlocked=state.achievements.map(function(u){
@@ -891,13 +1010,17 @@ function onboarding(){
     '<input id="obName" placeholder="Hero name" maxlength="24" value="'+esc(keep)+'">'+
     '<div class="avpick">'+AVATARS.slice(0,12).map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';onboarding()">'+a+'</button>';}).join('')+'</div>'+
+    '<div class="flabel">Choose your path — it tailors your starting quests, habits, life areas and rewards</div>'+
+    '<div class="pathpick">'+RPG.PATHS.map(function(p){
+      return '<button class="'+(pickedPath===p.id?'on':'')+'" onclick="pickedPath=\''+p.id+'\';onboarding()"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
+    }).join('')+'</div>'+
     '<button class="btn wide go" onclick="createHero()">▶ START ADVENTURE</button>'+
-    '<div class="hint" style="margin-top:10px">You start with 50 💰, sample quests, habits and rewards — edit everything. Full customization behind your avatar.</div></div>';
+    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your path — edit everything. Full customization lives behind your avatar.</div></div>';
   var inp=$('#obName'); if(inp && !inp.value) inp.focus();
 }
 function createHero(){
   var n=$('#obName').value.trim()||'Hero';
-  state=RPG.seed(RPG.newState(n,pickedAv||'🧙'));
+  state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPath||'general');
   pickedAv=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
