@@ -59,8 +59,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .skillcard .bar{height:7px}
 
 /* weekly boss */
-.boss{border:1px solid var(--hp);border-radius:10px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;
-  background:linear-gradient(90deg,color-mix(in srgb,var(--hp) 9%,transparent),transparent)}
+.boss{border:1px solid var(--hp);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--hp) 12%,transparent),transparent),color-mix(in srgb,var(--panel) 86%,transparent)}
+.boss.calm{background:color-mix(in srgb,var(--panel) 86%,transparent)}
 .boss .ic{font-size:32px;animation:bossbreathe 2.2s infinite}
 @keyframes bossbreathe{50%{transform:scale(1.12);filter:drop-shadow(0 0 10px var(--hp))}}
 .boss .grow{flex:1;min-width:0}
@@ -411,31 +412,34 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .wrap.ss .logo::after{background:linear-gradient(90deg,transparent,var(--gold) 20%,#ff5fa2 50%,var(--gold) 80%,transparent);height:3px;box-shadow:0 0 14px color-mix(in srgb,#ff5fa2 40%,transparent)}
 .wrap.ss .hud{border-color:color-mix(in srgb,#ff5fa2 45%,var(--gold))}
 
-/* ---------- v4: aurora background, glass surfaces & motion polish ---------- */
-/* slow drifting aurora built from the active theme's accent colours */
+/* ---------- v4/v5: WebGL gradient bg, glass surfaces & motion polish ---------- */
+/* animated shader gradient (gradient.js) sits here; CSS aurora is the fallback beneath it */
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:block;pointer-events:none}
 body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
   background:
     radial-gradient(38% 38% at 16% 18%, color-mix(in srgb,var(--gold) 24%,transparent) 0%, transparent 70%),
     radial-gradient(42% 42% at 84% 12%, color-mix(in srgb,var(--skill) 22%,transparent) 0%, transparent 70%),
     radial-gradient(48% 48% at 78% 88%, color-mix(in srgb,var(--xp) 16%,transparent) 0%, transparent 72%);
-  filter:blur(44px);opacity:.55;animation:aurora 26s ease-in-out infinite alternate}
+  filter:blur(44px);opacity:.55;animation:aurora 26s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes aurora{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(2%,-2%,0) scale(1.12)}100%{transform:translate3d(-2%,2%,0) scale(1.06)}}
 
-/* frosted-glass surfaces */
-.panel,.hud{backdrop-filter:blur(9px) saturate(1.12);-webkit-backdrop-filter:blur(9px) saturate(1.12)}
-.panel{background-color:color-mix(in srgb,var(--panel) 88%,transparent);
-  border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
-  box-shadow:0 1px 0 color-mix(in srgb,#fff 6%,transparent) inset, 0 12px 32px -14px rgba(0,0,0,.55);
-  transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .2s,border-color .2s}
+/* glass surfaces — translucent + machined "double-bezel" highlight, but NO backdrop-blur
+   on these large scrolling panels (blur on scrolling content tanks mobile GPU) */
+.panel{background-color:color-mix(in srgb,var(--panel) 92%,transparent);
+  border-radius:14px;border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
+  box-shadow:0 1px 0 color-mix(in srgb,#fff 7%,transparent) inset, 0 12px 32px -14px rgba(0,0,0,.55);
+  transition:transform .18s cubic-bezier(.32,.72,0,1),box-shadow .2s cubic-bezier(.32,.72,0,1),border-color .2s}
 .panel:hover{border-color:color-mix(in srgb,var(--gold) 20%,var(--line));
-  box-shadow:0 1px 0 color-mix(in srgb,#fff 9%,transparent) inset, 0 18px 44px -16px rgba(0,0,0,.62)}
-.hud{background-color:color-mix(in srgb,var(--panel) 90%,transparent)}
+  box-shadow:0 1px 0 color-mix(in srgb,#fff 10%,transparent) inset, 0 18px 44px -16px rgba(0,0,0,.62)}
+.hud{background-color:color-mix(in srgb,var(--panel) 92%,transparent)}
+.item{border-radius:10px}
 
-/* button sheen sweep + coloured glow on hover */
+/* button sheen sweep (transform-only) + coloured glow on hover */
 .btn{position:relative;overflow:hidden}
-.btn::after{content:"";position:absolute;top:0;left:-125%;width:55%;height:100%;
-  background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);transform:skewX(-18deg);transition:left .55s ease}
-.btn:hover::after{left:135%}
+.btn::after{content:"";position:absolute;top:0;left:0;width:60%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);
+  transform:translateX(-130%) skewX(-18deg);transition:transform .6s cubic-bezier(.32,.72,0,1)}
+.btn:hover::after{transform:translateX(285%) skewX(-18deg)}
 .btn.go:hover{box-shadow:0 0 18px color-mix(in srgb,var(--good) 45%,transparent)}
 .btn.buy:hover{box-shadow:0 0 18px color-mix(in srgb,var(--gold) 45%,transparent)}
 .btn.slip:hover{box-shadow:0 0 18px color-mix(in srgb,var(--hp) 45%,transparent)}
@@ -487,6 +491,15 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
   .tabs button .dot{top:2px;right:8px}
   .item{flex-wrap:wrap}
   .item .grow{flex:1 1 100%;order:-1}
+  /* weekly-boss strip: stack cleanly instead of crushing the text to one word per line */
+  .boss{flex-wrap:wrap;gap:8px 10px}
+  .boss .ic{flex:0 0 auto;font-size:26px}
+  .boss .grow{flex:1 1 60%;min-width:0}
+  .boss input{flex:1 1 100%;max-width:none!important}
+  .boss .btn{flex:1 1 auto}
+  .boss .btn.ghost{flex:0 0 auto}
+  .ag{flex-wrap:wrap}
+  .ag .grow{flex:1 1 60%}
   .btn{padding:10px 14px}
   .btn.ghost{padding:10px 8px}
   .goal .t{flex-direction:column;align-items:flex-start}

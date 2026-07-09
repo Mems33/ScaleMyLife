@@ -28,6 +28,7 @@ function applyTheme(){
   var r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel);
   r.setProperty('--panel2',t.panel2); r.setProperty('--line',t.line); r.setProperty('--gold',t.accent);
+  if(window.SMLGradient) window.SMLGradient.setColors();
 }
 /* Legend mode: at rank S/SS the whole interface shifts to a refined, gilded look */
 function applyLegend(){
@@ -357,7 +358,7 @@ function bossStrip(){
       '<button class="btn slip" onclick="slayBoss()">⚔ SLAY</button>'+
       '<button class="btn ghost" onclick="abandonBoss()">✕</button></div>';
   }
-  return '<div class="boss" style="border-color:var(--line);background:none"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
+  return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
     '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
     '<div class="sub">Pick THE task of the week — worth 500xp / 250💰. Ideal during Friday planning.</div></div>'+
     '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:260px">'+
