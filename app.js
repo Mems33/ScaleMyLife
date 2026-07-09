@@ -3,6 +3,19 @@ var $ = function(s,el){ return (el||document).querySelector(s); };
 var A = RPG.actions;
 var state = RPG.load(localStorage);
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=3;
+var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
+var editDays=[];                 // weekday picker state inside the edit-quest modal
+var SKILL_PALETTE=['#5aa2ff','#f5c542','#3ddc84','#b07bff','#ff7854','#59c2ff','#ff5fa2','#7bd88f','#ffb454','#a78bfa','#4dd0e1','#ffd166'];
+function skillColorById(id){
+  if(id==='__none') return '#6c6690';
+  var idx=state.skills.findIndex(function(s){return s.id===id;});
+  return SKILL_PALETTE[(idx>=0?idx:0)%SKILL_PALETTE.length];
+}
+function skillLabelById(id){
+  if(id==='__none') return '· untagged';
+  var s=state.skills.find(function(k){return k.id===id;}); return s? s.icon+' '+esc(s.name) : '?';
+}
+function fmtHm(min){ var h=Math.floor(min/60), m=Math.round(min%60); return (h?h+'h ':'')+m+'m'; }
 var focusMode={work:50,brk:10};
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var pendingDays=[];              // weekday ints picked for a new recurring quest
@@ -229,7 +242,7 @@ function renderTabs(){
     return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+t[1]+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
   }).join('');
 }
-function go(t){ tab=t; render(); }
+function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; render(); }
 
 function diffChip(d){ return '<span class="chip '+d+'">'+RPG.DIFF[d].label+' · '+RPG.DIFF[d].xp+'xp/'+RPG.DIFF[d].coins+'💰</span>'; }
 function skillOptions(sel){
@@ -281,6 +294,7 @@ function questRow(q){
     '<div class="meta">'+meta.join('')+'</div></div>'+
     action+
     (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">⬆</button>':'')+
+    '<button class="btn ghost" title="Edit" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
     '<button class="btn ghost" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
 }
 
@@ -301,10 +315,12 @@ function goalCard(g){
     return '<div class="step'+(done?' done':'')+'"><span>'+(done?'✅':'▫️')+'</span>'+
       '<div class="grow">'+esc(q.title)+' <span class="chip '+q.diff+'" style="margin-left:6px">'+RPG.DIFF[q.diff].label+'</span></div>'+
       (done?'':'<button class="btn go small" onclick="doQuest(\''+q.id+'\')">Clear · '+RPG.DIFF[q.diff].xp+'xp</button>')+
+      '<button class="btn ghost small" title="Edit" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
       '<button class="btn ghost small" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
   }).join('');
   return '<div class="goal"><div class="t"><div class="title">🏆 '+esc(g.title)+'</div>'+
     '<div><button class="btn go" onclick="doGoal(\''+g.id+'\')">Complete · 300xp/150💰</button>'+
+    '<button class="btn ghost" title="Edit" onclick="editGoalModal(\''+g.id+'\')">✎</button>'+
     '<button class="btn ghost" onclick="delGoal(\''+g.id+'\')">✕</button></div></div>'+
     (g.note?'<div class="hint">'+esc(g.note)+'</div>':'')+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
@@ -345,7 +361,12 @@ function renderQuests(){
       }).join('')+'<span class="hint">none selected = every day (needs “repeat” ticked)</span></div>'+
       '<button class="btn wide go" onclick="addQuest()">+ Add quest</button>'+presetChips('quest')+'</div></div></div>';
 }
-function toggleDow(n){ var i=pendingDays.indexOf(n); if(i>=0) pendingDays.splice(i,1); else pendingDays.push(n); render(); }
+/* toggle a weekday chip in place — must NOT re-render, or it wipes the half-typed quest form */
+function toggleDow(n){
+  var i=pendingDays.indexOf(n); if(i>=0) pendingDays.splice(i,1); else pendingDays.push(n);
+  var btns=document.querySelectorAll('.daysrow .dow');
+  for(var k=0;k<btns.length;k++){ btns[k].className='dow'+(pendingDays.indexOf(k)>=0?' on':''); }
+}
 
 function bossStrip(){
   var b=state.boss;
@@ -468,6 +489,7 @@ function renderHabits(){
         '<span>+'+(12+Math.min(10,h.streak+1))+'xp/6💰</span></div></div>'+
         (done?'<span style="color:var(--good);font-weight:700">✓ today</span>'
           :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
+        '<button class="btn ghost" title="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
         '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Add a habit you want to grow.</div>')+
     '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
@@ -489,6 +511,7 @@ function renderHabits(){
         '<span>slips: '+h.slips+'</span><span style="color:var(--hp)">slip = −'+dmg+' ❤️ / −10 💰</span></div>'+
         (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
         '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
+        '<button class="btn ghost" title="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
         '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP — the more you feed a monster, the harder it hits back.</div>')+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
@@ -678,11 +701,11 @@ function renderJournal(){
       var on=(pendingMood||((entry||{}).mood))===m.key;
       return '<button class="'+(on?'on':'')+'" title="'+m.label+'" onclick="pendingMood=\''+m.key+'\';render()">'+m.emoji+'</button>';
     }).join('')+'</div>'+
-    '<textarea id="jNote" rows="3" placeholder="One honest line about today…">'+esc((entry||{}).note||'')+'</textarea>'+
+    '<textarea id="jNote" rows="3" placeholder="One honest line about today…" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
     '<button class="btn wide go" style="margin-top:8px" onclick="saveJournal()">'+(entry?'Update entry':'Log entry')+'</button>'+
     '<h3 style="margin-top:18px">🌙 Sleep '+(sl?'<span class="cnt">logged ✓</span>':'· restores ❤️')+'</h3>'+
     '<div class="row" style="display:flex;gap:8px;align-items:center">'+
-    '<input id="slHours" type="number" step="0.5" min="0" max="16" value="'+((sl||{}).hours||7.5)+'" style="max-width:90px"> <span class="hint">hours</span>'+
+    '<input id="slHours" type="number" step="0.5" min="0" max="16" value="'+(pendingHours!=null?esc(pendingHours):((sl||{}).hours||7.5))+'" oninput="pendingHours=this.value" style="max-width:90px"> <span class="hint">hours</span>'+
     '<div class="stars">'+[1,2,3,4,5].map(function(n){
       var on=n<=(sl?sl.quality:pendingQuality);
       return '<button class="'+(on?'on':'')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div>'+
@@ -708,6 +731,29 @@ function insightsPanel(){
     body=iv.findings.map(function(f){ return '<div class="insight"><span class="ic">'+f.icon+'</span><span>'+esc(f.text)+'</span></div>'; }).join('');
   }
   return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights — what moves your mood</h3>'+body+'</div>';
+}
+function focusPanel(){
+  var f=RPG.focusByDay(state,7);
+  var body;
+  if(!f.totalMin){
+    body='<div class="empty">No focus sessions yet. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown — what you actually worked on — appears here.</div>';
+  } else {
+    var legend='<div class="focuslegend">'+f.skills.map(function(id){
+      return '<span><i style="background:'+skillColorById(id)+'"></i>'+skillLabelById(id)+'</span>';
+    }).join('')+'</div>';
+    var rows=f.days.map(function(d){
+      var day=f.per[d], total=day.total;
+      var lbl=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
+      var segs=f.skills.map(function(id){
+        var m=day.bySkill[id]||0; if(!m) return '';
+        return '<span class="fseg" style="width:'+(m/f.maxMin*100)+'%;background:'+skillColorById(id)+'" title="'+skillLabelById(id)+': '+fmtHm(m)+'"></span>';
+      }).join('');
+      return '<div class="frow"><span class="fdl">'+lbl+'</span><div class="ftrack">'+segs+'</div>'+
+        '<span class="ftt">'+(total?fmtHm(total):'')+'</span></div>';
+    }).join('');
+    body='<div class="hint" style="margin-bottom:8px">Total this week: <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
+  }
+  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area — what you worked on</h3>'+body+'</div>';
 }
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
@@ -763,6 +809,7 @@ function renderStats(){
     '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
     '<div class="hint" style="text-align:center">mood, last 7 days</div></div>'+
+    focusPanel()+
     insightsPanel()+
     '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
@@ -841,9 +888,9 @@ function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ ch
 function saveJournal(){
   var mood=pendingMood||((state.journal[RPG.todayKey()]||{}).mood);
   if(!mood){ toast('<span class="h">Pick a mood first</span>','dmg'); return; }
-  var r=A.logJournal(state,mood,$('#jNote').value); pendingMood=null; persist(); render(); fx(r); afterAction();
+  var r=A.logJournal(state,mood,$('#jNote').value); pendingMood=null; pendingNote=null; persist(); render(); fx(r); afterAction();
 }
-function saveSleep(){ var r=A.logSleep(state,$('#slHours').value,pendingQuality); persist(); render(); fx(r); afterAction(); }
+function saveSleep(){ var r=A.logSleep(state,$('#slHours').value,pendingQuality); pendingHours=null; persist(); render(); fx(r); afterAction(); }
 function addSkillPrompt(){ openSkillModal(); }
 function openSkillModal(){
   var m=$('#modal'); m.className='modal show';
@@ -966,7 +1013,8 @@ function openSettings(){
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>⚙️ SETTINGS</h2>'+
     '<div class="setrow"><button class="btn" onclick="closeModal();openCharacter()">🧝 Character & theme</button>'+
-    '<button class="btn" onclick="tut(0)">❓ Tutorial</button></div>'+
+    '<button class="btn" onclick="closeModal();startTour()">🎯 Interactive tour</button></div>'+
+    '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button></div>'+
     '<div class="setrow">'+
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button></div>'+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
@@ -978,6 +1026,121 @@ function openSettings(){
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
 function closeModal(){ $('#modal').className='modal'; }
+
+/* ---------- edit modals ---------- */
+function toggleEditDow(n){
+  var i=editDays.indexOf(n); if(i>=0) editDays.splice(i,1); else editDays.push(n);
+  var btns=document.querySelectorAll('#editDaysRow .dow');
+  for(var k=0;k<btns.length;k++){ btns[k].className='dow'+(editDays.indexOf(k)>=0?' on':''); }
+}
+function editQuestModal(id){
+  var q=state.quests.find(function(x){return x.id===id;}); if(!q) return;
+  editDays=(q.recurring&&q.days)?q.days.slice():[];
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>✎ EDIT QUEST</h2>'+
+    '<div class="flabel">Title</div><input id="eqTitle" maxlength="80" value="'+esc(q.title)+'">'+
+    '<div class="flabel">Difficulty</div><select id="eqDiff">'+['easy','normal','hard','epic'].map(function(dd){return '<option value="'+dd+'"'+(q.diff===dd?' selected':'')+'>'+RPG.DIFF[dd].label+' · '+RPG.DIFF[dd].xp+'xp/'+RPG.DIFF[dd].coins+'💰</option>';}).join('')+'</select>'+
+    '<div class="flabel">Life area</div><select id="eqSkill">'+skillOptions(q.skillId)+'</select>'+
+    (q.recurring
+      ? '<div class="flabel">Repeat on <span class="hint">(none = every day)</span></div><div class="daysrow" id="editDaysRow">'+DOW.map(function(dn,idx){return '<button type="button" class="dow'+(editDays.indexOf(idx)>=0?' on':'')+'" onclick="toggleEditDow('+idx+')">'+dn[0]+'</button>';}).join('')+'</div>'
+      : '<div class="flabel">Due date</div><input type="date" id="eqDue" value="'+(q.due||'')+'">')+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveEditQuest(\''+id+'\')">Save</button>'+
+    '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
+  $('#eqTitle').focus();
+}
+function saveEditQuest(id){
+  var q=state.quests.find(function(x){return x.id===id;}); if(!q) return;
+  var o={title:$('#eqTitle').value,diff:$('#eqDiff').value,skillId:$('#eqSkill').value||null};
+  if(q.recurring) o.days=editDays.slice(); else if($('#eqDue')) o.due=$('#eqDue').value||null;
+  A.editQuest(state,id,o); persist(); closeModal(); render();
+  toast('<span class="p">✎ Quest updated</span>');
+}
+function editGoalModal(id){
+  var g=state.goals.find(function(x){return x.id===id;}); if(!g) return;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>✎ EDIT MAIN QUEST</h2>'+
+    '<div class="flabel">Title</div><input id="egTitle" maxlength="80" value="'+esc(g.title)+'">'+
+    '<div class="flabel">Why it matters</div><input id="egNote" maxlength="120" value="'+esc(g.note||'')+'">'+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveEditGoal(\''+id+'\')">Save</button>'+
+    '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
+  $('#egTitle').focus();
+}
+function saveEditGoal(id){
+  A.editGoal(state,id,{title:$('#egTitle').value,note:$('#egNote').value});
+  persist(); closeModal(); render(); toast('<span class="p">✎ Main quest updated</span>');
+}
+function editHabitModal(id){
+  var h=state.habits.find(function(x){return x.id===id;}); if(!h) return;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>✎ EDIT '+(h.type==='bad'?'MONSTER':'HABIT')+'</h2>'+
+    '<div class="flabel">Title</div><input id="ehTitle" maxlength="60" value="'+esc(h.title)+'">'+
+    (h.type==='good'
+      ? '<div class="flabel">Life area</div><select id="ehSkill">'+skillOptions(h.skillId)+'</select>'+
+        '<div class="flabel">Frequency</div><select id="ehTarget">'+[7,6,5,4,3,2,1].map(function(t){return '<option value="'+t+'"'+(h.target===t?' selected':'')+'>'+(t===7?'Every day':t+'×/week')+'</option>';}).join('')+'</select>'
+      : '')+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveEditHabit(\''+id+'\')">Save</button>'+
+    '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
+  $('#ehTitle').focus();
+}
+function saveEditHabit(id){
+  var h=state.habits.find(function(x){return x.id===id;}); if(!h) return;
+  var o={title:$('#ehTitle').value};
+  if(h.type==='good'){ o.skillId=$('#ehSkill').value||null; o.target=Number(($('#ehTarget')||{}).value||h.target); }
+  A.editHabit(state,id,o); persist(); closeModal(); render();
+  toast('<span class="p">✎ Updated</span>');
+}
+
+/* ---------- interactive spotlight tour ---------- */
+var tourStep=0;
+var TOUR=[
+  {tab:'today', sel:'#hud', title:'Your hero', body:'Your rank, level, XP, HP, coins and streak live here. Tap your avatar any time to rename, re-theme or ascend.'},
+  {tab:'today', sel:'#skillsRow', title:'Life areas', body:'Tag quests, habits and focus sessions to these areas. Each one levels up and unlocks mastery bonuses on its own actions.'},
+  {tab:'today', sel:'.tabs', title:'Getting around', body:'Today is home base. Quests, Habits, Focus, Market, Journal and Stats each live in their own tab.'},
+  {tab:'today', sel:'.quick', title:'Daily rituals', body:'Log your mood and sleep, and start a focus run, right from here. Keeping the streak alive multiplies all your XP.'},
+  {tab:'quests', sel:'.boss', title:'The weekly boss', body:'Name THE task of your week and slay it within 7 days for a big reward.'},
+  {tab:'quests', sel:'.panel', title:'Quests', body:'Main quests are big goals broken into steps. Daily quests reset each morning and fill the chest. The ✎ button edits anything you added.'},
+  {tab:'focus', sel:'.focusbox', title:'Focus = paid deep work', body:'Pomodoro cycles that pay you for every worked minute. Tag a life area so it shows up in your Stats breakdown.'},
+  {tab:'market', sel:'.shoptabs', title:'Spend what you earned', body:'Turn coins into real rewards, guilt-free. Prices climb if you binge the same treat in one day.'},
+  {tab:'stats', sel:'.review', title:'See your patterns', body:'Your week in review, a focus-by-area breakdown, and insights on what actually moves your mood.'}
+];
+function startTour(){ closeModal(); tourStep=0; showTourStep(); }
+function showTourStep(){
+  if(tourStep<0){ tourStep=0; }
+  if(tourStep>=TOUR.length){ endTour(true); return; }
+  var s=TOUR[tourStep];
+  var run=function(){
+    var el=null; s.sel.split(',').some(function(sel){ el=document.querySelector(sel.trim()); return !!el; });
+    if(el&&el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
+    setTimeout(function(){ positionTour(el); }, 130);
+  };
+  if(s.tab && tab!==s.tab){ go(s.tab); setTimeout(run, 90); } else run();
+}
+function positionTour(el){
+  var host=document.getElementById('tour');
+  if(!host){ host=document.createElement('div'); host.id='tour'; document.body.appendChild(host); }
+  host.className='show';
+  var s=TOUR[tourStep];
+  var vw=window.innerWidth, vh=window.innerHeight, pad=8;
+  var r=el&&el.getBoundingClientRect?el.getBoundingClientRect():{top:vh/2-40,left:16,width:vw-32,height:80};
+  if(!r.width && !r.height){ r={top:vh/2-40,left:16,width:vw-32,height:80}; }
+  var hole='<div class="tourhole" style="top:'+(r.top-pad)+'px;left:'+(r.left-pad)+'px;width:'+(r.width+pad*2)+'px;height:'+(r.height+pad*2)+'px"></div>';
+  var below=(r.top+r.height+220)<vh;
+  var tipTop=below?(r.top+r.height+pad+12):(r.top-pad-12);
+  var tip='<div class="tourtip'+(below?'':' above')+'" style="top:'+tipTop+'px">'+
+    '<div class="tt">'+esc(s.title)+'</div><div class="tb">'+esc(s.body)+'</div>'+
+    '<div class="tnav"><span class="tprog">'+(tourStep+1)+' / '+TOUR.length+'</span>'+
+    '<button class="btn small" onclick="endTour()">Skip</button>'+
+    (tourStep>0?'<button class="btn small" onclick="tourPrev()">◀ Back</button>':'')+
+    '<button class="btn small go" onclick="tourNext()">'+(tourStep===TOUR.length-1?'Done ✓':'Next ▶')+'</button></div></div>';
+  host.innerHTML=hole+tip;
+}
+function tourNext(){ tourStep++; showTourStep(); }
+function tourPrev(){ tourStep--; showTourStep(); }
+function endTour(done){
+  var h=document.getElementById('tour'); if(h){ h.className=''; h.innerHTML=''; }
+  if(done===true){ toast('🎉 <span class="p">You’re all set — go clear a quest!</span>'); go('today'); }
+}
+
 function exportSave(){
   var blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -1044,6 +1207,7 @@ function createHero(){
   pickedAv=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
+  setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
 }
 function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); } else { renderHUDShell(); tut(0); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }

@@ -661,5 +661,47 @@ ok(mig5.settings.escalate === true, 'migration enables escalation by default');
 ok(mig5.shop[0].surge === 0.4 && mig5.shop[1].limit === 2, 'migration backfills surge + cap on old shop items');
 
 
+section('Edit quests / main quests / habits');
+var ed = RPG.seed(RPG.newState('ED'));
+var eq = A.addQuest(ed, { title: 'old title', diff: 'easy' });
+A.editQuest(ed, eq.id, { title: 'new title', diff: 'hard', skillId: ed.skills[0].id });
+ok(eq.title === 'new title' && eq.diff === 'hard' && eq.skillId === ed.skills[0].id, 'editQuest updates title/diff/life area');
+A.editQuest(ed, eq.id, { title: '   ' });
+ok(eq.title === 'new title', 'blank title is ignored on edit');
+var erq = A.addQuest(ed, { title: 'daily', diff: 'easy', recurring: true });
+A.editQuest(ed, erq.id, { days: [1, 3, 5] });
+ok(erq.days && erq.days.length === 3, 'editQuest sets a weekday schedule on a recurring quest');
+A.editQuest(ed, erq.id, { days: [0, 1, 2, 3, 4, 5, 6] });
+ok(erq.days === null, 'editQuest: a full-week schedule means every day');
+var eg = A.addGoal(ed, { title: 'goal', note: '' });
+A.editGoal(ed, eg.id, { title: 'big goal', note: 'because it matters' });
+ok(eg.title === 'big goal' && eg.note === 'because it matters', 'editGoal updates title + note');
+var eh = A.addHabit(ed, { title: 'read', type: 'good', target: 7 });
+A.editHabit(ed, eh.id, { title: 'read more', target: 3, skillId: ed.skills[0].id });
+ok(eh.title === 'read more' && eh.target === 3 && eh.skillId === ed.skills[0].id, 'editHabit updates a good habit');
+var ehb = A.addHabit(ed, { title: 'scroll', type: 'bad' });
+A.editHabit(ed, ehb.id, { title: 'doomscroll', target: 2 });
+ok(ehb.title === 'doomscroll' && ehb.target === 7, 'editHabit renames a monster but ignores target/skill for bad habits');
+ok(A.editQuest(ed, 'nope', {}) === null && A.editGoal(ed, 'nope', {}) === null && A.editHabit(ed, 'nope', {}) === null, 'editing an unknown id returns null');
+
+section('Focus breakdown by day');
+var fb = RPG.newState('FB');
+var tf0 = Date.now();
+A.startFocus(fb, { work: 25, brk: 0, skillId: fb.skills[0].id, now: tf0 });
+A.tickFocus(fb, tf0 + 25 * 60000 + 5); A.stopFocus(fb, tf0 + 25 * 60000 + 5);
+var tf1 = Date.now();
+A.startFocus(fb, { work: 25, brk: 0, skillId: fb.skills[1].id, now: tf1 });
+A.tickFocus(fb, tf1 + 25 * 60000 + 5); A.stopFocus(fb, tf1 + 25 * 60000 + 5);
+var fbd = RPG.focusByDay(fb, 7);
+ok(fbd.days.length === 7, 'focusByDay covers 7 days');
+ok(fbd.per[RPG.todayKey()].total === 50, 'today total = 50 min across two sessions');
+ok(fbd.per[RPG.todayKey()].bySkill[fb.skills[0].id] === 25 && fbd.per[RPG.todayKey()].bySkill[fb.skills[1].id] === 25, 'focus split by life area');
+ok(fbd.skills.length === 2 && fbd.totalMin === 50 && fbd.maxMin === 50, 'life areas + totals computed');
+var fu = RPG.newState('FU'); var tu = Date.now();
+A.startFocus(fu, { work: 30, brk: 0, now: tu }); A.tickFocus(fu, tu + 30 * 60000 + 5); A.stopFocus(fu, tu + 30 * 60000 + 5);
+var fud = RPG.focusByDay(fu, 7);
+ok(fud.per[RPG.todayKey()].bySkill['__none'] === 30 && fud.skills.indexOf('__none') >= 0, 'untagged focus is bucketed as __none');
+
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

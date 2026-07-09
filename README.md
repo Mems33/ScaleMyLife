@@ -14,7 +14,7 @@ Saves live in the browser (localStorage). Export a JSON backup now and then (⚙
 
 ## Start here
 
-First launch runs a short, skippable tutorial, then **Create your hero**: name, avatar, and a **starting path** (Student, Athlete, Founder, Creative or Balanced) that tailors your opening quests, habits, life areas and rewards so you never stare at an empty board. Everything is editable afterwards. The app opens on the **Today** tab.
+First launch runs a short, skippable primer, then **Create your hero**: name, avatar, and a **starting path** (Student, Athlete, Founder, Creative or Balanced) that tailors your opening quests, habits, life areas and rewards so you never stare at an empty board. A new hero is then walked through an **interactive spotlight tour** that dims the screen and points at the real controls one by one (re-runnable any time from ⚙️ → Interactive tour). Everything you add is editable — every quest, main quest and habit has a ✎ button. The app opens on the **Today** tab.
 
 ## The core loop
 
@@ -41,6 +41,7 @@ Work earns coins, coins buy pleasures. A solid day (dailies + habits + 2 focus b
 
 The **Stats** tab now does more than count XP:
 
+- **Focus by life area** — a per-day stacked breakdown of *what you actually worked on*: each focus session is tagged to a life area, then charted so you can see where your deep-work hours really went this week.
 - **Week in review** — your best day, your toughest monster of the week, and a concrete suggestion for next week (ideal for Friday planning).
 - **Insights** — plain-language patterns computed from data you already log: how sleep, focus and slips track with your mood ("On your best-mood days you sleep 1.3h more"). It needs a few days of mood entries before it speaks up, and it never invents a pattern that isn't there.
 
@@ -52,7 +53,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-ui.js` (426 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-ui.js` (457 tests).
 
 ## Development
 
