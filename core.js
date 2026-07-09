@@ -316,10 +316,11 @@
   /* ---------- log ---------- */
   function addLog(state, icon, text, d) {
     d = d || {};
-    state.log.unshift({
-      t: new Date().toISOString(), day: todayKey(), icon: icon, text: text,
-      xp: d.xp || 0, coins: d.coins || 0, hp: d.hp || 0, min: d.min || 0
-    });
+    var e = { t: new Date().toISOString(), day: todayKey(), icon: icon, text: text,
+      xp: d.xp || 0, coins: d.coins || 0, hp: d.hp || 0, min: d.min || 0 };
+    if (d.sk) e.sk = d.sk;       // life area a focus session belonged to (for the breakdown chart)
+    if (d.label) e.label = d.label;
+    state.log.unshift(e);
     if (state.log.length > 1000) state.log.length = 1000;
   }
 
@@ -490,6 +491,28 @@
     return q.days.indexOf(wd) >= 0;
   }
 
+  /* ---------- focus breakdown ----------
+     Per-day focus minutes, split by the life area each session was tagged to,
+     for a stacked "what did I work on" chart. Untagged time bucketed as '__none'. */
+  function focusByDay(state, span) {
+    span = span || 7;
+    var days = [], per = {}, used = {};
+    for (var i = span - 1; i >= 0; i--) { var d = new Date(); d.setDate(d.getDate() - i); var k = todayKey(d); days.push(k); per[k] = { total: 0, bySkill: {} }; }
+    (state.log || []).forEach(function (e) {
+      if (e.icon !== '⏳' || !per[e.day] || !e.min) return;
+      var key = e.sk || '__none';
+      per[e.day].bySkill[key] = (per[e.day].bySkill[key] || 0) + e.min;
+      per[e.day].total += e.min;
+      used[key] = true;
+    });
+    var order = [];
+    (state.skills || []).forEach(function (s) { if (used[s.id]) order.push(s.id); });
+    if (used['__none']) order.push('__none');
+    var maxMin = 1, totalMin = 0;
+    days.forEach(function (k) { if (per[k].total > maxMin) maxMin = per[k].total; totalMin += per[k].total; });
+    return { days: days, per: per, skills: order, maxMin: maxMin, totalMin: totalMin };
+  }
+
   /* ---------- insight layer ----------
      Pure math over data the app already collects (mood, sleep, focus, log).
      metricsByDay -> per-day numbers; insights -> plain-language findings. */
@@ -610,6 +633,25 @@
       state.quests = state.quests.filter(function (q) { return q.id !== id; });
     },
 
+    /* edit a quest in place (title/diff/skill/due/schedule) — does not touch progress */
+    editQuest: function (state, id, o) {
+      var q = state.quests.find(function (x) { return x.id === id; });
+      if (!q) return null;
+      if (o.title != null && o.title.trim()) q.title = o.title.trim();
+      if (o.diff && DIFF[o.diff]) q.diff = o.diff;
+      if ('skillId' in o) q.skillId = o.skillId || null;
+      if ('due' in o) q.due = o.due || null;
+      if ('days' in o) {
+        var days = null;
+        if (q.recurring && Array.isArray(o.days) && o.days.length && o.days.length < 7) {
+          days = o.days.map(Number).filter(function (n) { return n >= 0 && n <= 6; });
+          if (!days.length) days = null;
+        }
+        q.days = days;
+      }
+      return q;
+    },
+
     addGoal: function (state, o) {
       var g = { id: uid(), title: o.title.trim(), note: o.note || '', doneOn: null, createdOn: todayKey() };
       state.goals.push(g);
@@ -633,6 +675,14 @@
     deleteGoal: function (state, id) {
       state.goals = state.goals.filter(function (g) { return g.id !== id; });
       state.quests.forEach(function (q) { if (q.main === id) q.main = null; });
+    },
+
+    editGoal: function (state, id, o) {
+      var g = state.goals.find(function (x) { return x.id === id; });
+      if (!g) return null;
+      if (o.title != null && o.title.trim()) g.title = o.title.trim();
+      if ('note' in o) g.note = o.note || '';
+      return g;
     },
 
     addHabit: function (state, o) {
@@ -730,6 +780,18 @@
       state.habits = state.habits.filter(function (h) { return h.id !== id; });
     },
 
+    /* edit a habit's title (and, for good habits, its life area + weekly target) */
+    editHabit: function (state, id, o) {
+      var h = state.habits.find(function (x) { return x.id === id; });
+      if (!h) return null;
+      if (o.title != null && o.title.trim()) h.title = o.title.trim();
+      if (h.type === 'good') {
+        if ('skillId' in o) h.skillId = o.skillId || null;
+        if (o.target != null) h.target = clamp(Math.round(o.target) || 7, 1, 7);
+      }
+      return h;
+    },
+
     /* ----- pomodoro focus engine -----
        Runs work/break cycles forever until stopped. Payment = worked minutes
        (full work phases + elapsed part of the current one), not all-or-nothing. */
@@ -791,7 +853,7 @@
       }
       state.counters.focusMin += paid;
       var res = grant(state, { xp: Math.round(paid * FOCUS_XP_PER_MIN), coins: Math.round(paid * FOCUS_COIN_PER_MIN) }, skillId);
-      addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' — ' + label : ''), { xp: res.xp, coins: res.coins, min: paid });
+      addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' — ' + label : ''), { xp: res.xp, coins: res.coins, min: paid, sk: skillId, label: label });
       res.minutes = paid;
       return res;
     },
@@ -1070,7 +1132,7 @@
     newState: newState, seed: seed, seedPreset: seedPreset, dailyReset: dailyReset, migrate: migrate,
     grant: grant, damage: damage, ascend: ascend, usePotion: usePotion, addLog: addLog,
     checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,
-    insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn,
+    insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn, focusByDay: focusByDay,
     actions: actions, save: save, load: load
   };
 });

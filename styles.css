@@ -466,6 +466,30 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
 .cap{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 7px}
 .cap.hit{color:var(--hp);border-color:var(--hp)}
 
+/* ---------- v6: focus breakdown chart, edit, interactive tour ---------- */
+.focuslegend{display:flex;flex-wrap:wrap;gap:6px 12px;margin-bottom:10px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.focuslegend span{display:inline-flex;align-items:center;gap:5px}
+.focuslegend i{width:11px;height:11px;border-radius:3px;display:inline-block;flex:0 0 auto}
+.focusbars{display:grid;gap:7px}
+.frow{display:flex;align-items:center;gap:9px}
+.frow .fdl{font-family:var(--mono);font-size:11px;color:var(--muted);flex:0 0 30px}
+.frow .ftrack{flex:1;height:16px;background:#0d0b18;border:1px solid var(--line);border-radius:5px;overflow:hidden;display:flex}
+.frow .fseg{height:100%;display:block;transition:width .5s cubic-bezier(.2,.8,.3,1)}
+.frow .ftt{font-family:var(--mono);font-size:11px;color:var(--gold);flex:0 0 auto;min-width:54px;text-align:right}
+
+/* interactive spotlight tour (coach-marks) */
+#tour{position:fixed;inset:0;z-index:90;display:none}
+#tour.show{display:block}
+.tourhole{position:absolute;border-radius:12px;box-shadow:0 0 0 3px var(--gold),0 0 0 9999px rgba(6,4,16,.82);
+  transition:top .3s cubic-bezier(.32,.72,0,1),left .3s cubic-bezier(.32,.72,0,1),width .3s cubic-bezier(.32,.72,0,1),height .3s cubic-bezier(.32,.72,0,1);pointer-events:none}
+.tourtip{position:absolute;left:16px;right:16px;max-width:430px;margin:0 auto;background:var(--panel);border:1px solid var(--gold);
+  border-radius:12px;padding:14px 16px;box-shadow:0 14px 44px rgba(0,0,0,.6);animation:pop .25s cubic-bezier(.2,1.6,.4,1)}
+.tourtip.above{transform:translateY(-100%)}
+.tourtip .tt{font-family:var(--px);font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.5px;line-height:1.5}
+.tourtip .tb{font-size:14px;line-height:1.55;color:var(--ink);margin-bottom:12px}
+.tourtip .tnav{display:flex;gap:8px;align-items:center}
+.tourtip .tprog{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:auto}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}

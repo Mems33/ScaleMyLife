@@ -375,7 +375,7 @@ setTimeout(function () {
 
   console.log('\nTutorial replay');
   w.openSettings();
-  ok(d.querySelector('#modal').textContent.indexOf('Tutorial') >= 0, 'tutorial replay in settings');
+  ok(d.querySelector('#modal').textContent.indexOf('How it works') >= 0 && d.querySelector('#modal').textContent.indexOf('Interactive tour') >= 0, 'tutorial + interactive tour available in settings');
   w.tut(0);
   ok(d.querySelector('.tdots') !== null, 'tutorial replays');
   w.tut(3);
@@ -550,6 +550,65 @@ setTimeout(function () {
   ok(w.state.settings.escalate === false, 'surge can be toggled off in the market');
   ok(w.RPG.buyPrice(w.state, gm) === 60, 'with surge off the price is flat again');
   w.toggleEscalate();
+
+  console.log('\nData-loss bugfixes (v6)');
+  w.go('journal');
+  w.pendingNote = 'draft note here';
+  w.pendingMood = 'great'; w.render();   // simulates clicking a mood (which re-renders)
+  ok(d.querySelector('#jNote').value === 'draft note here', 'typed journal note survives a mood/star re-render');
+  ok(d.querySelector('#jNote').getAttribute('oninput') !== null, 'note textarea captures typing into the draft');
+  d.querySelector('#jNote').value = 'final'; w.pendingNote = 'final'; w.saveJournal();
+  ok(w.pendingNote === null, 'journal draft cleared after saving');
+  w.go('quests');
+  d.querySelector('#qTitle').value = 'My scheduled quest';
+  d.querySelector('#qRec').checked = true;
+  w.toggleDow(1);                         // must NOT wipe the half-typed title
+  ok(d.querySelector('#qTitle').value === 'My scheduled quest', 'side-quest title survives a weekday toggle');
+  ok(w.pendingDays.indexOf(1) >= 0, 'weekday recorded without a full re-render');
+  w.addQuest();
+  var sq = w.state.quests.find(function (q) { return q.title === 'My scheduled quest'; });
+  ok(sq && sq.recurring && sq.days && sq.days.indexOf(1) >= 0, 'scheduled quest added with its weekday');
+
+  console.log('\nEdit quests / goals / habits (v6)');
+  w.go('quests');
+  d.querySelector('#qTitle').value = 'Editable quest'; w.addQuest();
+  var eqid = w.state.quests.find(function (q) { return q.title === 'Editable quest'; }).id;
+  w.editQuestModal(eqid);
+  ok(d.querySelector('#eqTitle') !== null, 'edit-quest modal opens prefilled');
+  d.querySelector('#eqTitle').value = 'Edited quest'; d.querySelector('#eqDiff').value = 'hard';
+  w.saveEditQuest(eqid);
+  ok(w.state.quests.find(function (q) { return q.id === eqid; }).title === 'Edited quest', 'quest edited via modal');
+  d.querySelector('#gTitle').value = 'Editable goal'; w.addGoal();
+  var egid = w.state.goals.find(function (g) { return g.title === 'Editable goal'; }).id;
+  w.editGoalModal(egid);
+  d.querySelector('#egTitle').value = 'Edited goal'; w.saveEditGoal(egid);
+  ok(w.state.goals.find(function (g) { return g.id === egid; }).title === 'Edited goal', 'main quest edited via modal');
+  w.go('habits');
+  var ghid = w.state.habits.filter(function (h) { return h.type === 'good'; })[0].id;
+  w.editHabitModal(ghid);
+  ok(d.querySelector('#ehTitle') !== null, 'edit-habit modal opens');
+  d.querySelector('#ehTitle').value = 'Renamed habit'; w.saveEditHabit(ghid);
+  ok(w.state.habits.find(function (h) { return h.id === ghid; }).title === 'Renamed habit', 'habit renamed via modal');
+
+  console.log('\nFocus breakdown panel (v6)');
+  var tfp = Date.now();
+  w.A.startFocus(w.state, { work: 25, brk: 0, skillId: w.state.skills[0].id, now: tfp });
+  w.A.tickFocus(w.state, tfp + 25 * 60000 + 5); w.A.stopFocus(w.state, tfp + 25 * 60000 + 5);
+  w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('Focus by life area') >= 0, 'focus breakdown panel renders');
+  ok(d.querySelector('.focusbars') !== null && d.querySelector('.fseg') !== null, 'stacked focus bars render');
+  ok(d.querySelector('.focuslegend') !== null, 'focus legend shows life areas');
+
+  console.log('\nInteractive tour (v6)');
+  w.go('today');
+  w.startTour();
+  w.positionTour(d.querySelector('#hud')); // force synchronous positioning for the test
+  ok(d.querySelector('#tour.show') !== null && d.querySelector('.tourtip') !== null, 'tour overlay + tooltip render');
+  ok(d.querySelector('.tourhole') !== null, 'spotlight hole renders');
+  w.tourNext();
+  ok(w.tourStep === 1, 'tour advances a step');
+  w.endTour();
+  ok(d.querySelector('#tour.show') === null, 'tour closes cleanly');
 
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
