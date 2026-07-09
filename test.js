@@ -703,5 +703,23 @@ var fud = RPG.focusByDay(fu, 7);
 ok(fud.per[RPG.todayKey()].bySkill['__none'] === 30 && fud.skills.indexOf('__none') >= 0, 'untagged focus is bucketed as __none');
 
 
+section('Release hygiene: service-worker cache freshness');
+/* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
+   itself changes (new CACHE name -> new install). So any commit that touches a
+   precached asset MUST also touch sw.js. This guard fails the suite otherwise. */
+(function () {
+  var cp = require('child_process');
+  try {
+    var swCommit = cp.execSync('git log -1 --format=%H -- sw.js', { cwd: __dirname }).toString().trim();
+    var assets = ['index.html', 'styles.css', 'core.js', 'app.js', 'gradient.js', 'manifest.json'];
+    var changed = cp.execSync('git diff --name-only ' + swCommit + '..HEAD -- ' + assets.join(' '), { cwd: __dirname }).toString().trim();
+    ok(changed === '', 'sw.js cache bumped alongside asset changes' + (changed ? ' — STALE for: ' + changed.replace(/\n/g, ', ') + ' (bump CACHE in sw.js)' : ''));
+  } catch (e) {
+    ok(true, 'sw freshness check skipped (git unavailable)');
+  }
+  var swSrc = require('fs').readFileSync(__dirname + '/sw.js', 'utf8');
+  ok(/var CACHE = 'sml-v\d+';/.test(swSrc), 'sw.js declares a versioned cache name');
+})();
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);
