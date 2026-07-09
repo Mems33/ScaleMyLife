@@ -411,6 +411,57 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .wrap.ss .logo::after{background:linear-gradient(90deg,transparent,var(--gold) 20%,#ff5fa2 50%,var(--gold) 80%,transparent);height:3px;box-shadow:0 0 14px color-mix(in srgb,#ff5fa2 40%,transparent)}
 .wrap.ss .hud{border-color:color-mix(in srgb,#ff5fa2 45%,var(--gold))}
 
+/* ---------- v4: aurora background, glass surfaces & motion polish ---------- */
+/* slow drifting aurora built from the active theme's accent colours */
+body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
+  background:
+    radial-gradient(38% 38% at 16% 18%, color-mix(in srgb,var(--gold) 24%,transparent) 0%, transparent 70%),
+    radial-gradient(42% 42% at 84% 12%, color-mix(in srgb,var(--skill) 22%,transparent) 0%, transparent 70%),
+    radial-gradient(48% 48% at 78% 88%, color-mix(in srgb,var(--xp) 16%,transparent) 0%, transparent 72%);
+  filter:blur(44px);opacity:.55;animation:aurora 26s ease-in-out infinite alternate}
+@keyframes aurora{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(2%,-2%,0) scale(1.12)}100%{transform:translate3d(-2%,2%,0) scale(1.06)}}
+
+/* frosted-glass surfaces */
+.panel,.hud{backdrop-filter:blur(9px) saturate(1.12);-webkit-backdrop-filter:blur(9px) saturate(1.12)}
+.panel{background-color:color-mix(in srgb,var(--panel) 88%,transparent);
+  border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
+  box-shadow:0 1px 0 color-mix(in srgb,#fff 6%,transparent) inset, 0 12px 32px -14px rgba(0,0,0,.55);
+  transition:transform .18s cubic-bezier(.2,.8,.3,1),box-shadow .2s,border-color .2s}
+.panel:hover{border-color:color-mix(in srgb,var(--gold) 20%,var(--line));
+  box-shadow:0 1px 0 color-mix(in srgb,#fff 9%,transparent) inset, 0 18px 44px -16px rgba(0,0,0,.62)}
+.hud{background-color:color-mix(in srgb,var(--panel) 90%,transparent)}
+
+/* button sheen sweep + coloured glow on hover */
+.btn{position:relative;overflow:hidden}
+.btn::after{content:"";position:absolute;top:0;left:-125%;width:55%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);transform:skewX(-18deg);transition:left .55s ease}
+.btn:hover::after{left:135%}
+.btn.go:hover{box-shadow:0 0 18px color-mix(in srgb,var(--good) 45%,transparent)}
+.btn.buy:hover{box-shadow:0 0 18px color-mix(in srgb,var(--gold) 45%,transparent)}
+.btn.slip:hover{box-shadow:0 0 18px color-mix(in srgb,var(--hp) 45%,transparent)}
+
+/* smoother item entrance + tab motion + bar glow */
+.item{animation:riseIn .3s cubic-bezier(.2,.9,.3,1) both}
+@keyframes riseIn{from{opacity:0;transform:translateY(8px) scale(.99)}}
+.tabs button{transition:transform .15s,box-shadow .15s,border-color .15s,color .15s,background .15s}
+.tabs button:hover{transform:translateY(-2px)}
+.tabs button.on{box-shadow:0 0 16px color-mix(in srgb,var(--gold) 26%,transparent),0 6px 16px -8px rgba(0,0,0,.55)}
+.bar.xp>i{box-shadow:0 0 12px color-mix(in srgb,var(--xp) 50%,transparent)}
+.bar.hp>i{box-shadow:0 0 12px color-mix(in srgb,var(--hp) 42%,transparent)}
+
+/* modal: frosted glass + spring entrance */
+.modal{backdrop-filter:blur(6px)}
+.modal .box{backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+  background-color:color-mix(in srgb,var(--panel) 92%,transparent);animation:modalIn .3s cubic-bezier(.2,1.4,.4,1)}
+@keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.97)}}
+#overlay .levelbox{will-change:transform}
+
+/* economy: surged price + daily-cap chips */
+.price.surged{color:var(--orange)}
+.price.surged small{color:var(--muted);font-size:11px;font-weight:400;margin-left:2px}
+.cap{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:1px 7px}
+.cap.hit{color:var(--hp);border-color:var(--hp)}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}

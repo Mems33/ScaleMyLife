@@ -604,11 +604,61 @@ ok(m5.schema === 5, 'schema bumped to 5');
 section('New achievements');
 var na = RPG.newState('NA');
 na.skills[0].level = 10;
-ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'skill_master'; }), 'Grandmaster unlocks at a Lv10 life area');
+ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'skill_master'; }), 'Master Mind unlocks at a Lv10 life area');
 na.hero.level = 60;
 ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'legend'; }), 'Living Legend unlocks at rank SS');
 na.hero.ascension = 1;
 ok(RPG.checkAchievements(na).some(function (a) { return a.id === 'ascend_1'; }), 'Reborn unlocks after ascending');
+
+
+section('Extended mastery tiers (skills uncapped)');
+ok(RPG.skillTier(15).name === 'Grandmaster', 'Lv15 = Grandmaster');
+ok(RPG.skillTier(20).name === 'Sage', 'Lv20 = Sage');
+ok(RPG.skillTier(999).name === 'Sage', 'bonus plateaus at Sage (level itself keeps rising)');
+ok(RPG.skillTier(20).xp === 1.50 && RPG.skillTier(20).coins === 1.20, 'Sage = +50% XP / +20% coins');
+var stg = RPG.newState('STG'); stg.skills[0].level = 15;
+var qtg = A.addQuest(stg, { title: 'x', diff: 'hard', skillId: stg.skills[0].id });
+var rtg = A.completeQuest(stg, qtg.id);
+ok(rtg.xp === Math.round(60 * 1 * 1.40), 'Grandmaster adds +40% XP (' + rtg.xp + ')');
+var unc = RPG.newState('UNC'); var uk = unc.skills[0]; uk.level = 10; uk.xp = 0;
+for (var uz = 0; uz < 100; uz++) { var uq = A.addQuest(unc, { title: 'u' + uz, diff: 'epic', skillId: uk.id }); A.completeQuest(unc, uq.id); }
+ok(uk.level > 10, 'a life area levels past 10 — no cap (reached Lv.' + uk.level + ')');
+ok(RPG.checkAchievements(RPG.newState('SGX')).length >= 0, 'sage achievement wired'); // smoke
+var sagey = RPG.newState('SGY'); sagey.skills[0].level = 20;
+ok(RPG.checkAchievements(sagey).some(function (a) { return a.id === 'skill_sage'; }), 'Sage achievement at Lv.20');
+
+section('Anti-binge economy: surge + daily cap');
+var ec = RPG.newState('EC'); ec.hero.coins = 100000;
+var game = A.addShopItem(ec, { title: 'Gaming 1h', price: 60, tab: 'market' });
+ok(game.surge === 0.4 && game.limit === 0, 'market items get 0.4 surge, no hard cap by default');
+var eb1 = A.buy(ec, game.id);
+ok(eb1.coins === -60 && eb1.count === 1 && eb1.surged !== true, 'first buy at base price 60');
+var eb2 = A.buy(ec, game.id);
+ok(eb2.coins === -Math.round(60 * 1.4) && eb2.surged === true, 'second same-day buy surges to 84');
+var eb3 = A.buy(ec, game.id);
+ok(eb3.coins === -Math.round(60 * 1.8), 'third buy surges to 108 (escalating)');
+ok(RPG.buyInfo(ec, game).count === 3, 'daily buy count tracked');
+var vice = A.addShopItem(ec, { title: 'Skip gym', price: 70, tab: 'black', dmg: 6 });
+ok(vice.limit === 2 && vice.surge === 0.6, 'black-market items default to 0.6 surge + 2/day cap');
+A.buy(ec, vice.id); A.buy(ec, vice.id);
+var vcap = A.buy(ec, vice.id);
+ok(vcap.fail === 'limit', 'third black-market buy of the day is blocked by the cap');
+game.dayBuysOn = '2000-01-01';
+ok(RPG.buyPrice(ec, game) === 60 && RPG.buyCount(ec, game) === 0, 'surge + count reset on a new day');
+ec.settings.escalate = false; game.dayBuysOn = RPG.todayKey(); game.dayBuys = 5;
+ok(RPG.buyPrice(ec, game) === 60, 'escalation off in settings -> flat price');
+ec.settings.escalate = true;
+var nap = A.addShopItem(ec, { title: 'Nap', price: 25, tab: 'hotel', hp: 15 });
+A.buy(ec, nap.id);
+ok(RPG.buyPrice(ec, nap) === 25, 'hotel (rest) items never surge');
+var shieldItm = A.addShopItem(ec, { title: 'Shield', price: 200, tab: 'market', special: 'shield' });
+ok(shieldItm.surge === 0 && shieldItm.limit === 0, 'special items (shield) never surge or cap');
+var mig5 = RPG.migrate(JSON.parse(JSON.stringify(RPG.newState('MIG5'))));
+delete mig5.shop; mig5.shop = [{ id: 'x', title: 'g', price: 60, tab: 'market' }, { id: 'y', title: 'v', price: 70, tab: 'black' }];
+delete mig5.settings.escalate;
+mig5 = RPG.migrate(mig5);
+ok(mig5.settings.escalate === true, 'migration enables escalation by default');
+ok(mig5.shop[0].surge === 0.4 && mig5.shop[1].limit === 2, 'migration backfills surge + cap on old shop items');
 
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

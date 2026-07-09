@@ -32,6 +32,11 @@
   var ASCEND_LEVEL = 40;          // rank S — the gate for a new season (prestige)
   var POTION_XP_MULT = 2;         // Focus Elixir doubles XP for the rest of the day
   var MENACE_STEP = 0.2, MENACE_MAX = 2.5, MENACE_DECAY = 0.1; // bad-habit scaling
+  /* anti-binge economy: repeat same-day buys of a reward get pricier, so a coin
+     hoard can't buy unlimited "cheat" indulgences. Black-market rule-breaking is
+     also hard-capped per day. Overridable per item; toggle off in settings. */
+  var SURGE_DEFAULT = { market: 0.4, black: 0.6, hotel: 0 };
+  var LIMIT_DEFAULT = { market: 0, black: 2, hotel: 0 };
 
   /* ---------- prestige boons ---------- permanent buffs chosen when you ascend */
   var BOONS = [
@@ -54,12 +59,17 @@
   ];
   function frameById(id) { for (var i = 0; i < FRAMES.length; i++) if (FRAMES[i].id === id) return FRAMES[i]; return null; }
 
-  /* ---------- skill mastery tiers ---------- leveling a life area boosts its own actions */
+  /* ---------- skill mastery tiers ----------
+     Leveling a life area boosts its own actions. Skill level itself is UNCAPPED —
+     XP keeps accumulating and the level keeps rising; these tiers just define the
+     bonus, which plateaus at Sage so a maxed area can't run away with the economy. */
   function skillTier(level) {
-    if (level >= 10) return { name: 'Master', roman: 'III', xp: 1.30, coins: 1.10 };
-    if (level >= 6)  return { name: 'Expert', roman: 'II',  xp: 1.20, coins: 1.00 };
-    if (level >= 3)  return { name: 'Adept',  roman: 'I',   xp: 1.10, coins: 1.00 };
-    return { name: null, roman: '', xp: 1, coins: 1 };
+    if (level >= 20) return { name: 'Sage',        roman: 'V',   icon: '🌌', xp: 1.50, coins: 1.20 };
+    if (level >= 15) return { name: 'Grandmaster', roman: 'IV',  icon: '👑', xp: 1.40, coins: 1.15 };
+    if (level >= 10) return { name: 'Master',      roman: 'III', icon: '🎓', xp: 1.30, coins: 1.10 };
+    if (level >= 6)  return { name: 'Expert',      roman: 'II',  icon: '⭐', xp: 1.20, coins: 1.00 };
+    if (level >= 3)  return { name: 'Adept',       roman: 'I',   icon: '✦',  xp: 1.10, coins: 1.00 };
+    return { name: null, roman: '', icon: '', xp: 1, coins: 1 };
   }
 
   var RANKS = [
@@ -100,7 +110,8 @@
     { id: 'sleep_7',     icon: '🌙', name: 'Well Rested',     desc: 'Log sleep 7 times',             cond: function (s) { return Object.keys(s.sleep).length >= 7; } },
     { id: 'boss_1',      icon: '🐲', name: 'Dragonheart',     desc: 'Slay your first weekly boss',   cond: function (s) { return s.counters.bosses >= 1; } },
     { id: 'boss_5',      icon: '🔱', name: 'Serial Slayer',   desc: 'Slay 5 weekly bosses',          cond: function (s) { return s.counters.bosses >= 5; } },
-    { id: 'skill_master',icon: '🎓', name: 'Grandmaster',     desc: 'Take a life area to Lv.10',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 10; }); } },
+    { id: 'skill_master',icon: '🎓', name: 'Master Mind',      desc: 'Take a life area to Lv.10',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 10; }); } },
+    { id: 'skill_sage',  icon: '🌌', name: 'Sage',             desc: 'Take a life area to Lv.20',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 20; }); } },
     { id: 'ascend_1',    icon: '♻️', name: 'Reborn',          desc: 'Ascend into a new season',      cond: function (s) { return (s.hero.ascension || 0) >= 1; } },
     { id: 'legend',      icon: '🌟', name: 'Living Legend',   desc: 'Reach rank SS',                 cond: function (s) { return s.hero.level >= 60; } }
   ];
@@ -141,6 +152,23 @@
     return m;
   }
   function menaceOf(h) { return (h && typeof h.menace === 'number') ? h.menace : 1; }
+
+  /* ---------- shop pricing ---------- surge + daily cap, with tab-based fallbacks */
+  function itemSurge(state, it) {
+    if (state.settings && state.settings.escalate === false) return 0;
+    if (it.special) return 0;
+    return (typeof it.surge === 'number') ? it.surge : (SURGE_DEFAULT[it.tab] || 0);
+  }
+  function itemLimit(it) {
+    if (it.special) return 0;
+    return (typeof it.limit === 'number') ? it.limit : (LIMIT_DEFAULT[it.tab] || 0);
+  }
+  function buyCount(state, it) { return (it.dayBuysOn === todayKey()) ? (it.dayBuys || 0) : 0; }
+  function buyPrice(state, it) { return Math.round(it.price * (1 + itemSurge(state, it) * buyCount(state, it))); }
+  function buyInfo(state, it) {
+    var n = buyCount(state, it), lim = itemLimit(it);
+    return { price: buyPrice(state, it), count: n, limit: lim, capped: lim > 0 && n >= lim, surge: itemSurge(state, it) };
+  }
 
   /* iCalendar export: quests with due dates -> events at 09:00 with an alert.
      Importable into Apple Calendar / Google Calendar. */
@@ -195,7 +223,7 @@
       activeFocus: null,
       boss: null,                 // {title,setOn,due,doneOn}
       chestClaimedOn: null,
-      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '' },
+      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true },
       lastSeenDay: todayKey()
     };
   }
@@ -867,26 +895,41 @@
 
     /* ----- shop ----- */
     addShopItem: function (state, o) {
+      var tab = ['market', 'hotel', 'black'].indexOf(o.tab) >= 0 ? o.tab : 'market';
+      var special = o.special || null;
       var it = { id: uid(), title: o.title.trim(), price: Math.max(1, Math.round(o.price || 10)),
-        tab: ['market', 'hotel', 'black'].indexOf(o.tab) >= 0 ? o.tab : 'market',
-        hp: Math.max(0, Math.round(o.hp || 0)), dmg: Math.max(0, Math.round(o.dmg || 0)),
-        special: o.special || null };
+        tab: tab, hp: Math.max(0, Math.round(o.hp || 0)), dmg: Math.max(0, Math.round(o.dmg || 0)),
+        special: special,
+        surge: special ? 0 : (typeof o.surge === 'number' ? Math.max(0, o.surge) : SURGE_DEFAULT[tab]),
+        limit: special ? 0 : (typeof o.limit === 'number' ? Math.max(0, Math.round(o.limit)) : LIMIT_DEFAULT[tab]),
+        dayBuys: 0, dayBuysOn: null };
       state.shop.push(it);
       return it;
     },
 
+    buyInfo: function (state, it) { return buyInfo(state, it); },
+
     buy: function (state, id) {
       var it = state.shop.find(function (x) { return x.id === id; });
       if (!it) return null;
-      if (it.special === 'shield' && (state.hero.shields || 0) >= 1) return { fail: 'shield' };
-      if (state.hero.coins < it.price) return { fail: 'coins' };
-      state.hero.coins -= it.price;
-      state.counters.purchases++;
+      /* Streak Shield: one-at-a-time, never surges/caps */
       if (it.special === 'shield') {
+        if ((state.hero.shields || 0) >= 1) return { fail: 'shield' };
+        if (state.hero.coins < it.price) return { fail: 'coins' };
+        state.hero.coins -= it.price;
+        state.counters.purchases++;
         state.hero.shields = (state.hero.shields || 0) + 1;
         addLog(state, '🛡', 'Bought: ' + it.title, { coins: -it.price });
         return { title: it.title, coins: -it.price, shield: true };
       }
+      var info = buyInfo(state, it);
+      if (info.capped) return { fail: 'limit', limit: it.limit, count: info.count };
+      var price = info.price;
+      if (state.hero.coins < price) return { fail: 'coins', price: price };
+      state.hero.coins -= price;
+      state.counters.purchases++;
+      if (it.dayBuysOn !== todayKey()) { it.dayBuysOn = todayKey(); it.dayBuys = 0; }
+      it.dayBuys++;
       var healed = 0, ko = false;
       if (it.hp > 0) {
         var before = state.hero.hp;
@@ -899,9 +942,10 @@
         healed = -it.dmg;
         ko = hit.ko;
       }
+      var surged = price > it.price;
       addLog(state, it.tab === 'black' ? '🕶️' : it.tab === 'hotel' ? '🛏️' : '🛒',
-        'Bought: ' + it.title, { coins: -it.price, hp: healed });
-      return { title: it.title, coins: -it.price, hp: healed, ko: ko };
+        'Bought: ' + it.title + (surged ? ' (×' + it.dayBuys + ' today · surged to ' + price + ')' : ''), { coins: -price, hp: healed });
+      return { title: it.title, coins: -price, hp: healed, ko: ko, price: price, count: it.dayBuys, surged: surged };
     },
 
     deleteShopItem: function (state, id) {
@@ -978,6 +1022,7 @@
     if (!s.settings.theme) s.settings.theme = 'dungeon';
     if (!s.settings.music) s.settings.music = 'lofi';
     if (typeof s.settings.musicUrl !== 'string') s.settings.musicUrl = '';
+    if (typeof s.settings.escalate !== 'boolean') s.settings.escalate = true;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
@@ -990,6 +1035,11 @@
     (s.shop || []).forEach(function (it) {
       if (typeof it.dmg !== 'number') it.dmg = 0;
       if (!('special' in it)) it.special = null;
+      /* v5: anti-binge surge + daily cap (tab defaults; shields never surge) */
+      if (typeof it.surge !== 'number') it.surge = it.special ? 0 : (SURGE_DEFAULT[it.tab] != null ? SURGE_DEFAULT[it.tab] : 0.4);
+      if (typeof it.limit !== 'number') it.limit = it.special ? 0 : (LIMIT_DEFAULT[it.tab] != null ? LIMIT_DEFAULT[it.tab] : 0);
+      if (typeof it.dayBuys !== 'number') it.dayBuys = 0;
+      if (!('dayBuysOn' in it)) it.dayBuysOn = null;
     });
     var iconFix = { '⚒️': '🔨', '🗣️': '🤝', '💰': '💎' };
     (s.skills || []).forEach(function (k) { if (iconFix[k.icon]) k.icon = iconFix[k.icon]; });
@@ -1016,6 +1066,7 @@
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     skillTier: skillTier, boonById: boonById, frameById: frameById, pathById: pathById,
     boonCount: boonCount, maxHpOf: maxHpOf, menaceOf: menaceOf, ascendReady: ascendReady, buffXpMult: buffXpMult,
+    buyInfo: buyInfo, buyPrice: buyPrice, buyCount: buyCount,
     newState: newState, seed: seed, seedPreset: seedPreset, dailyReset: dailyReset, migrate: migrate,
     grant: grant, damage: damage, ascend: ascend, usePotion: usePotion, addLog: addLog,
     checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,

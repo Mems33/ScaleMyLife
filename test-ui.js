@@ -514,6 +514,41 @@ setTimeout(function () {
   ok(d.querySelector('#modal').textContent.indexOf('Student') >= 0, 'named paths listed');
   w.closeModal();
 
+  console.log('\nMastery tiers past Master (v4)');
+  w.state.skills[0].level = 15;
+  w.render();
+  ok(d.querySelector('#skillsRow').textContent.indexOf('Grandmaster') >= 0, 'Grandmaster tier label at Lv.15');
+  w.state.skills[0].level = 20;
+  w.render();
+  ok(d.querySelector('#skillsRow').textContent.indexOf('Sage') >= 0, 'Sage tier label at Lv.20');
+
+  console.log('\nAnti-binge economy (v4)');
+  w.go('market');
+  w.shopTab = 'market'; w.state.hero.coins = 100000; w.render();
+  ok(d.querySelector('#view').textContent.indexOf('Surge ON') >= 0, 'surge toggle shown, on by default');
+  var gm = w.A.addShopItem(w.state, { title: 'Gaming binge', price: 60, tab: 'market' });
+  w.render();
+  w.buy(gm.id); // 1st
+  w.buy(gm.id); // 2nd -> should surge
+  w.render();
+  ok(w.RPG.buyInfo(w.state, gm).count === 2, 'repeat buys tracked in the day');
+  ok(d.querySelector('#view').textContent.indexOf('bought 2') >= 0 || d.querySelector('.price.surged') !== null, 'surged price shown on the item');
+  // black market daily cap
+  w.shopTab = 'black'; w.render();
+  var bm = w.A.addShopItem(w.state, { title: 'Cheat binge', price: 50, tab: 'black', dmg: 4 });
+  w.render();
+  w.buy(bm.id); w.buy(bm.id); // hits the 2/day cap
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  w.render();
+  ok(d.querySelector('#view').textContent.indexOf('daily cap reached') >= 0 || d.querySelector('.cap.hit') !== null, 'black-market cap shown when reached');
+  var capped = w.A.buy(w.state, bm.id);
+  ok(capped && capped.fail === 'limit', 'buying past the cap is blocked');
+  // toggle surge off
+  w.toggleEscalate();
+  ok(w.state.settings.escalate === false, 'surge can be toggled off in the market');
+  ok(w.RPG.buyPrice(w.state, gm) === 60, 'with surge off the price is flat again');
+  w.toggleEscalate();
+
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
 

@@ -626,30 +626,47 @@ function checkFocus(){
 function renderMarket(){
   var tabs=[['market','🛒 Market'],['hotel','🛏️ Hotel'],['black','🕶️ Black Market']];
   var items=state.shop.filter(function(i){return i.tab===shopTab;});
-  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free — that is the whole point.',
-    hotel:'Rest and recovery. Hotel items restore ❤️ HP.',
-    black:'Break your own rules — but the deal costs coins AND HP. The devil always collects twice.'}[shopTab];
-  $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span></h3>'+
+  var escOn=state.settings.escalate!==false;
+  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free — that is the whole point.'+(escOn?' Repeat the same treat in one day and its price climbs — indulge, don’t binge.':''),
+    hotel:'Rest and recovery. Hotel items restore ❤️ HP — no surge, rest all you like.',
+    black:'Break your own rules — the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
+  $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span>'+
+    '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
     '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+'</div>'+
     '<div class="hint" style="margin-bottom:10px">'+blurb+'</div>'+
     (items.map(function(i){
-      var can=state.hero.coins>=i.price;
-      var gap=can?'':'<div class="afford">'+(i.price-state.hero.coins)+' 💰 to go</div>';
+      if(i.special==='shield'){
+        var canS=state.hero.coins>=i.price, haveS=(state.hero.shields||0)>=1;
+        return '<div class="item"><div class="grow"><div class="title">'+esc(i.title)+'</div>'+
+          '<div class="meta"><span style="color:var(--gold);font-family:var(--mono);font-size:12px">auto-saves one missed day · hold one at a time</span></div>'+
+          (canS||haveS?'':'<div class="afford">'+(i.price-state.hero.coins)+' 💰 to go</div>')+'</div>'+
+          '<span class="price">💰 '+i.price+'</span>'+
+          '<button class="btn buy" '+((canS&&!haveS)?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':'Buy')+'</button>'+
+          '<button class="btn ghost" onclick="delShop(\''+i.id+'\')">✕</button></div>';
+      }
+      var info=A.buyInfo(state,i);
+      var can=state.hero.coins>=info.price && !info.capped;
+      var gap=info.capped?'':(can?'':'<div class="afford">'+(info.price-state.hero.coins)+' 💰 to go</div>');
       var effects=[];
       if(i.hp) effects.push('<span style="color:var(--good);font-family:var(--mono);font-size:12px">restores +'+i.hp+' ❤️</span>');
       if(i.dmg) effects.push('<span style="color:var(--hp);font-family:var(--mono);font-size:12px">costs −'+i.dmg+' ❤️</span>');
+      if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap reached':info.count+'/'+info.limit+' today')+'</span>');
+      else if(info.count>0 && info.surge>0) effects.push('<span class="cap">bought '+info.count+'× today</span>');
+      var surgedPrice=info.price>i.price;
       return '<div class="item"><div class="grow"><div class="title">'+esc(i.title)+'</div>'+
         (effects.length?'<div class="meta">'+effects.join('')+'</div>':'')+gap+'</div>'+
-        '<span class="price">💰 '+i.price+'</span>'+
-        '<button class="btn buy" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">Buy</button>'+
+        '<span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
+        '<button class="btn buy" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(info.capped?'Capped':'Buy')+'</button>'+
         '<button class="btn ghost" onclick="delShop(\''+i.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Empty shelf. Stock rewards you actually want — that is what makes coins matter.</div>')+
     '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
     '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
     (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
     (shopTab==='black'?'<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">':'')+
+    (shopTab!=='hotel'?'<input id="sLimit" type="number" min="0" placeholder="max/day" style="max-width:100px" title="0 = unlimited">':'')+
     '<button class="btn buy" onclick="addShop()">+ Stock it</button></div>'+presetChips('shop')+'</div></div>';
 }
+function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
 
 function renderJournal(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
@@ -807,6 +824,7 @@ function buy(id){
   var r=A.buy(state,id);
   if(r&&r.fail==='coins'){ toast('<span class="h">Not enough coins — go earn them</span>','dmg'); return; }
   if(r&&r.fail==='shield'){ toast('<span class="h">You already carry a Streak Shield</span>','dmg'); return; }
+  if(r&&r.fail==='limit'){ toast('<span class="h">Daily cap reached — come back tomorrow</span>','dmg'); return; }
   if(r&&r.shield){ persist(); render(); toast('🛡 <span class="c">Streak Shield equipped — one missed day is covered</span>'); SND.buy(); afterAction(); return; }
   persist(); render(); fx(r); afterAction();
 }
@@ -814,7 +832,8 @@ function addShop(){
   var t=$('#sTitle').value.trim(), p=Number($('#sPrice').value); if(!t||!p) return;
   var hp=shopTab==='hotel'?Number(($('#sHp')||{}).value||0):0;
   var dmg=shopTab==='black'?Number(($('#sDmg')||{}).value||0):0;
-  A.addShopItem(state,{title:t,price:p,tab:shopTab,hp:hp,dmg:dmg}); persist(); render();
+  var limEl=$('#sLimit'), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
+  A.addShopItem(state,{title:t,price:p,tab:shopTab,hp:hp,dmg:dmg,limit:lim}); persist(); render();
 }
 function delShop(id){ if(confirm('Remove this reward?')){ A.deleteShopItem(state,id); persist(); render(); } }
 function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ chestScreen(r); flyCoins(r.coins); } afterAction(); }

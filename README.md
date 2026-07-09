@@ -24,13 +24,14 @@ Work earns coins, coins buy pleasures. A solid day (dailies + habits + 2 focus b
 - **Daily quests** — recurring, reset at midnight. Clear them all → **daily chest**. You can also **schedule** a daily to specific weekdays (e.g. gym Mon/Wed/Fri); off-day dailies sit dormant and don't block the chest.
 - **Side quests** — one-offs. Give them due dates to line up in **Deadlines**, export them as an **.ics calendar** file, or promote one (⬆) into a main quest.
 - **Focus (pomodoro)** — 25/5, 50/10, 90/15 or free run, looping until you stop. You're paid for every worked minute (1.2xp + 0.6💰/min). Breaks show a campfire and heal +3 ❤️. Optional study music (Lofi/synthwave/any YouTube URL).
+- **Market with anti-binge pricing** — buy rewards you actually want. To stop a coin hoard from funding unlimited indulgence, repeat purchases of the same reward *the same day* cost progressively more (a soft cap you can toggle off), and Black-Market rule-breaking is hard-capped at 2×/day. Rest/Hotel items never surge. Every reward's per-day cap is editable.
 - **Habits** — good habits pay xp/coins, refresh daily, and show a 7-day chain; set a weekly frequency (gym 3×/week) for week progress + a streak of weeks met.
 - **Deadlines, KO & wounds, Streak Shield, Weekly boss** — as before: hit 0 ❤️ and you respawn wounded (XP halved for the day); a Streak Shield auto-saves one missed day; name THE task of the week and slay it within 7 days for 500xp / 250💰.
 
 ## Progression & retention
 
 - **Ranks** — E→SS, with a full celebration on rank-up. At rank **S / SS** the interface shifts into **Legend mode** — a refined, gilded look with an animated avatar aura.
-- **Skill mastery** — each life area you tag work to levels up and unlocks a tier: **Adept** (Lv.3, +10% XP), **Expert** (Lv.6, +20%), **Master** (Lv.10, +30% XP & +10% coins) on that area's actions. Specializing pays off.
+- **Skill mastery** — each life area you tag work to levels up (level itself is uncapped) and unlocks a tier: **Adept** (Lv.3, +10% XP), **Expert** (Lv.6, +20%), **Master** (Lv.10, +30% XP & +10% coins), **Grandmaster** (Lv.15, +40%/+15%) and **Sage** (Lv.20, +50%/+20%). The bonus plateaus at Sage so a maxed area can't run away with the economy; the level keeps climbing for bragging rights.
 - **Daily chest loot** — most opens give coins, but rare drops include a **coin jackpot**, a **Focus Elixir** (×2 XP for a day), or a **cosmetic avatar frame**.
 - **Ascension (prestige / seasons)** — at rank S you can **ascend**: reset your level and rank for a fresh climb while keeping coins, quests, habits, streak, titles, badges and cosmetics. Each season grants a **permanent boon** that stacks: Scholar (+8% XP), Coinfinder (+8% coins), Vigor (+20 max HP), Warden (monsters hit 20% softer) or Fortune (better chest loot).
 - **Monster menace** — bad habits are monsters that scale. Keep feeding one and its menace rises, so it hits harder; stay clean and it calms back down. Warden softens every monster.
