@@ -801,8 +801,8 @@
       var brk = clamp(Math.round(o.brk) || 0, 0, 60);
       var now = o.now || Date.now();
       state.activeFocus = { work: work, brk: brk, phase: 'work', phaseEnd: now + work * 60000,
-        workedMs: 0, cycles: 0, skillId: o.skillId || null, label: (o.label || '').trim(),
-        startedAt: new Date(now).toISOString() };
+        workedMs: 0, cycles: 0, skillId: o.skillId || null, goalId: o.goalId || null,
+        label: (o.label || '').trim(), startedAt: new Date(now).toISOString() };
       return state.activeFocus;
     },
 
@@ -853,6 +853,11 @@
       }
       state.counters.focusMin += paid;
       var res = grant(state, { xp: Math.round(paid * FOCUS_XP_PER_MIN), coins: Math.round(paid * FOCUS_COIN_PER_MIN) }, skillId);
+      /* deep work attached to a main quest banks invested time on it */
+      if (f.goalId) {
+        var g = state.goals.find(function (x) { return x.id === f.goalId && !x.doneOn; });
+        if (g) { g.focusMin = (g.focusMin || 0) + paid; res.goalTitle = g.title; }
+      }
       addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' — ' + label : ''), { xp: res.xp, coins: res.coins, min: paid, sk: skillId, label: label });
       res.minutes = paid;
       return res;
@@ -1074,6 +1079,7 @@
     if (!s.cosmetics || typeof s.cosmetics !== 'object') s.cosmetics = { frames: [] };
     if (!Array.isArray(s.cosmetics.frames)) s.cosmetics.frames = [];
     (s.quests || []).forEach(function (q) { if (!('days' in q)) q.days = null; });
+    (s.goals || []).forEach(function (g) { if (typeof g.focusMin !== 'number') g.focusMin = 0; });
     if (!s.achievements) s.achievements = [];
     if (!('activeFocus' in s)) s.activeFocus = null;
     if (s.activeFocus && !s.activeFocus.phase) s.activeFocus = null; // old one-shot format
@@ -1085,6 +1091,7 @@
     if (!s.settings.music) s.settings.music = 'lofi';
     if (typeof s.settings.musicUrl !== 'string') s.settings.musicUrl = '';
     if (typeof s.settings.escalate !== 'boolean') s.settings.escalate = true;
+    if (typeof s.settings.reminders !== 'boolean') s.settings.reminders = false;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;

@@ -703,6 +703,27 @@ var fud = RPG.focusByDay(fu, 7);
 ok(fud.per[RPG.todayKey()].bySkill['__none'] === 30 && fud.skills.indexOf('__none') >= 0, 'untagged focus is bucketed as __none');
 
 
+section('Focus invested in main quests');
+var fg = RPG.newState('FG');
+var fgGoal = A.addGoal(fg, { title: 'Ship the app' });
+var tg0 = Date.now();
+A.startFocus(fg, { work: 25, brk: 0, goalId: fgGoal.id, skillId: fg.skills[0].id, now: tg0 });
+ok(fg.activeFocus.goalId === fgGoal.id, 'focus session carries the main-quest link');
+A.tickFocus(fg, tg0 + 25 * 60000 + 5);
+var fgRes = A.stopFocus(fg, tg0 + 25 * 60000 + 5);
+ok(fgGoal.focusMin === 25, '25 worked minutes banked on the goal');
+ok(fgRes.goalTitle === 'Ship the app', 'stop reports which goal was funded');
+var tg1 = Date.now();
+A.startFocus(fg, { work: 25, brk: 0, goalId: 'gone', now: tg1 });
+A.tickFocus(fg, tg1 + 25 * 60000 + 5);
+ok(A.stopFocus(fg, tg1 + 25 * 60000 + 5).goalTitle === undefined, 'unknown/finished goal is ignored safely');
+var mgF = RPG.migrate(JSON.parse(JSON.stringify(RPG.newState('MGF'))));
+mgF.goals.push({ id: 'g0', title: 'old', note: '', doneOn: null, createdOn: RPG.todayKey() });
+delete mgF.settings.reminders;
+mgF = RPG.migrate(mgF);
+ok(mgF.goals[0].focusMin === 0, 'migration backfills focusMin on old goals');
+ok(mgF.settings.reminders === false, 'migration adds reminders setting (off by default)');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a

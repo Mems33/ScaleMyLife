@@ -490,6 +490,50 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
 .tourtip .tnav{display:flex;gap:8px;align-items:center}
 .tourtip .tprog{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:auto}
 
+/* ---------- v7: cloud sync, undo, glance, reminders, Daylight theme ---------- */
+/* undo toast is interactive (the toast layer itself is pointer-events:none) */
+.toast.undo{pointer-events:auto;border-color:var(--blue);display:flex;align-items:center;gap:12px}
+.toast.undo button{background:var(--panel2);border:1px solid var(--blue);color:var(--blue);border-radius:7px;padding:5px 12px;font-weight:700;font-size:12px}
+.toast.undo button:hover{background:var(--blue);color:#08131f}
+
+/* cloud nudge on Today */
+.nudgebar{border:1px solid color-mix(in srgb,var(--blue) 55%,var(--line));border-radius:12px;padding:10px 14px;margin-bottom:12px;
+  display:flex;gap:10px 12px;align-items:center;flex-wrap:wrap;font-size:14px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--blue) 10%,transparent),transparent),color-mix(in srgb,var(--panel) 86%,transparent)}
+.nudgebar .nb{margin-left:auto;display:flex;gap:6px}
+
+/* HUD today glance */
+.glance{font-family:var(--mono);letter-spacing:.2px}
+
+/* keyboard a11y: visible focus rings without mouse noise */
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:6px}
+button:focus:not(:focus-visible),input:focus:not(:focus-visible),select:focus:not(:focus-visible),textarea:focus:not(:focus-visible){outline:none}
+
+/* unified chart language: same radii + track colour across XP + focus charts */
+.chart .colbar{border-radius:5px 5px 0 0}
+.chart .col{position:relative}
+.frow .ftrack,.menacebar{border-radius:5px}
+
+/* ---------- Daylight (light) theme ---------- */
+body.light{background-image:radial-gradient(ellipse 900px 400px at 50% -100px,rgba(164,112,12,.10) 0%,transparent 60%)}
+body.light::before{opacity:.35}
+body.light .logo{text-shadow:none}
+body.light .bar{background:#e8e1d0;border-color:var(--line)}
+body.light .bar b{color:#241d10;text-shadow:0 1px 0 rgba(255,255,255,.5)}
+body.light .hud{box-shadow:0 0 0 2px var(--bg),0 0 0 4px color-mix(in srgb,var(--line) 80%,var(--gold)),0 10px 26px rgba(96,74,26,.18)}
+body.light .panel{box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 10px 24px -14px rgba(96,74,26,.25)}
+body.light ::placeholder{color:#9a8fae}
+body.light .empty{color:#8d8398}
+body.light .frow .ftrack,body.light .menacebar,body.light .skillcard .bar{background:#e8e1d0}
+body.light .chart .colbar{background:linear-gradient(180deg,#2fae6d,#1d7a4c)}
+body.light .toast{box-shadow:0 8px 30px rgba(96,74,26,.25)}
+body.light #overlay{background:rgba(46,38,20,.55)}
+body.light .modal{background:rgba(46,38,20,.45)}
+body.light .tourhole{box-shadow:0 0 0 3px var(--gold),0 0 0 9999px rgba(46,38,20,.62)}
+body.light .item,body.light .stat,body.light .insight,body.light .rv,body.light .ag,body.light .step{background:var(--panel2)}
+body.light .btn.go{color:#04160c}
+body.light .campfire .z{color:#8d8398}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}
