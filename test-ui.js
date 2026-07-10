@@ -667,6 +667,31 @@ setTimeout(function () {
   ok(!d.body.classList.contains('light'), 'dark themes remove light mode');
   w.closeModal();
 
+  console.log('\nProgress & sharing (v8)');
+  w.go('stats');
+  ok(d.querySelector('.heatmap') !== null || d.querySelector('#view').textContent.indexOf('Consistency') >= 0, 'consistency heatmap panel renders');
+  ok(d.querySelectorAll('.hc.l4').length >= 1 || d.querySelectorAll('.hc.l1,.hc.l2,.hc.l3,.hc.l4').length >= 1, 'active days light up on the heatmap');
+  ok(d.querySelector('.spantoggle') !== null, 'Week/Month toggle on the focus chart');
+  w.focusSpan = 30; w.render();
+  ok(d.querySelectorAll('.frow').length >= 28 || d.querySelector('#view').textContent.indexOf('this month') >= 0, 'month view shows 30 day rows');
+  ok(d.querySelector('.frow.slim') !== null, 'month rows use the compact style');
+  w.focusSpan = 7; w.render();
+  ok(typeof w.shareRecap === 'function' && d.querySelector('#view').textContent.indexOf('Share my week') >= 0, 'share-my-week button present');
+  var threwShare = false; try { w.shareRecap(); } catch (e) { threwShare = true; }
+  ok(!threwShare, 'shareRecap degrades gracefully without canvas support');
+  // trophies
+  w.A.setBoss(w.state, { title: 'Trophy dragon' }); w.A.slayBoss(w.state);
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  w.go('stats');
+  ok(d.querySelector('.trophy') !== null && d.querySelector('#view').textContent.indexOf('Trophy dragon') >= 0, 'boss trophy shelf renders kills');
+  // cloud chip appears with a session
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'x', refresh_token: 'y', user: { id: 'u', email: 'a@b.c' } }));
+  w.render();
+  ok(d.querySelector('.cloudchip') !== null, 'HUD shows the cloud-sync chip when signed in');
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.render();
+  ok(d.querySelector('.cloudchip') === null, 'chip hides when signed out');
+
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
   ok(typeof w.SMLGradient === 'object' && typeof w.SMLGradient.setColors === 'function', 'gradient controller exposed on window');

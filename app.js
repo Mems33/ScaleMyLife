@@ -5,6 +5,7 @@ var state = RPG.load(localStorage);
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=3;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
 var editDays=[];                 // weekday picker state inside the edit-quest modal
+var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var SKILL_PALETTE=['#5aa2ff','#f5c542','#3ddc84','#b07bff','#ff7854','#59c2ff','#ff5fa2','#7bd88f','#ffb454','#a78bfa','#4dd0e1','#ffd166'];
 function skillColorById(id){
   if(id==='__none') return '#6c6690';
@@ -245,11 +246,12 @@ function renderHUD(){
   var fr=h.frame?RPG.frameById(h.frame):null;
   var avStyle=fr?('border-color:'+fr.color+';box-shadow:0 0 12px '+fr.glow+', inset 0 0 8px '+fr.glow):('border-color:'+col);
   var asc=(h.ascension||0)>0?'<span class="season" title="Season '+h.ascension+' — you have ascended '+h.ascension+' time'+(h.ascension===1?'':'s')+'">✦ S'+h.ascension+'</span>':'';
+  var cloudChip=cloudOn()?'<span class="cloudchip on" title="Cloud sync on — tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>':'';
   var buffM=RPG.buffXpMult(state);
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active — XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
     '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" onclick="openCharacter()" title="Customize character">'+h.avatar+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+'">'+r.code+' · '+r.name+'</span>'+asc+'</div>'+
+    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+'">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
@@ -781,27 +783,51 @@ function insightsPanel(){
   return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights — what moves your mood</h3>'+body+'</div>';
 }
 function focusPanel(){
-  var f=RPG.focusByDay(state,7);
+  var month=focusSpan===30;
+  var f=RPG.focusByDay(state,focusSpan);
+  var toggle='<span class="spantoggle right"><button class="'+(month?'':'on')+'" onclick="focusSpan=7;render()">Week</button><button class="'+(month?'on':'')+'" onclick="focusSpan=30;render()">Month</button></span>';
   var body;
   if(!f.totalMin){
-    body='<div class="empty">No focus sessions yet. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown — what you actually worked on — appears here.</div>';
+    body='<div class="empty">No focus sessions in this window. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown — what you actually worked on — appears here.</div>';
   } else {
     var legend='<div class="focuslegend">'+f.skills.map(function(id){
       return '<span><i style="background:'+skillColorById(id)+'"></i>'+skillLabelById(id)+'</span>';
     }).join('')+'</div>';
     var rows=f.days.map(function(d){
       var day=f.per[d], total=day.total;
-      var lbl=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T00:00:00').getDay()];
+      var dt=new Date(d+'T00:00:00');
+      var lbl=month?String(dt.getDate()):['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
       var segs=f.skills.map(function(id){
         var m=day.bySkill[id]||0; if(!m) return '';
         return '<span class="fseg" style="width:'+(m/f.maxMin*100)+'%;background:'+skillColorById(id)+'" title="'+skillLabelById(id)+': '+fmtHm(m)+'"></span>';
       }).join('');
-      return '<div class="frow"><span class="fdl">'+lbl+'</span><div class="ftrack">'+segs+'</div>'+
+      return '<div class="frow'+(month?' slim':'')+'"><span class="fdl">'+lbl+'</span><div class="ftrack">'+segs+'</div>'+
         '<span class="ftt">'+(total?fmtHm(total):'')+'</span></div>';
     }).join('');
-    body='<div class="hint" style="margin-bottom:8px">Total this week: <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
+    body='<div class="hint" style="margin-bottom:8px">Total this '+(month?'month':'week')+': <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
   }
-  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area — what you worked on</h3>'+body+'</div>';
+  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area — what you worked on'+toggle+'</h3>'+body+'</div>';
+}
+/* GitHub-style consistency heatmap: 12 weeks of daily XP */
+function heatmapPanel(){
+  var h=RPG.heatmap(state,12);
+  if(!h.total) return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency — last 12 weeks</h3><div class="empty">Every day you earn XP lights a square. Come back in a few days and watch the wall fill up.</div></div>';
+  var cells=h.cells.map(function(c){
+    return '<i class="hc l'+c.level+(c.future?' fut':'')+'" title="'+c.day+(c.future?'':' · '+c.xp+' XP')+'"></i>';
+  }).join('');
+  return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency — last 12 weeks '+
+    '<span class="cnt">'+h.activeDays+' active days · '+h.total+' XP</span></h3>'+
+    '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
+    '<div class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></div></div>';
+}
+/* trophy shelf: every weekly boss slain */
+function trophyShelf(){
+  var t=RPG.bossTrophies(state);
+  if(!t.length) return '';
+  return '<div class="panel" style="margin-top:14px"><h3>🐲 Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
+    '<div class="trophies">'+t.map(function(x){
+      return '<div class="trophy"><span class="ti">🏆</span><div><div class="tt">'+esc(x.title)+'</div><div class="td">'+x.day+'</div></div></div>';
+    }).join('')+'</div></div>';
 }
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
@@ -842,7 +868,8 @@ function renderStats(){
       }).join('');
   }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
 
-  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review — for your Friday planning</h3>'+
+  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review — for your Friday planning'+
+    '<button class="btn small right" onclick="shareRecap()" title="Create a shareable image of your week">📸 Share my week</button></h3>'+
     reviewBox()+
     '<div class="statgrid">'+
     '<div class="stat"><div class="v g">'+w.tot.xp+'</div><div class="k">XP earned</div></div>'+
@@ -858,7 +885,9 @@ function renderStats(){
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
     '<div class="hint" style="text-align:center">mood, last 7 days</div></div>'+
     focusPanel()+
+    heatmapPanel()+
     insightsPanel()+
+    trophyShelf()+
     '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
     '<div class="panel" style="margin-top:14px"><h3>📜 Adventure log</h3>'+logHtml+'</div>';
@@ -1145,6 +1174,71 @@ function checkReminders(){
   }
 }
 
+/* ---------- shareable weekly recap card ---------- */
+function shareRecap(){
+  var cv=document.createElement('canvas'); cv.width=1080; cv.height=1080;
+  var ctx=cv.getContext&&cv.getContext('2d');
+  if(!ctx){ toast('<span class="h">Sharing not supported in this browser</span>','dmg'); return; }
+  var css=getComputedStyle(document.documentElement);
+  var C={bg:css.getPropertyValue('--bg').trim()||'#12101f',panel:css.getPropertyValue('--panel').trim()||'#1b1830',
+    gold:css.getPropertyValue('--gold').trim()||'#f5c542',ink:css.getPropertyValue('--ink').trim()||'#e8e4ff',
+    muted:css.getPropertyValue('--muted').trim()||'#8f88b8',xp:'#3ddc84',hp:'#ff5470',blue:'#5aa2ff'};
+  var w=RPG.weekStats(state), h=state.hero, r=RPG.rankFor(h.level);
+  // backdrop
+  var grad=ctx.createLinearGradient(0,0,1080,1080);
+  grad.addColorStop(0,C.bg); grad.addColorStop(.55,C.panel); grad.addColorStop(1,C.bg);
+  ctx.fillStyle=grad; ctx.fillRect(0,0,1080,1080);
+  ctx.globalAlpha=.16;
+  var rg=ctx.createRadialGradient(880,160,10,880,160,520); rg.addColorStop(0,C.gold); rg.addColorStop(1,'transparent');
+  ctx.fillStyle=rg; ctx.fillRect(0,0,1080,1080);
+  var rg2=ctx.createRadialGradient(140,940,10,140,940,560); rg2.addColorStop(0,C.blue); rg2.addColorStop(1,'transparent');
+  ctx.fillStyle=rg2; ctx.fillRect(0,0,1080,1080);
+  ctx.globalAlpha=1;
+  // frame
+  ctx.strokeStyle=C.gold; ctx.lineWidth=3; ctx.strokeRect(36,36,1008,1008);
+  // header
+  ctx.textAlign='center'; ctx.fillStyle=C.gold;
+  ctx.font='700 44px "IBM Plex Mono", monospace';
+  ctx.fillText('S C A L E   M Y   L I F E',540,120);
+  ctx.fillStyle=C.muted; ctx.font='500 30px "IBM Plex Mono", monospace';
+  var d0=new Date(w.days[0]+'T00:00:00'), d1=new Date(w.days[6]+'T00:00:00');
+  ctx.fillText(d0.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' — '+d1.toLocaleDateString(undefined,{month:'short',day:'numeric'}),540,168);
+  // avatar + name
+  ctx.font='150px serif'; ctx.fillText(h.avatar,540,340);
+  ctx.fillStyle=C.ink; ctx.font='700 56px Karla, sans-serif'; ctx.fillText(h.name,540,430);
+  ctx.fillStyle=C.gold; ctx.font='700 34px "IBM Plex Mono", monospace';
+  ctx.fillText(r.code+' · '+r.name.toUpperCase()+'   LV.'+h.level+((h.ascension||0)>0?'   ✦ S'+h.ascension:''),540,478);
+  if(h.title){ ctx.fillStyle=C.muted; ctx.font='italic 30px Karla, sans-serif'; ctx.fillText('“'+h.title+'”',540,522); }
+  // stat tiles
+  var tiles=[['XP EARNED',w.tot.xp,C.xp],['QUESTS',w.tot.quests,C.blue],['FOCUS',Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60?String(w.tot.focusMin%60).padStart(2,'0'):''),C.gold],
+             ['HABITS KEPT',w.tot.habits,C.xp],['STREAK',h.streak+'d',C.hp],['COINS',w.tot.earned,C.gold]];
+  var tw=300, th=150, gap=24, x0=(1080-3*tw-2*gap)/2, y0=590;
+  tiles.forEach(function(t,i){
+    var x=x0+(i%3)*(tw+gap), y=y0+Math.floor(i/3)*(th+gap);
+    ctx.fillStyle='rgba(255,255,255,0.05)'; ctx.strokeStyle='rgba(255,255,255,0.14)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(x,y,tw,th,18); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=t[2]; ctx.font='700 58px "IBM Plex Mono", monospace'; ctx.fillText(String(t[1]),x+tw/2,y+82);
+    ctx.fillStyle=C.muted; ctx.font='600 24px Karla, sans-serif'; ctx.fillText(t[0],x+tw/2,y+122);
+  });
+  // mood strip
+  ctx.font='44px serif';
+  w.moods.forEach(function(m,i){ ctx.fillText(m.emoji,340+i*68,975); });
+  ctx.fillStyle=C.muted; ctx.font='500 26px "IBM Plex Mono", monospace';
+  ctx.fillText('scale-my-life.vercel.app',540,1032);
+  // export
+  cv.toBlob(function(blob){
+    if(!blob){ toast('<span class="h">Could not create the image</span>','dmg'); return; }
+    var file; try{ file=new File([blob],'scalemylife-week.png',{type:'image/png'}); }catch(e){}
+    if(file && navigator.canShare && navigator.canShare({files:[file]}) && navigator.share){
+      navigator.share({files:[file],title:'My week in ScaleMyLife'}).catch(function(){});
+    } else {
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='scalemylife-week.png'; a.click();
+      toast('📸 <span class="p">Recap image saved — post it anywhere</span>');
+    }
+    SND.chest();
+  },'image/png');
+}
+
 /* ---------- cloud sync UI ---------- */
 function cloudSection(){
   if(typeof SMLCloud==='undefined') return '';
@@ -1403,6 +1497,12 @@ function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><di
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);
 setInterval(function(){ if(state) checkReminders(); }, 30000);
+var lastVisPull=0;
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden || !state) return;
+  var now=Date.now();
+  if(now-lastVisPull>5*60000){ lastVisPull=now; cloudBootPull(); }
+});
 
 boot();
 if('serviceWorker' in navigator && location.protocol==='https:'){
