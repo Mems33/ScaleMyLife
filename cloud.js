@@ -162,7 +162,49 @@
         });
     },
 
-    lastSync: function () { var s = store(); return (s && s.getItem(SYNC_LS)) || null; }
+    lastSync: function () { var s = store(); return (s && s.getItem(SYNC_LS)) || null; },
+
+    /* ---------- opt-in leaderboard ----------
+       Having a row IS the opt-in; deleting it is the opt-out. Only the tiny
+       profile snapshot below is ever shared — never the save itself. */
+
+    pushBoard: function (profile) {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      var row = {
+        user_id: sess.user.id,
+        name: String(profile.name || 'Hero').slice(0, 24),
+        avatar: String(profile.avatar || '🧙').slice(0, 8),
+        level: profile.level || 1,
+        rank_code: String(profile.rank || 'E').slice(0, 3),
+        week_xp: Math.max(0, Math.min(100000, Math.round(profile.weekXp || 0))),
+        best_streak: Math.max(0, profile.bestStreak || 0),
+        ascension: Math.max(0, profile.ascension || 0),
+        updated_at: new Date().toISOString()
+      };
+      return api._rest('POST', 'leaderboard?on_conflict=user_id', [row], 'resolution=merge-duplicates,return=minimal')
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'board push failed (' + r.status + ')') }; });
+    },
+
+    /* reads are public: works with just the apikey, auth attached when present */
+    fetchBoard: function (limit) {
+      if (!api.configured()) return Promise.resolve({ ok: false, error: 'not configured' });
+      var path = 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&order=week_xp.desc,level.desc&limit=' + (limit || 25);
+      var sess = getSession();
+      var h = authHeaders(sess ? { 'Authorization': 'Bearer ' + sess.access_token } : null);
+      return req(cfg.url + '/rest/v1/' + path, { method: 'GET', headers: h })
+        .then(function (r) {
+          if (!r.ok || !Array.isArray(r.j)) return { ok: false, error: errMsg(r.j, 'board fetch failed (' + r.status + ')') };
+          return { ok: true, rows: r.j, me: sess ? sess.user.id : null };
+        });
+    },
+
+    leaveBoard: function () {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api._rest('DELETE', 'leaderboard?user_id=eq.' + sess.user.id, null, 'return=minimal')
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'leave failed (' + r.status + ')') }; });
+    }
   };
 
   return api;

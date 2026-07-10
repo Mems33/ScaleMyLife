@@ -94,6 +94,30 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   var p4 = await Cloud.pull();
   ok(p4.ok === false && Cloud.session() === null, 'dead refresh token signs the user out cleanly');
 
+  section('Leaderboard (opt-in)');
+  fx.route('grant_type=password', 200, { access_token: 'at3', refresh_token: 'rt3', user: SESS.user });
+  await Cloud.signIn('a@b.c', 'pw123456');
+  fx.route('/rest/v1/leaderboard?on_conflict', 201, {});
+  var pb = await Cloud.pushBoard({ name: 'A-very-long-hero-name-that-overflows', avatar: '🧙', level: 14, rank: 'C', weekXp: 1432.7, bestStreak: 15, ascension: 1 });
+  ok(pb.ok === true, 'board push succeeds');
+  var pbReq = log[log.length - 1];
+  ok(/on_conflict=user_id/.test(pbReq.url) && /merge-duplicates/.test(pbReq.headers.Prefer), 'board push is an upsert');
+  ok(pbReq.body[0].name.length <= 24 && pbReq.body[0].week_xp === 1433, 'profile snapshot is clamped and rounded');
+  ok(!('data' in pbReq.body[0]) && !('coins' in pbReq.body[0]), 'only the tiny public profile is shared — never the save');
+  fx.route('/rest/v1/leaderboard?select', 200, [
+    { user_id: 'u9', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 },
+    { user_id: 'uid-1', name: 'Me', avatar: '🧙', level: 14, rank_code: 'C', week_xp: 1433, best_streak: 15, ascension: 1 }
+  ]);
+  var fb = await Cloud.fetchBoard(25);
+  ok(fb.ok && fb.rows.length === 2 && fb.me === 'uid-1', 'board fetch returns rows + own id for highlighting');
+  ok(/order=week_xp.desc/.test(log[log.length - 1].url) && /limit=25/.test(log[log.length - 1].url), 'board is ranked by weekly XP with a limit');
+  fx.route('/rest/v1/leaderboard?user_id=eq.uid-1', 204, {});
+  var lb = await Cloud.leaveBoard();
+  ok(lb.ok === true && log[log.length - 1].method === 'DELETE', 'opting out deletes own row');
+  fx.route('/rest/v1/leaderboard?select', 404, { message: 'relation "public.leaderboard" does not exist' });
+  var fb404 = await Cloud.fetchBoard(25);
+  ok(fb404.ok === false && /does not exist/.test(fb404.error), 'missing table fails soft with the server message');
+
   section('Network failure resilience');
   Cloud.configure({ fetch: function () { return Promise.reject(new Error('offline')); } });
   st.setItem('sml.cloud.session.v1', JSON.stringify(SESS));

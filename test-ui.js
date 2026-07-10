@@ -728,6 +728,38 @@ setTimeout(function () {
   w.go('stats');
   ok(d.querySelector('#view').textContent.indexOf('best streak') >= 0, 'best-streak stat tile renders');
 
+  console.log('\nLeaderboard (v11)');
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('Leaderboard') >= 0, 'leaderboard panel present in Stats');
+  ok(d.querySelector('#view').textContent.indexOf('Sign in') >= 0, 'signed-out teaser invites sign-in');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'x', refresh_token: 'y', user: { id: 'me-1', email: 'a@b.c' } }));
+  w.state.settings.board = false; w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('not on the board') >= 0, 'synced-but-not-joined teaser shows');
+  // opt in: settings toggle + fetch spy
+  var boardUrls = [];
+  w.SMLCloud.configure({ fetch: function (url) { boardUrls.push(url);
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve('[]'); } }); } });
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Join the leaderboard') >= 0, 'board toggle in cloud settings');
+  w.toggleBoard();
+  ok(w.state.settings.board === true, 'opt-in stored');
+  w.closeModal();
+  w.go('stats');
+  ok(d.querySelector('#boardBody') !== null, 'board body renders for members');
+  // sync row renderer with fixtures (async fetch path covered by cloud tests)
+  w.renderBoardInto(d.querySelector('#boardBody'), [
+    { user_id: 'u9', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 },
+    { user_id: 'me-1', name: 'Mems', avatar: '🧙', level: 14, rank_code: 'C', week_xp: 1433, best_streak: 15, ascension: 1 }
+  ], 'me-1');
+  ok(d.querySelectorAll('.brow').length === 2 && d.querySelector('.brow.me') !== null, 'rows render, own row highlighted');
+  ok(d.querySelector('#view').textContent.indexOf('🥇') >= 0 && d.querySelector('#view').textContent.indexOf('✦S1') >= 0, 'medals + season marker shown');
+  // opt out
+  w.openSettings(); w.toggleBoard();
+  ok(w.state.settings.board === false, 'opt-out stored (row deletion covered by cloud tests)');
+  w.closeModal();
+  w.localStorage.removeItem('sml.cloud.session.v1');
+
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
   ok(typeof w.SMLGradient === 'object' && typeof w.SMLGradient.setColors === 'function', 'gradient controller exposed on window');

@@ -64,10 +64,18 @@ function persist(){
 /* ---------- cloud sync (Supabase via cloud.js) ---------- */
 var cloudPushTimer=null;
 function cloudOn(){ return typeof SMLCloud!=='undefined' && SMLCloud.configured() && !!SMLCloud.session(); }
+function boardProfile(){
+  var w=RPG.weekStats(state), r=RPG.rankFor(state.hero.level);
+  return { name:state.hero.name, avatar:state.hero.avatar, level:state.hero.level, rank:r.code,
+    weekXp:w.tot.xp, bestStreak:state.hero.bestStreak||0, ascension:state.hero.ascension||0 };
+}
 function scheduleCloudPush(){
   if(!cloudOn()) return;
   clearTimeout(cloudPushTimer);
-  cloudPushTimer=setTimeout(function(){ SMLCloud.push(state); }, 4000); // debounced; fails soft offline
+  cloudPushTimer=setTimeout(function(){
+    SMLCloud.push(state);                                        // full save (private)
+    if(state.settings.board) SMLCloud.pushBoard(boardProfile()); // tiny public snapshot (opt-in)
+  }, 4000); // debounced; fails soft offline
 }
 /* on boot with a live session: adopt the cloud save if it is newer than this device */
 function cloudBootPull(){
@@ -823,6 +831,34 @@ function trophyShelf(){
       return '<div class="trophy"><span class="ti">🏆</span><div><div class="tt">'+esc(x.title)+'</div><div class="td">'+x.day+'</div></div></div>';
     }).join('')+'</div></div>';
 }
+/* ---------- leaderboard (Stats) ---------- */
+function boardRowsHtml(rows, me){
+  var medals=['🥇','🥈','🥉'];
+  return rows.map(function(r,i){
+    var mine=me&&r.user_id===me;
+    return '<div class="brow'+(mine?' me':'')+'"><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
+      '<span class="bav">'+esc(r.avatar||'🧙')+'</span>'+
+      '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
+      '<div class="bmeta">'+esc(r.rank_code||'E')+' · Lv.'+(r.level||1)+((r.ascension||0)>0?' · ✦S'+r.ascension:'')+' · 🔥best '+(r.best_streak||0)+'</div></div>'+
+      '<span class="bxp">'+(r.week_xp||0)+' <small>xp/wk</small></span></div>';
+  }).join('')||'<div class="empty">The board is empty — be the first hero on it.</div>';
+}
+function renderBoardInto(el, rows, me){ if(el) el.innerHTML=boardRowsHtml(rows, me); }
+function leaderboardPanel(){
+  if(typeof SMLCloud==='undefined'||!SMLCloud.configured()) return '';
+  var head='<div class="panel" style="margin-top:14px"><h3>🏆 Leaderboard <span class="cnt">weekly XP</span></h3>';
+  if(!cloudOn()) return head+'<div class="empty">Sign in (⚙️ → Cloud sync) and join the leaderboard to race other heroes on weekly XP.</div></div>';
+  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the board yet. Join from ⚙️ → Cloud sync — only your name, avatar, level and weekly XP are shared.</div>'+
+    '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
+  setTimeout(function(){
+    SMLCloud.fetchBoard(25).then(function(r){
+      var el=document.getElementById('boardBody'); if(!el) return;
+      if(!r.ok){ el.innerHTML='<div class="empty">Leaderboard unavailable right now — it\u2019ll be back.</div>'; return; }
+      renderBoardInto(el, r.rows, r.me);
+    });
+  },0);
+  return head+'<div id="boardBody"><div class="empty">Summoning the heroes…</div></div></div>';
+}
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
   var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}):'—';
@@ -911,6 +947,7 @@ function renderStats(){
     heatmapPanel()+
     insightsPanel()+
     trophyShelf()+
+    leaderboardPanel()+
     '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
     '<div class="panel" style="margin-top:14px"><h3>📜 Adventure log</h3>'+logHtml+'</div>';
@@ -1307,6 +1344,8 @@ function cloudSection(){
     '<div class="hint">Synced as <b>'+esc(sess.user.email||'')+'</b>'+(ls?' · last sync '+new Date(ls).toLocaleString():'')+'</div>'+
     '<div class="setrow" style="margin-top:6px"><button class="btn go" onclick="cloudSyncNow()">⟳ Sync now</button>'+
     '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
+    '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button></div>'+
+    '<div class="hint">'+(state.settings.board?'Sharing: name, avatar, level, rank, weekly XP, best streak. Tap again to leave — your row is removed.':'Opt-in. Shares only name, avatar, level, rank, weekly XP and best streak — never your save.')+'</div>'+
     '<div class="hint" id="cMsg"></div>';
 }
 function cloudMsg(t,bad){ var el=$('#cMsg'); if(el) el.innerHTML=bad?'<span class="h">'+esc(t)+'</span>':'<span class="p">'+esc(t)+'</span>'; }
@@ -1349,6 +1388,18 @@ function afterCloudSignIn(){
   });
 }
 function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out — save stays on this device'); }); }
+function toggleBoard(){
+  if(!cloudOn()){ toast('<span class="h">Sign in first to join the leaderboard</span>','dmg'); return; }
+  if(state.settings.board){
+    state.settings.board=false; persist(); openSettings();
+    SMLCloud.leaveBoard().then(function(){ toast('🏆 Left the leaderboard — your row is gone'); });
+  } else {
+    state.settings.board=true; persist(); openSettings();
+    SMLCloud.pushBoard(boardProfile()).then(function(r){
+      toast(r.ok?'🏆 <span class="c">You are on the board!</span>':'<span class="h">'+esc(r.error||'Could not join')+'</span>', r.ok?'':'dmg');
+    });
+  }
+}
 function cloudSyncNow(){
   cloudMsg('Syncing…');
   SMLCloud.push(state).then(function(r){ openSettings(); cloudMsg(r.ok?'Synced ✓':(r.error||'Sync failed'), !r.ok); });
