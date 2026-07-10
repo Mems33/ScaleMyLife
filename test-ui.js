@@ -614,15 +614,12 @@ setTimeout(function () {
 
   console.log('\nCloud sync UI (v7)');
   ok(typeof w.SMLCloud === 'object', 'cloud client loads in the page');
-  ok(w.SMLCloud.configured() === false, 'cloud starts unconfigured (no key baked in yet)');
+  ok(w.SMLCloud.configured() === true, 'cloud is configured out of the box (publishable key baked in)');
+  ok(w.SMLCloud.session() === null, 'no session until the user signs in');
   w.openSettings();
   var setTxt = d.querySelector('#modal').textContent;
-  ok(setTxt.indexOf('Cloud sync') >= 0 && d.querySelector('#cKey') !== null, 'settings offers the one-time key field when unconfigured');
+  ok(setTxt.indexOf('Cloud sync') >= 0 && d.querySelector('#cEmail') !== null && d.querySelector('#cPw') !== null, 'settings shows the sign-in form when configured');
   ok(setTxt.indexOf('Reminders OFF') >= 0, 'reminders toggle present (off by default)');
-  w.closeModal();
-  w.SMLCloud.setKey('sb_publishable_test');
-  w.openSettings();
-  ok(d.querySelector('#cEmail') !== null && d.querySelector('#cPw') !== null, 'with a key set, sign-in form appears');
   w.closeModal();
   w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.go('today');
   ok(d.querySelector('.nudgebar') !== null, 'cloud nudge banner shows for unsynced progress');

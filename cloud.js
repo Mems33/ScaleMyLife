@@ -16,7 +16,7 @@
   'use strict';
 
   var PROJECT_URL = 'https://rbhjqvfuvzpqrxmvfimd.supabase.co';
-  var PUBLISHABLE_KEY = ''; // paste the anon/publishable key here to bake it in
+  var PUBLISHABLE_KEY = 'sb_publishable_TnkG6FAH-l78na_JJ6E4fg_lAIsm_Ww'; // public by design — security is Postgres RLS
   var SESSION_LS = 'sml.cloud.session.v1';
   var KEY_LS = 'sml.cloud.key.v1';
   var SYNC_LS = 'sml.cloud.lastsync.v1';
