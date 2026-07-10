@@ -61,6 +61,8 @@ Plus the existing weekly XP chart, mood strip, achievements and adventure log. T
 
 ## Comfort & safety
 
+- **Quest of Atonement (streak repair)** — when a 3+ day streak breaks, you get until midnight to mend it: clear all of today's dailies and the flame is relit as if it never went out. Softens the single most rage-quit-inducing moment in any streak app; the Streak Shield still prevents the break entirely. Mending unlocks the *Keeper of the Flame* title, and your **best streak** is tracked forever in Stats.
+- **Journal archive** — every entry you've ever written, grouped by month with live search.
 - **Undo everywhere** — deleting a quest/habit/reward or logging a slip shows a 6-second ↩ Undo toast instead of a scary confirm dialog.
 - **Haptics** — subtle vibration feedback on mobile for earns, hits, level-ups and chests (tied to the sound toggle).
 - **Reminders** — optional notifications (⚙️ → Reminders): an evening nudge if dailies/journal are unfinished, a boss-escapes-tomorrow warning, and break/work alerts from the focus timer when the tab is hidden. Uses the browser Notification API, so they fire while the app is open; true background push arrives with a later backend phase.

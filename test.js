@@ -757,6 +757,55 @@ ok(fmr.days.length === 30, 'month view covers 30 days');
 ok(fmr.per[hmDay(20)] && fmr.per[hmDay(20)].total === 45, 'session 20 days back lands in the month view');
 ok(RPG.focusByDay(fm, 7).totalMin === 0, 'same session is outside the 7-day view');
 
+section('Quest of Atonement (streak repair)');
+var ra = RPG.newState('RA');
+var rq1 = A.addQuest(ra, { title: 'd1', diff: 'easy', recurring: true });
+var rq2 = A.addQuest(ra, { title: 'd2', diff: 'easy', recurring: true });
+ra.hero.streak = 9; ra.hero.lastActiveDay = '2020-01-01'; ra.lastSeenDay = '2020-01-02';
+RPG.dailyReset(ra);
+ok(ra.hero.streak === 0 && ra.redemption && ra.redemption.streak === 9 && ra.redemption.on === RPG.todayKey(), 'breaking a 9-day streak opens a same-day redemption');
+var re0 = A.redeemEligible(ra);
+ok(re0.active === true && re0.eligible === false, 'not eligible before the dailies are done');
+ok(A.redeemStreak(ra).fail === 'work', 'mending refuses until the work is done');
+A.completeQuest(ra, rq1.id); A.completeQuest(ra, rq2.id);
+ok(A.redeemEligible(ra).eligible === true, 'all dailies cleared -> eligible');
+var mend = A.redeemStreak(ra);
+ok(mend && mend.streak === 10 && ra.hero.streak === 10, 'mended streak continues as if unbroken (9 -> 10)');
+ok(ra.redemption === null && ra.counters.mends === 1, 'offer consumed, mend counted');
+ok(RPG.checkAchievements(ra).some(function (a) { return a.id === 'mended'; }), 'Keeper of the Flame unlocks');
+ok(ra.hero.bestStreak >= 10, 'best streak keeps the record');
+// small streaks don't qualify
+var rb = RPG.newState('RB');
+rb.hero.streak = 2; rb.hero.lastActiveDay = '2020-01-01'; rb.lastSeenDay = '2020-01-02';
+RPG.dailyReset(rb);
+ok(rb.redemption === null, 'a 2-day streak breaks without an offer');
+// shield takes precedence — no redemption when the shield saves it
+var rc = RPG.newState('RC');
+rc.hero.shields = 1; rc.hero.streak = 8; rc.hero.lastActiveDay = '2020-01-01'; rc.lastSeenDay = '2020-01-02';
+RPG.dailyReset(rc);
+ok(rc.hero.streak === 8 && rc.redemption === null, 'shield saves the streak, no atonement needed');
+// unclaimed offers expire on the next day
+var rd = RPG.newState('RD');
+rd.redemption = { streak: 12, on: '2020-01-05' }; rd.lastSeenDay = '2020-01-06';
+RPG.dailyReset(rd);
+ok(rd.redemption === null, 'stale offer expires on the next daily reset');
+ok(A.redeemStreak(RPG.newState('RE')) === null, 'no offer -> nothing to redeem');
+// no dailies on the board: any XP today qualifies
+var rf = RPG.newState('RF');
+rf.redemption = { streak: 5, on: RPG.todayKey() };
+ok(A.redeemEligible(rf).eligible === false, 'empty board + no XP -> not yet');
+var rfq = A.addQuest(rf, { title: 'x', diff: 'easy' }); A.completeQuest(rf, rfq.id);
+ok(A.redeemStreak(rf).streak === 6, 'earning XP today mends when there are no dailies');
+
+section('Best streak record + migration');
+var bs = RPG.newState('BS');
+var bq = A.addQuest(bs, { title: 'x', diff: 'easy' }); A.completeQuest(bs, bq.id);
+ok(bs.hero.bestStreak === 1, 'first action starts the record');
+var mig6 = RPG.newState('MIG6'); mig6.hero.streak = 7;
+delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
+mig6 = RPG.migrate(mig6);
+ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a

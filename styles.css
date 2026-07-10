@@ -565,6 +565,22 @@ body.light .hc.l4{background:#1d7a4c}
 
 .cloudchip{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--xp);border:1px solid color-mix(in srgb,var(--xp) 45%,var(--line));border-radius:10px;padding:2px 7px;cursor:pointer;background:color-mix(in srgb,var(--xp) 9%,transparent)}
 
+/* quest of atonement (streak repair) */
+.redeembar{border:1px solid color-mix(in srgb,var(--orange) 60%,var(--line));border-radius:12px;padding:10px 14px;margin-bottom:12px;
+  display:flex;gap:10px 12px;align-items:center;flex-wrap:wrap;font-size:14px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--orange) 12%,transparent),transparent),color-mix(in srgb,var(--panel) 86%,transparent);
+  animation:candleglow 2.2s ease-in-out infinite}
+@keyframes candleglow{50%{box-shadow:0 0 18px color-mix(in srgb,var(--orange) 28%,transparent)}}
+.redeembar .nb{margin-left:auto;display:flex;gap:6px;align-items:center}
+
+/* journal archive */
+details.jmonth{border:1px solid var(--line);border-radius:9px;background:var(--panel2);margin-bottom:8px;overflow:hidden}
+details.jmonth summary{cursor:pointer;list-style:none;padding:9px 12px;font-weight:700;font-size:13.5px;display:flex;gap:8px;align-items:center}
+details.jmonth summary::-webkit-details-marker{display:none}
+details.jmonth summary::before{content:"▸";color:var(--muted);transition:transform .15s}
+details.jmonth[open] summary::before{transform:rotate(90deg)}
+details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent);border-bottom:none}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}

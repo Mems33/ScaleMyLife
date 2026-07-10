@@ -692,6 +692,42 @@ setTimeout(function () {
   w.render();
   ok(d.querySelector('.cloudchip') === null, 'chip hides when signed out');
 
+  console.log('\nQuest of Atonement + journal archive (v9)');
+  // simulate a broken streak offered for redemption today
+  w.state.redemption = { streak: 9, on: w.RPG.todayKey() };
+  w.state.quests.filter(function (q) { return q.recurring; }).forEach(function (q) { q.doneOn = null; });
+  w.go('today');
+  ok(d.querySelector('.redeembar') !== null, 'atonement banner appears for a broken streak');
+  ok(d.querySelector('#view').textContent.indexOf('9-day streak') >= 0, 'banner names the lost streak');
+  ok(d.querySelector('.redeembar .btn') === null, 'mend button hidden until the work is done');
+  w.state.quests.filter(function (q) { return q.recurring && w.RPG.questActiveOn(q, new Date()); }).forEach(function (q) {
+    if (q.doneOn !== w.RPG.todayKey()) w.doQuest(q.id);
+  });
+  if (d.querySelector('#overlay.show')) w.closeOverlay();
+  w.go('today');
+  ok(d.querySelector('.redeembar .btn') !== null, 'mend button unlocks once dailies are cleared');
+  w.mendStreak();
+  ok(w.state.hero.streak === 10 && w.state.redemption === null, 'streak mended to 10 from the UI');
+  ok(d.querySelector('#overlay.show') !== null && d.querySelector('#overlay').textContent.indexOf('STREAK MENDED') >= 0, 'mend celebration shows');
+  w.closeOverlay();
+  ok(w.state.counters.mends === 1, 'mend counted for the achievement');
+  // journal archive
+  w.state.journal['2026-05-03'] = { mood: 'good', note: 'ancient wisdom' };
+  w.state.journal['2026-05-14'] = { mood: 'great', note: 'shipped the thing' };
+  w.state.journal['2026-06-20'] = { mood: 'ok', note: 'meh day' };
+  w.go('journal');
+  ok(d.querySelectorAll('details.jmonth').length >= 2, 'archive groups entries by month');
+  ok(d.querySelector('#view').textContent.indexOf('ancient wisdom') >= 0, 'old entries are browsable');
+  ok(d.querySelector('#jSearch') !== null, 'archive has a search box');
+  w.filterJournal('ancient');
+  var visible = Array.prototype.filter.call(d.querySelectorAll('.jrow.jarch'), function (r) { return r.style.display !== 'none'; });
+  ok(visible.length === 1 && visible[0].textContent.indexOf('ancient wisdom') >= 0, 'search filters down to the matching entry');
+  w.filterJournal('');
+  ok(Array.prototype.every.call(d.querySelectorAll('.jrow.jarch'), function (r) { return r.style.display !== 'none'; }), 'clearing the search restores all rows');
+  // best streak tile
+  w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('best streak') >= 0, 'best-streak stat tile renders');
+
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
   ok(typeof w.SMLGradient === 'object' && typeof w.SMLGradient.setColors === 'function', 'gradient controller exposed on window');
