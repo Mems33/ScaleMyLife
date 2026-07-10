@@ -113,7 +113,8 @@
     { id: 'skill_master',icon: '🎓', name: 'Master Mind',      desc: 'Take a life area to Lv.10',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 10; }); } },
     { id: 'skill_sage',  icon: '🌌', name: 'Sage',             desc: 'Take a life area to Lv.20',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 20; }); } },
     { id: 'ascend_1',    icon: '♻️', name: 'Reborn',          desc: 'Ascend into a new season',      cond: function (s) { return (s.hero.ascension || 0) >= 1; } },
-    { id: 'legend',      icon: '🌟', name: 'Living Legend',   desc: 'Reach rank SS',                 cond: function (s) { return s.hero.level >= 60; } }
+    { id: 'legend',      icon: '🌟', name: 'Living Legend',   desc: 'Reach rank SS',                 cond: function (s) { return s.hero.level >= 60; } },
+    { id: 'mended',      icon: '🕯️', name: 'Keeper of the Flame', desc: 'Mend a broken streak',      cond: function (s) { return (s.counters.mends || 0) >= 1; } }
   ];
 
   /* ---------- helpers ---------- */
@@ -211,16 +212,17 @@
   function newState(heroName, avatar) {
     return {
       schema: SCHEMA,
-      hero: { name: heroName || 'Hero', avatar: avatar || '🧙', title: '', level: 1, xp: 0, coins: 50, hp: MAX_HP, streak: 0, lastActiveDay: null, badges: [], shields: 0, woundedOn: null,
+      hero: { name: heroName || 'Hero', avatar: avatar || '🧙', title: '', level: 1, xp: 0, coins: 50, hp: MAX_HP, streak: 0, bestStreak: 0, lastActiveDay: null, badges: [], shields: 0, woundedOn: null,
         boons: {}, ascension: 0, buffs: [], frame: '' },
       skills: defaultSkills(),
       quests: [], goals: [], habits: [], shop: [],
       journal: {}, sleep: {}, log: [],
       inventory: { potion: 0 },
       cosmetics: { frames: [] },
-      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0 },
+      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0 },
       achievements: [],           // [{id,on}]
       activeFocus: null,
+      redemption: null,           // {streak,on} — offer to mend a freshly broken streak
       boss: null,                 // {title,setOn,due,doneOn}
       chestClaimedOn: null,
       settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true },
@@ -330,6 +332,7 @@
     if (state.hero.lastActiveDay === today) return;
     var y = new Date(); y.setDate(y.getDate() - 1);
     state.hero.streak = (state.hero.lastActiveDay === todayKey(y)) ? state.hero.streak + 1 : 1;
+    if (state.hero.streak > (state.hero.bestStreak || 0)) state.hero.bestStreak = state.hero.streak;
     state.hero.lastActiveDay = today;
   }
 
@@ -439,12 +442,18 @@
         h.menace = Math.max(1, menaceOf(h) - MENACE_DECAY);
       }
     });
+    if (state.redemption && state.redemption.on !== today) state.redemption = null; // yesterday's offer expired
     if (state.hero.lastActiveDay && state.hero.lastActiveDay !== today && state.hero.lastActiveDay !== todayKey(y)) {
       if ((state.hero.shields || 0) > 0 && state.hero.streak > 0) {
         state.hero.shields--;
         state.hero.lastActiveDay = todayKey(y); // shield bridges the gap: next action continues the streak
         addLog(state, '🛡', 'Streak Shield consumed — your ' + state.hero.streak + '-day streak survives!');
       } else {
+        /* a real streak deserves a second chance: clear ALL of today's dailies to mend it */
+        if (state.hero.streak >= 3) {
+          state.redemption = { streak: state.hero.streak, on: today };
+          addLog(state, '🕯', 'Your ' + state.hero.streak + '-day streak broke — a Quest of Atonement is open until midnight.');
+        }
         state.hero.streak = 0;
       }
     }
@@ -998,6 +1007,33 @@
       return res;
     },
 
+    /* ----- quest of atonement: mend a streak broken this very day -----
+       Eligible once ALL of today's scheduled dailies are done (or, with no
+       dailies on the board, once any XP was earned today). Restores the old
+       streak +1 so the chain continues as if unbroken. */
+    redeemEligible: function (state) {
+      var r = state.redemption;
+      if (!r || r.on !== todayKey()) return { active: false };
+      var st = actions.chestStatus(state);
+      var done = st.total > 0
+        ? st.done === st.total
+        : state.log.some(function (e) { return e.day === todayKey() && e.xp > 0; });
+      return { active: true, eligible: done, streak: r.streak, done: st.done, total: st.total };
+    },
+
+    redeemStreak: function (state) {
+      var e = actions.redeemEligible(state);
+      if (!e.active) return null;
+      if (!e.eligible) return { fail: 'work', done: e.done, total: e.total };
+      state.hero.streak = e.streak + 1;
+      if (state.hero.streak > (state.hero.bestStreak || 0)) state.hero.bestStreak = state.hero.streak;
+      state.hero.lastActiveDay = todayKey();
+      state.redemption = null;
+      state.counters.mends = (state.counters.mends || 0) + 1;
+      addLog(state, '🕯', 'Streak mended — the flame burns again at ' + state.hero.streak + ' days.');
+      return { streak: state.hero.streak };
+    },
+
     /* ----- shop ----- */
     addShopItem: function (state, o) {
       var tab = ['market', 'hotel', 'black'].indexOf(o.tab) >= 0 ? o.tab : 'market';
@@ -1106,7 +1142,7 @@
     if (!s.sleep) s.sleep = {};
     if (!s.journal) s.journal = {};
     if (!s.counters) s.counters = { quests: 0, focusMin: 0, purchases: 0, chests: 0 };
-    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
+    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions', 'mends'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
     /* v5: prestige, inventory, cosmetics, buffs, menace, scheduled dailies */
     if (!s.hero.boons || typeof s.hero.boons !== 'object') s.hero.boons = {};
     if (typeof s.hero.ascension !== 'number') s.hero.ascension = 0;
@@ -1118,6 +1154,8 @@
     if (!Array.isArray(s.cosmetics.frames)) s.cosmetics.frames = [];
     (s.quests || []).forEach(function (q) { if (!('days' in q)) q.days = null; });
     (s.goals || []).forEach(function (g) { if (typeof g.focusMin !== 'number') g.focusMin = 0; });
+    if (!('redemption' in s)) s.redemption = null;
+    if (typeof s.hero.bestStreak !== 'number') s.hero.bestStreak = Math.max(0, s.hero.streak || 0);
     if (!s.achievements) s.achievements = [];
     if (!('activeFocus' in s)) s.activeFocus = null;
     if (s.activeFocus && !s.activeFocus.phase) s.activeFocus = null; // old one-shot format

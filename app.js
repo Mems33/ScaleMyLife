@@ -483,6 +483,7 @@ function renderToday(){
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
     (wounded?'<div class="woundbar">🩸 <b>Wounded</b> — XP halved today. Rest at the Hotel or log good sleep to recover.</div>':'')+
+    redemptionBar()+
     (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> — your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
@@ -744,7 +745,6 @@ function toggleEscalate(){ state.settings.escalate=state.settings.escalate===fal
 
 function renderJournal(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
-  var days=Object.keys(state.journal).sort().reverse().slice(0,7);
   $('#view').innerHTML='<div class="grid two">'+
     '<div class="panel"><h3>Today\'s mood '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰')+'</h3>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
@@ -760,14 +760,8 @@ function renderJournal(){
       var on=n<=(sl?sl.quality:pendingQuality);
       return '<button class="'+(on?'on':'')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div>'+
     '<button class="btn go" onclick="saveSleep()">'+(sl?'Update':'Log sleep')+'</button></div></div>'+
-    '<div class="panel"><h3>Last entries</h3>'+
-    (days.map(function(d){
-      var e=state.journal[d], m=RPG.MOODS.find(function(x){return x.key===e.mood;});
-      var s=state.sleep[d];
-      return '<div class="jrow"><span class="d">'+d+'</span><span>'+(m?m.emoji:'')+'</span>'+
-        '<span style="flex:1">'+esc(e.note||'—')+'</span>'+
-        (s?'<span class="hint">🌙'+s.hours+'h</span>':'')+'</div>';
-    }).join('')||'<div class="empty">Your story starts with the first entry.</div>')+'</div></div>';
+    '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
+    journalArchive()+'</div></div>';
 }
 
 function insightsPanel(){
@@ -837,6 +831,34 @@ function reviewBox(){
     (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
     '<div class="rv suggest"><span class="k">🎯 Next week</span><span class="v">'+esc(rev.suggestion)+'</span></div></div>';
 }
+/* full journal history, grouped by month, filtered in place */
+function journalArchive(){
+  var all=Object.keys(state.journal).sort().reverse();
+  if(!all.length) return '<div class="empty">Your story starts with the first entry.</div>';
+  var months=[], by={};
+  all.forEach(function(d){ var m=d.slice(0,7); if(!by[m]){ by[m]=[]; months.push(m); } by[m].push(d); });
+  var cur=RPG.todayKey().slice(0,7);
+  return '<input id="jSearch" placeholder="Search your entries…" oninput="filterJournal(this.value)" style="margin-bottom:8px">'+
+    months.map(function(m){
+      var label=new Date(m+'-01T00:00:00').toLocaleDateString(undefined,{month:'long',year:'numeric'});
+      var rows=by[m].map(function(d){
+        var e=state.journal[d], mo=RPG.MOODS.find(function(x){return x.key===e.mood;});
+        var s=state.sleep[d];
+        return '<div class="jrow jarch"><span class="d">'+d.slice(5)+'</span><span>'+(mo?mo.emoji:'')+'</span>'+
+          '<span style="flex:1">'+esc(e.note||'—')+'</span>'+
+          (s?'<span class="hint">🌙'+s.hours+'h</span>':'')+'</div>';
+      }).join('');
+      return '<details class="jmonth"'+(m===cur?' open':'')+'><summary>'+label+' <span class="cnt">'+by[m].length+'</span></summary>'+rows+'</details>';
+    }).join('');
+}
+function filterJournal(q){
+  q=(q||'').toLowerCase().trim();
+  document.querySelectorAll('.jrow.jarch').forEach(function(r){
+    r.style.display = !q || r.textContent.toLowerCase().indexOf(q)>=0 ? '' : 'none';
+  });
+  document.querySelectorAll('details.jmonth').forEach(function(dt){ if(q) dt.open=true; });
+}
+
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
@@ -879,6 +901,7 @@ function renderStats(){
     '<div class="stat"><div class="v g">'+w.tot.habits+'</div><div class="k">habits kept</div></div>'+
     '<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>'+
     '<div class="stat"><div class="v b">'+Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60)+'</div><div class="k">focus time</div></div>'+
+    '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.hero.bestStreak||0)+'d</div><div class="k">best streak</div></div>'+
     '</div>'+
     '<div class="chart">'+chart+'</div>'+
     '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
@@ -1148,6 +1171,28 @@ function toggleReminders(){
     if(p==='granted'){ state.settings.reminders=true; persist(); openSettings(); toast('🔔 <span class="p">Reminders on — evening nudge + focus alerts</span>'); }
     else toast('<span class="h">Permission denied — enable notifications in your browser settings</span>','dmg');
   });
+}
+
+/* quest of atonement: a freshly broken streak can be mended before midnight */
+function redemptionBar(){
+  var e=A.redeemEligible(state);
+  if(!e.active) return '';
+  var progress=e.total>0?('Clear all of today\u2019s dailies ('+e.done+'/'+e.total+')'):'Earn some XP today';
+  return '<div class="redeembar">🕯 <b>Quest of Atonement</b> — your '+e.streak+'-day streak lies broken. '+progress+' and mend it before midnight.'+
+    '<span class="nb">'+(e.eligible
+      ?'<button class="btn small go" onclick="mendStreak()">🕯 Mend the streak</button>'
+      :'<span class="chip muted">'+(e.total>0?e.done+'/'+e.total+' done':'no XP yet')+'</span>')+'</span></div>';
+}
+function mendStreak(){
+  var r=A.redeemStreak(state); persist(); render();
+  if(!r||r.fail) return;
+  SND.rankup(); confetti(true); sparks('🕯');
+  var o=$('#overlay'); o.className='show';
+  o.innerHTML='<div class="levelbox"><div class="rankbig" style="font-size:64px">🕯</div>'+
+    '<div class="big" style="color:var(--orange)">STREAK MENDED</div>'+
+    '<div class="sub">The flame burns again — <b style="color:var(--orange)">'+r.streak+' days</b> and counting.</div>'+
+    '<button class="btn go" onclick="closeOverlay()">Onward ▶</button></div>';
+  afterAction();
 }
 
 function cloudNudgeDue(){
