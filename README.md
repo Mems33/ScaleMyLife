@@ -59,6 +59,10 @@ The **Stats** tab now does more than count XP:
 
 Plus the existing weekly XP chart, mood strip, achievements and adventure log. The HUD shows a **today-at-a-glance** line (XP, coins, focus time earned since midnight).
 
+## Leaderboard (opt-in)
+
+Race other heroes on **weekly XP**. Strictly opt-in from ⚙️ → Cloud sync: joining shares only your name, avatar, level, rank, weekly XP and best streak — never your save — and leaving deletes your row entirely (row existence *is* the opt-in; see `supabase/leaderboard.sql`). Top 25 shown in Stats with your row highlighted. Degrades gracefully if the table isn't set up yet.
+
 ## Comfort & safety
 
 - **Quest of Atonement (streak repair)** — when a 3+ day streak breaks, you get until midnight to mend it: clear all of today's dailies and the flame is relit as if it never went out. Softens the single most rage-quit-inducing moment in any streak app; the Streak Shield still prevents the break entirely. Mending unlocks the *Keeper of the Flame* title, and your **best streak** is tracked forever in Stats.

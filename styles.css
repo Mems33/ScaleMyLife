@@ -637,3 +637,13 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .rv .k{min-width:0}
 }
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- v11: leaderboard ---------- */
+.brow{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);margin-bottom:7px}
+.brow.me{border-color:var(--gold);box-shadow:0 0 12px color-mix(in srgb,var(--gold) 18%,transparent)}
+.bpos{font-family:var(--mono);font-size:14px;font-weight:700;min-width:34px;text-align:center}
+.bav{font-size:22px}
+.bname{font-weight:700;font-size:14px}
+.bmeta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.bxp{font-family:var(--mono);font-weight:700;color:var(--xp);white-space:nowrap}
+.bxp small{color:var(--muted);font-weight:400}
