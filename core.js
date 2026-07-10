@@ -579,6 +579,44 @@
     return { enough: enough, sampleSize: moodDays.length, findings: findings, bestSleep: bestSleep };
   }
 
+  /* ---------- activity heatmap ----------
+     GitHub-style grid of daily XP for the last `weeks` weeks, padded to full
+     Sun-Sat columns. Cells carry a 0-4 intensity level for the UI. */
+  function heatmap(state, weeks) {
+    weeks = weeks || 12;
+    var xpBy = {};
+    (state.log || []).forEach(function (e) { if (e.xp > 0) xpBy[e.day] = (xpBy[e.day] || 0) + e.xp; });
+    var start = new Date(); start.setDate(start.getDate() - (weeks * 7 - 1));
+    start.setDate(start.getDate() - start.getDay());       // align to Sunday
+    var todayK = todayKey();
+    var cells = [], max = 0, total = 0, active = 0, streakGuard = weeks * 7 + 14;
+    var d = new Date(start);
+    while (streakGuard-- > 0) {
+      var k = todayKey(d);
+      var future = k > todayK;
+      var xp = future ? 0 : (xpBy[k] || 0);
+      cells.push({ day: k, xp: xp, future: future });
+      if (!future) { if (xp > max) max = xp; total += xp; if (xp > 0) active++; }
+      if (k >= todayK && d.getDay() === 6) break;          // finish the current column
+      d.setDate(d.getDate() + 1);
+    }
+    max = max || 1;
+    cells.forEach(function (c) {
+      c.level = c.future || !c.xp ? 0 : Math.min(4, 1 + Math.floor(c.xp / max * 3.999));
+    });
+    return { cells: cells, max: max, total: total, activeDays: active };
+  }
+
+  /* trophy shelf: every weekly boss ever slain, newest first (from the log) */
+  function bossTrophies(state) {
+    var TAG = 'WEEKLY BOSS SLAIN: ';
+    var out = [];
+    (state.log || []).forEach(function (e) {
+      if (e.icon === '🐲' && e.text && e.text.indexOf(TAG) === 0) out.push({ title: e.text.slice(TAG.length), day: e.day });
+    });
+    return out;
+  }
+
   /* upgraded Friday review: the one win, the worst monster, a suggested focus */
   function weeklyReview(state) {
     var w = weekStats(state);
@@ -1140,6 +1178,7 @@
     grant: grant, damage: damage, ascend: ascend, usePotion: usePotion, addLog: addLog,
     checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,
     insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn, focusByDay: focusByDay,
+    heatmap: heatmap, bossTrophies: bossTrophies,
     actions: actions, save: save, load: load
   };
 });

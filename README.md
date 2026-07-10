@@ -50,7 +50,10 @@ Work earns coins, coins buy pleasures. A solid day (dailies + habits + 2 focus b
 
 The **Stats** tab now does more than count XP:
 
-- **Focus by life area** — a per-day stacked breakdown of *what you actually worked on*: each focus session is tagged to a life area, then charted so you can see where your deep-work hours really went this week.
+- **Focus by life area** — a per-day stacked breakdown of *what you actually worked on*, with a **Week / Month toggle**: each focus session is tagged to a life area, then charted so you can see where your deep-work hours really went.
+- **Consistency heatmap** — a GitHub-style wall of the last 12 weeks; every day you earn XP lights a square. Nothing motivates like not breaking the wall.
+- **Share my week** — one tap renders your week (rank, level, XP, quests, focus hours, streak, mood strip) into a polished 1080×1080 image and opens the native share sheet (or downloads the PNG). Your progress, postable anywhere.
+- **Trophy shelf** — every weekly boss you've ever slain, with the date of the kill.
 - **Week in review** — your best day, your toughest monster of the week, and a concrete suggestion for next week (ideal for Friday planning).
 - **Insights** — plain-language patterns computed from data you already log: how sleep, focus and slips track with your mood ("On your best-mood days you sleep 1.3h more"). It needs a few days of mood entries before it speaks up, and it never invents a pattern that isn't there.
 

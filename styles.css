@@ -534,6 +534,37 @@ body.light .item,body.light .stat,body.light .insight,body.light .rv,body.light 
 body.light .btn.go{color:#04160c}
 body.light .campfire .z{color:#8d8398}
 
+/* ---------- v8: heatmap, week/month toggle, trophies, share, cloud chip ---------- */
+.spantoggle{display:inline-flex;gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-left:auto}
+.spantoggle button{background:var(--panel2);border:none;color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:700;padding:5px 12px}
+.spantoggle button.on{background:color-mix(in srgb,var(--gold) 16%,var(--panel2));color:var(--gold)}
+.frow.slim .ftrack{height:10px}
+.frow.slim .fdl{font-size:9.5px}
+.frow.slim .ftt{font-size:10px}
+
+.heatwrap{overflow-x:auto;padding-bottom:4px}
+.heatmap{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,14px);gap:3px;width:max-content}
+.hc{width:14px;height:14px;border-radius:3.5px;background:color-mix(in srgb,var(--line) 55%,transparent);display:block}
+.hc.l1{background:color-mix(in srgb,var(--xp) 30%,var(--panel2))}
+.hc.l2{background:color-mix(in srgb,var(--xp) 55%,var(--panel2))}
+.hc.l3{background:color-mix(in srgb,var(--xp) 78%,var(--panel2))}
+.hc.l4{background:var(--xp);box-shadow:0 0 6px color-mix(in srgb,var(--xp) 55%,transparent)}
+.hc.fut{background:none;border:1px dashed color-mix(in srgb,var(--line) 60%,transparent)}
+.heatkey{display:flex;gap:4px;align-items:center;justify-content:flex-end;margin-top:8px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+body.light .hc{background:#e8e1d0}
+body.light .hc.l1{background:color-mix(in srgb,#1d7a4c 25%,#e8e1d0)}
+body.light .hc.l2{background:color-mix(in srgb,#1d7a4c 50%,#e8e1d0)}
+body.light .hc.l3{background:color-mix(in srgb,#1d7a4c 75%,#e8e1d0)}
+body.light .hc.l4{background:#1d7a4c}
+
+.trophies{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.trophy{display:flex;gap:10px;align-items:center;background:var(--panel2);border:1px solid color-mix(in srgb,var(--gold) 30%,var(--line));border-radius:9px;padding:9px 12px}
+.trophy .ti{font-size:22px}
+.trophy .tt{font-weight:700;font-size:13.5px}
+.trophy .td{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+.cloudchip{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--xp);border:1px solid color-mix(in srgb,var(--xp) 45%,var(--line));border-radius:10px;padding:2px 7px;cursor:pointer;background:color-mix(in srgb,var(--xp) 9%,transparent)}
+
 @media(min-width:860px){.grid.two{grid-template-columns:1.4fr 1fr}}
 @media(max-width:640px){
   body{font-size:15px}

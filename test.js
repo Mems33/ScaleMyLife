@@ -724,6 +724,39 @@ mgF = RPG.migrate(mgF);
 ok(mgF.goals[0].focusMin === 0, 'migration backfills focusMin on old goals');
 ok(mgF.settings.reminders === false, 'migration adds reminders setting (off by default)');
 
+section('Activity heatmap');
+var hm = RPG.newState('HM');
+function hmDay(n) { var d = new Date(); d.setDate(d.getDate() - n); return RPG.todayKey(d); }
+hm.log.push({ t: new Date().toISOString(), day: hmDay(0), icon: '⚔️', text: 'q', xp: 100, coins: 0, hp: 0, min: 0 });
+hm.log.push({ t: new Date().toISOString(), day: hmDay(0), icon: '🌱', text: 'h', xp: 20, coins: 0, hp: 0, min: 0 });
+hm.log.push({ t: new Date().toISOString(), day: hmDay(3), icon: '⚔️', text: 'q', xp: 30, coins: 0, hp: 0, min: 0 });
+var hmr = RPG.heatmap(hm, 12);
+ok(hmr.cells.length % 7 === 0 && hmr.cells.length >= 84, 'grid padded to whole Sun-Sat weeks (' + hmr.cells.length + ' cells)');
+ok(hmr.total === 150 && hmr.activeDays === 2 && hmr.max === 120, 'totals, active days and max computed');
+var todayCell = hmr.cells.find(function (c) { return c.day === RPG.todayKey(); });
+ok(todayCell && todayCell.xp === 120 && todayCell.level === 4, 'today aggregates to the hottest level');
+var d3 = hmr.cells.find(function (c) { return c.day === hmDay(3); });
+ok(d3 && d3.level >= 1 && d3.level <= 4, 'lighter day gets a non-zero level');
+ok(hmr.cells.every(function (c) { return !c.future || c.level === 0; }), 'future padding cells stay empty');
+ok(RPG.heatmap(RPG.newState('HM2'), 12).total === 0, 'fresh hero -> empty heatmap, no crash');
+
+section('Boss trophies');
+var bt = RPG.newState('BT');
+A.setBoss(bt, { title: 'First dragon' }); A.slayBoss(bt);
+A.setBoss(bt, { title: 'Second dragon' }); A.slayBoss(bt);
+var trophies = RPG.bossTrophies(bt);
+ok(trophies.length === 2, 'both kills on the shelf');
+ok(trophies[0].title === 'Second dragon' && trophies[1].title === 'First dragon', 'newest first');
+ok(trophies[0].day === RPG.todayKey(), 'kill date recorded');
+
+section('Focus chart month span');
+var fm = RPG.newState('FM');
+fm.log.push({ t: new Date().toISOString(), day: hmDay(20), icon: '⏳', text: 'f', xp: 0, coins: 0, hp: 0, min: 45, sk: fm.skills[0].id });
+var fmr = RPG.focusByDay(fm, 30);
+ok(fmr.days.length === 30, 'month view covers 30 days');
+ok(fmr.per[hmDay(20)] && fmr.per[hmDay(20)].total === 45, 'session 20 days back lands in the month view');
+ok(RPG.focusByDay(fm, 7).totalMin === 0, 'same session is outside the 7-day view');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a
