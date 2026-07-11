@@ -606,12 +606,12 @@ function musicId(){
 function ytEmbed(){
   var id=musicId();
   if(!id) return '';
+  var popout='<button class="btn small" style="margin-top:8px" onclick="openMusicWin()">🎵 Pop-out player (always works)</button>';
   if(location.protocol==='file:'){
-    return '<div class="hint" style="margin-top:14px">YouTube blocks embedded players on local files (error 153) - use the pop-out player instead:</div>'+
-      '<button class="btn" style="margin-top:8px" onclick="openMusicWin()">🎵 Open music player window</button>';
+    return '<div class="hint" style="margin-top:14px">YouTube blocks embedded players on local files - use the pop-out player, which keeps playing while you focus:</div>'+popout;
   }
-  return '<div class="yt"><iframe src="https://www.youtube.com/embed/'+id+'?autoplay=1&playsinline=1" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe></div>'+
-    '<div class="hint">needs internet - pick another stream or paste any YouTube URL in setup</div>';
+  return '<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe></div>'+
+    '<div class="hint">Player not loading, or you want it to keep playing between work and break phases? Use the pop-out - it survives the timer and tab switches.</div>'+popout;
 }
 function openMusicWin(){
   var id=musicId(); if(!id) return;

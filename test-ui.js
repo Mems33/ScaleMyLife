@@ -849,6 +849,11 @@ setTimeout(function () {
   ok(d.querySelector('#fWork') !== null && d.querySelector('#fBrk') !== null, 'Custom reveals the work/break inputs');
   ok(d.querySelector('#view').textContent.indexOf('at least 5 minutes') >= 0, 'focus notes the 5-minute minimum');
   w.focusMode = { work: 50, brk: 10, custom: false };
+  // study music always offers a pop-out fallback
+  w.state.settings.music = 'lofi';
+  var mus = w.ytEmbed();
+  ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
+  w.state.settings.music = 'none';
   // name required at hero creation is covered by createHero refusing empty names
   var before = w.state; w.state = null; w.renderHUDShell(); w.tut(0); w.tutSkip();
   d.querySelector('#obName').value = '   ';
