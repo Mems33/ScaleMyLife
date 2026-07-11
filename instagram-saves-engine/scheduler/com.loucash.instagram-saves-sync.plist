@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent: runs sync.py at 09:00 and 21:00 every day.
+
+  Before installing, replace ABSOLUTE_PROJECT_PATH below with the real absolute
+  path to this project (run `pwd` inside instagram-saves-engine to get it),
+  e.g. /Users/yourname/Code/instagram-saves-engine.
+
+  Install:
+    cp scheduler/com.loucash.instagram-saves-sync.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.loucash.instagram-saves-sync.plist
+  Verify:
+    launchctl list | grep instagram-saves
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.loucash.instagram-saves-sync.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.loucash.instagram-saves-sync</string>
+
+    <key>WorkingDirectory</key>
+    <string>ABSOLUTE_PROJECT_PATH</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>ABSOLUTE_PROJECT_PATH/.venv/bin/python3</string>
+        <string>ABSOLUTE_PROJECT_PATH/sync.py</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Hour</key><integer>9</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key><integer>21</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>ABSOLUTE_PROJECT_PATH/launchd-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>ABSOLUTE_PROJECT_PATH/launchd-stderr.log</string>
+</dict>
+</plist>
