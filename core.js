@@ -1169,6 +1169,7 @@
     if (typeof s.settings.escalate !== 'boolean') s.settings.escalate = true;
     if (typeof s.settings.reminders !== 'boolean') s.settings.reminders = false;
     if (typeof s.settings.board !== 'boolean') s.settings.board = false;
+    if (typeof s.settings.friends !== 'boolean') s.settings.friends = false;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;

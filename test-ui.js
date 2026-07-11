@@ -735,7 +735,7 @@ setTimeout(function () {
   ok(d.querySelector('#view').textContent.indexOf('Sign in') >= 0, 'signed-out teaser invites sign-in');
   w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'x', refresh_token: 'y', user: { id: 'me-1', email: 'a@b.c' } }));
   w.state.settings.board = false; w.go('stats');
-  ok(d.querySelector('#view').textContent.indexOf('not on the board') >= 0, 'synced-but-not-joined teaser shows');
+  ok(d.querySelector('#view').textContent.indexOf('not on the global board') >= 0, 'synced-but-not-joined teaser shows');
   // opt in: settings toggle + fetch spy
   var boardUrls = [];
   w.SMLCloud.configure({ fetch: function (url) { boardUrls.push(url);
@@ -759,6 +759,43 @@ setTimeout(function () {
   ok(w.state.settings.board === false, 'opt-out stored (row deletion covered by cloud tests)');
   w.closeModal();
   w.localStorage.removeItem('sml.cloud.session.v1');
+
+  console.log('\nFriends by code (v12)');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'x', refresh_token: 'y', user: { id: '11112222-3333-4444-5555-666677778888', email: 'a@b.c' } }));
+  ok(w.SMLCloud.friendCode() === '11112222', 'friend code = first 8 hex of the user id, upper-cased');
+  w.state.settings.friends = false; w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Enable friends') >= 0, 'friends toggle offered in settings');
+  // scripted network for the friends flow
+  var frFetch = [];
+  w.SMLCloud.configure({ fetch: function (url, opts) {
+    frFetch.push({ url: url, method: (opts && opts.method) || 'GET', body: opts && opts.body ? JSON.parse(opts.body) : null });
+    var body = '[]';
+    if (url.indexOf('rpc/find_by_friend_code') >= 0) body = JSON.stringify([{ user_id: 'friend-abc', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 }]);
+    if (url.indexOf('friends?select=friend_id') >= 0) body = JSON.stringify([{ friend_id: 'friend-abc' }]);
+    if (url.indexOf('leaderboard?select') >= 0 && url.indexOf('user_id=in.') >= 0) body = JSON.stringify([{ user_id: 'friend-abc', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 }]);
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(body); } });
+  } });
+  w.toggleFriends();
+  ok(w.state.settings.friends === true, 'enabling friends is stored');
+  w.openSettings();
+  ok(d.querySelector('#myCode') !== null && d.querySelector('#myCode').textContent === '11112222', 'shareable code shown in settings');
+  ok(d.querySelector('#frCode') !== null, 'add-by-code input present');
+  d.querySelector('#frCode').value = 'FRIENDXY';
+  var afOk = false; try { w.addFriendByCode(); afOk = true; } catch (e) {}
+  ok(afOk, 'addFriendByCode runs without error');
+  ok(frFetch.some(function (r) { return /rpc\/find_by_friend_code/.test(r.url); }), 'lookup by code is called');
+  // friends board view in Stats
+  w.boardView = 'friends'; w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('Friends') >= 0 && d.querySelector('.spantoggle') !== null, 'Global/Friends toggle on the board');
+  var frb = d.querySelector('#boardBody');
+  w.renderBoardInto(frb, [
+    { user_id: 'friend-abc', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 },
+    { user_id: '11112222-3333-4444-5555-666677778888', name: 'Me', avatar: '🧙', level: 14, rank_code: 'C', week_xp: 1433, best_streak: 15, ascension: 0 }
+  ], '11112222-3333-4444-5555-666677778888');
+  ok(d.querySelectorAll('.brow').length === 2 && d.querySelector('.brow.me') !== null, 'friends board renders rows with self highlighted');
+  w.boardView = 'global';
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.SMLCloud.configure({ fetch: null });
 
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');

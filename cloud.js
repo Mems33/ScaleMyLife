@@ -168,11 +168,21 @@
        Having a row IS the opt-in; deleting it is the opt-out. Only the tiny
        profile snapshot below is ever shared — never the save itself. */
 
-    pushBoard: function (profile) {
+    /* a short, shareable code derived from the (immutable) user id — no storage race */
+    friendCode: function () {
+      var s = getSession();
+      return s ? s.user.id.replace(/-/g, '').slice(0, 8).toUpperCase() : '';
+    },
+
+    /* upsert the public profile row. onBoard=true lists you on the GLOBAL board;
+       even with onBoard=false the row exists so friends (and only friends) can see you. */
+    pushBoard: function (profile, onBoard) {
       var sess = getSession();
       if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
       var row = {
         user_id: sess.user.id,
+        friend_code: api.friendCode(),
+        on_board: !!onBoard,
         name: String(profile.name || 'Hero').slice(0, 24),
         avatar: String(profile.avatar || '🧙').slice(0, 8),
         level: profile.level || 1,
@@ -183,13 +193,70 @@
         updated_at: new Date().toISOString()
       };
       return api._rest('POST', 'leaderboard?on_conflict=user_id', [row], 'resolution=merge-duplicates,return=minimal')
-        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'board push failed (' + r.status + ')') }; });
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'profile push failed (' + r.status + ')') }; });
+    },
+
+    /* look up a hero by their exact friend code (RLS-bypassing RPC) */
+    findByCode: function (code) {
+      if (!api.configured()) return Promise.resolve({ ok: false, error: 'not configured' });
+      var sess = getSession();
+      var h = authHeaders(sess ? { 'Authorization': 'Bearer ' + sess.access_token } : null);
+      return req(cfg.url + '/rest/v1/rpc/find_by_friend_code', { method: 'POST', headers: h, body: JSON.stringify({ code: String(code || '').toUpperCase().trim() }) })
+        .then(function (r) {
+          if (!r.ok || !Array.isArray(r.j)) return { ok: false, error: errMsg(r.j, 'lookup failed (' + r.status + ')') };
+          if (!r.j.length) return { ok: true, found: false };
+          return { ok: true, found: true, profile: r.j[0] };
+        });
+    },
+
+    addFriend: function (friendId) {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      if (friendId === sess.user.id) return Promise.resolve({ ok: false, error: 'that is your own code' });
+      return api._rest('POST', 'friends?on_conflict=user_id,friend_id', [{ user_id: sess.user.id, friend_id: friendId }], 'resolution=ignore-duplicates,return=minimal')
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'add failed (' + r.status + ')') }; });
+    },
+    removeFriend: function (friendId) {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api._rest('DELETE', 'friends?user_id=eq.' + sess.user.id + '&friend_id=eq.' + friendId, null, 'return=minimal')
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'remove failed (' + r.status + ')') }; });
+    },
+    listFriendIds: function () {
+      if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api._rest('GET', 'friends?select=friend_id')
+        .then(function (r) { return (r.ok && Array.isArray(r.j)) ? { ok: true, ids: r.j.map(function (x) { return x.friend_id; }) } : { ok: false, error: errMsg(r.j, 'list failed (' + r.status + ')') }; });
+    },
+    fetchProfiles: function (ids) {
+      if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
+      if (!ids || !ids.length) return Promise.resolve({ ok: true, rows: [] });
+      var inList = '(' + ids.map(function (i) { return '"' + i + '"'; }).join(',') + ')';
+      return api._rest('GET', 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&user_id=in.' + inList + '&order=week_xp.desc,level.desc')
+        .then(function (r) { return (r.ok && Array.isArray(r.j)) ? { ok: true, rows: r.j } : { ok: false, error: errMsg(r.j, 'profiles fetch failed (' + r.status + ')') }; });
+    },
+    /* composed Friends board: me + everyone I follow, ranked */
+    fetchFriendsBoard: function (myProfile) {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api.listFriendIds().then(function (lf) {
+        if (!lf.ok) return lf;
+        return api.fetchProfiles(lf.ids).then(function (fp) {
+          if (!fp.ok) return fp;
+          var rows = fp.rows.slice();
+          if (!rows.some(function (r) { return r.user_id === sess.user.id; }) && myProfile) {
+            rows.push({ user_id: sess.user.id, name: myProfile.name, avatar: myProfile.avatar, level: myProfile.level,
+              rank_code: myProfile.rank, week_xp: Math.round(myProfile.weekXp || 0), best_streak: myProfile.bestStreak || 0, ascension: myProfile.ascension || 0 });
+          }
+          rows.sort(function (a, b) { return (b.week_xp || 0) - (a.week_xp || 0) || (b.level || 0) - (a.level || 0); });
+          return { ok: true, rows: rows, me: sess.user.id };
+        });
+      });
     },
 
     /* reads are public: works with just the apikey, auth attached when present */
     fetchBoard: function (limit) {
       if (!api.configured()) return Promise.resolve({ ok: false, error: 'not configured' });
-      var path = 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&order=week_xp.desc,level.desc&limit=' + (limit || 25);
+      var path = 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&on_board=eq.true&order=week_xp.desc,level.desc&limit=' + (limit || 25);
       var sess = getSession();
       var h = authHeaders(sess ? { 'Authorization': 'Bearer ' + sess.access_token } : null);
       return req(cfg.url + '/rest/v1/' + path, { method: 'GET', headers: h })

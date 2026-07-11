@@ -118,6 +118,33 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   var fb404 = await Cloud.fetchBoard(25);
   ok(fb404.ok === false && /does not exist/.test(fb404.error), 'missing table fails soft with the server message');
 
+  section('Friends by code');
+  ok(Cloud.friendCode() === 'UID1', 'friend code derived from the user id (real uuids yield 8 hex chars)');
+  fx.route('/rest/v1/leaderboard?on_conflict', 201, {});
+  var pf = await Cloud.pushBoard({ name: 'Me', avatar: '🧙', level: 14, rank: 'C', weekXp: 1433, bestStreak: 15, ascension: 1 }, false);
+  ok(pf.ok === true, 'profile push (friends-visible, off the global board) succeeds');
+  var pfReq = log[log.length - 1];
+  ok(pfReq.body[0].on_board === false && pfReq.body[0].friend_code === 'UID1', 'row carries on_board flag + friend_code');
+  fx.route('/rest/v1/rpc/find_by_friend_code', 200, [{ user_id: 'friend-9', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 }]);
+  var fc = await Cloud.findByCode('a1b2c3d4');
+  ok(fc.ok && fc.found && fc.profile.user_id === 'friend-9', 'lookup by code resolves a hero');
+  ok(log[log.length - 1].body.code === 'A1B2C3D4', 'code is upper-cased before lookup');
+  fx.route('/rest/v1/rpc/find_by_friend_code', 200, []);
+  ok((await Cloud.findByCode('ZZZZZZZZ')).found === false, 'unknown code returns found:false');
+  fx.route('/rest/v1/friends?on_conflict', 201, {});
+  var af = await Cloud.addFriend('friend-9');
+  ok(af.ok === true && log[log.length - 1].body[0].friend_id === 'friend-9', 'add friend inserts a follow row');
+  ok((await Cloud.addFriend('uid-1')).error === 'that is your own code', 'cannot add yourself');
+  fx.route('/rest/v1/friends?select=friend_id', 200, [{ friend_id: 'friend-9' }]);
+  fx.route('/rest/v1/leaderboard?select', 200, [{ user_id: 'friend-9', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 }]);
+  var fbrd = await Cloud.fetchFriendsBoard({ name: 'Me', avatar: '🧙', level: 14, rank: 'C', weekXp: 1433, bestStreak: 15, ascension: 1 });
+  ok(fbrd.ok && fbrd.rows.length === 2, 'friends board = me + everyone I follow');
+  ok(fbrd.rows[0].user_id === 'friend-9' && fbrd.rows[1].user_id === 'uid-1', 'ranked by weekly XP (rival above me)');
+  fx.route('/rest/v1/friends?user_id=eq.uid-1&friend_id=eq.friend-9', 204, {});
+  ok((await Cloud.removeFriend('friend-9')).ok === true && log[log.length - 1].method === 'DELETE', 'unfollow deletes the row');
+  fx.route('/rest/v1/leaderboard?select', 200, []);
+  ok((await Cloud.fetchBoard(25)).ok === true && /on_board=eq.true/.test(log[log.length - 1].url), 'global board only lists opted-in profiles');
+
   section('Network failure resilience');
   Cloud.configure({ fetch: function () { return Promise.reject(new Error('offline')); } });
   st.setItem('sml.cloud.session.v1', JSON.stringify(SESS));
