@@ -86,7 +86,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (620 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (627 tests).
 
 ## Development
 

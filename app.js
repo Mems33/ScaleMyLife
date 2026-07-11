@@ -262,8 +262,8 @@ function renderHUD(){
   var buffM=RPG.buffXpMult(state);
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
-    '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" onclick="openCharacter()" title="Customize character">'+h.avatar+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" onclick="openRanks()">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
+    '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+h.avatar+'</div>'+
+    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
@@ -285,7 +285,7 @@ function renderSkills(){
     var tierChip=tier.name?'<span class="tier" title="'+tier.name+' - +'+Math.round((tier.xp-1)*100)+'% XP'+(tier.coins>1?', +'+Math.round((tier.coins-1)*100)+'% coins':'')+' on this area’s actions">'+tier.name+'</span>':'';
     return '<div class="skillcard"><div class="t"><span>'+s.icon+' '+esc(s.name)+'</span><small>Lv.'+s.level+'</small></div>'+
       '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+tierChip+
-      '<button class="del" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
+      '<button class="del" aria-label="Remove life area" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
   }).join('');
   html += '<button class="addskill" onclick="addSkillPrompt()">+ life area</button>';
   $('#skillsRow').innerHTML = html;
@@ -351,8 +351,8 @@ function questRow(q){
     '<div class="meta">'+meta.join('')+'</div></div>'+
     action+
     (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">⬆</button>':'')+
-    '<button class="btn ghost" title="Edit" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
-    '<button class="btn ghost" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
+    '<button class="btn ghost" title="Edit" aria-label="Edit quest" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
+    '<button class="btn ghost" aria-label="Delete quest" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
 }
 
 function chestChip(){
@@ -374,13 +374,13 @@ function goalCard(g){
     return '<div class="step'+(done?' done':'')+'"><span>'+(done?'✅':'▫️')+'</span>'+
       '<div class="grow">'+esc(q.title)+' <span class="chip '+q.diff+'" style="margin-left:6px">'+RPG.DIFF[q.diff].label+'</span>'+dueChip+'</div>'+
       (done?'':'<button class="btn go small" onclick="doQuest(\''+q.id+'\')">Clear · '+RPG.DIFF[q.diff].xp+'xp</button>')+
-      '<button class="btn ghost small" title="Edit" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
-      '<button class="btn ghost small" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
+      '<button class="btn ghost small" title="Edit" aria-label="Edit step" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
+      '<button class="btn ghost small" aria-label="Delete step" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
   }).join('');
   return '<div class="goal"><div class="t"><div class="title">🏆 '+esc(g.title)+'</div>'+
     '<div><button class="btn go" onclick="doGoal(\''+g.id+'\')">Complete · 300xp/150💰</button>'+
-    '<button class="btn ghost" title="Edit" onclick="editGoalModal(\''+g.id+'\')">✎</button>'+
-    '<button class="btn ghost" onclick="delGoal(\''+g.id+'\')">✕</button></div></div>'+
+    '<button class="btn ghost" title="Edit" aria-label="Edit main quest" onclick="editGoalModal(\''+g.id+'\')">✎</button>'+
+    '<button class="btn ghost" aria-label="Delete main quest" onclick="delGoal(\''+g.id+'\')">✕</button></div></div>'+
     (g.note?'<div class="hint">'+esc(g.note)+'</div>':'')+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
     '<div class="pct">'+p.done+' / '+p.total+' steps · '+pct+'%'+((g.focusMin||0)>0?' · <span style="color:var(--blue)">⏳ '+fmtHm(g.focusMin)+' invested</span>':'')+'</div>'+
@@ -443,7 +443,7 @@ function bossStrip(){
       '<div class="t">WEEKLY BOSS: '+esc(b.title)+'</div>'+
       '<div class="sub"><b>'+when+'</b> · slay it for 500xp / 250💰 · escapes after 7 days</div></div>'+
       '<button class="btn slip" onclick="slayBoss()">🗡️ SLAY</button>'+
-      '<button class="btn ghost" onclick="abandonBoss()">✕</button></div>';
+      '<button class="btn ghost" aria-label="Abandon boss" onclick="abandonBoss()">✕</button></div>';
   }
   return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
     '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
@@ -561,8 +561,8 @@ function renderHabits(){
         '<span>+'+(12+Math.min(10,h.streak+1))+'xp/6💰</span></div></div>'+
         (done?'<span style="color:var(--good);font-weight:700">✓ today</span>'
           :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
-        '<button class="btn ghost" title="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
-        '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
+        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
+        '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Add a habit you want to grow.</div>')+
     '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
@@ -583,8 +583,8 @@ function renderHabits(){
         '<span>slips: '+h.slips+'</span><span style="color:var(--hp)">slip = −'+dmg+' ❤️ / −10 💰</span></div>'+
         (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
         '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
-        '<button class="btn ghost" title="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
-        '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
+        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
+        '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP - the more you feed a monster, the harder it hits back.</div>')+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
@@ -743,7 +743,7 @@ function renderMarket(){
           (canS||haveS?'':'<div class="afford">'+(i.price-state.hero.coins)+' 💰 to go</div>')+'</div>'+
           '<span class="price">💰 '+i.price+'</span>'+
           '<button class="btn buy" '+((canS&&!haveS)?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':'Buy')+'</button>'+
-          '<button class="btn ghost" onclick="delShop(\''+i.id+'\')">✕</button></div>';
+          '<button class="btn ghost" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button></div>';
       }
       var info=A.buyInfo(state,i);
       var can=state.hero.coins>=info.price && !info.capped;
@@ -758,7 +758,7 @@ function renderMarket(){
         (effects.length?'<div class="meta">'+effects.join('')+'</div>':'')+gap+'</div>'+
         '<span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
         '<button class="btn buy" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(info.capped?'Capped':'Buy')+'</button>'+
-        '<button class="btn ghost" onclick="delShop(\''+i.id+'\')">✕</button></div>';
+        '<button class="btn ghost" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button></div>';
     }).join('')||'<div class="empty">Empty shelf. Stock rewards you actually want - that is what makes coins matter.</div>')+
     '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
     '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
@@ -775,7 +775,7 @@ function renderJournal(){
     '<div class="panel"><h3>Today\'s mood '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰')+'</h3>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
       var on=(pendingMood||((entry||{}).mood))===m.key;
-      return '<button class="'+(on?'on':'')+'" title="'+m.label+'" onclick="pendingMood=\''+m.key+'\';render()">'+m.emoji+'</button>';
+      return '<button class="'+(on?'on':'')+'" title="'+m.label+'" aria-label="Mood: '+m.label+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingMood=\''+m.key+'\';render()">'+m.emoji+'</button>';
     }).join('')+'</div>'+
     '<textarea id="jNote" rows="3" placeholder="One honest line about today…" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
     '<button class="btn wide go" style="margin-top:8px" onclick="saveJournal()">'+(entry?'Update entry':'Log entry')+'</button>'+
@@ -855,7 +855,7 @@ function boardRowsHtml(rows, me){
   var medals=['🥇','🥈','🥉'];
   return rows.map(function(r,i){
     var mine=me&&r.user_id===me;
-    var tap=r.user_id?' role="button" tabindex="0" onclick="showProfile(\''+r.user_id+'\')"':'';
+    var tap=r.user_id?' role="button" tabindex="0" aria-label="View '+esc(r.name||'hero')+'’s profile" onclick="showProfile(\''+r.user_id+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();showProfile(\''+r.user_id+'\')}"':'';
     return '<div class="brow'+(mine?' me':'')+(r.user_id?' tap':'')+'"'+tap+'><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
       '<span class="bav">'+esc(r.avatar||'🧙')+'</span>'+
       '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
@@ -1508,7 +1508,7 @@ function loadFriendList(){
     if(!r.ok || !host) return;
     var others=r.rows.filter(function(x){return x.user_id!==r.me;});
     host.innerHTML=others.length?('<div class="flabel">Following ('+others.length+')</div>'+others.map(function(x){
-      return '<div class="frrow"><span class="bav">'+esc(x.avatar||'🧙')+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
+      return '<div class="frrow"><span class="bav">'+esc(x.avatar||'🧙')+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" aria-label="Remove friend" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
     }).join('')):'<div class="hint">No friends yet - add someone by code above.</div>';
   });
 }

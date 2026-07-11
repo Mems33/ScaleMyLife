@@ -854,6 +854,17 @@ setTimeout(function () {
   var mus = w.ytEmbed();
   ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
   w.state.settings.music = 'none';
+
+  console.log('\nAccessibility (v16)');
+  ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
+  ok(d.querySelector('#toasts').getAttribute('aria-live') === 'polite', 'toasts are an aria-live region');
+  ok(d.querySelector('.gear').getAttribute('aria-label') === 'Settings', 'settings gear has an accessible name');
+  w.go('quests');
+  ok(d.querySelector('.item .btn.ghost[aria-label]') !== null, 'quest icon buttons have accessible names');
+  ok(d.querySelector('.rank[role="button"][tabindex="0"]') !== null, 'rank chip is a keyboard-focusable button');
+  ok(d.querySelector('.hud .avatar[aria-label]') !== null, 'avatar has an accessible name');
+  w.go('journal');
+  ok(d.querySelector('.moods button[aria-pressed]') !== null, 'mood buttons expose pressed state');
   // name required at hero creation is covered by createHero refusing empty names
   var before = w.state; w.state = null; w.renderHUDShell(); w.tut(0); w.tutSkip();
   d.querySelector('#obName').value = '   ';
