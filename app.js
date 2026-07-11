@@ -994,6 +994,7 @@ function render(){
   applyLegend();
   renderHUD(); renderSkills(); renderTabs();
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
+  if(typeof mascotMoodSync==='function') mascotMoodSync();
 }
 
 function afterAction(){
@@ -1250,7 +1251,8 @@ function openSettings(){
     '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button></div>'+
     '<div class="setrow">'+
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
-    '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button></div>'+
+    '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+
+    '<button class="btn" onclick="toggleMascotSetting()">'+(state.settings.mascot!==false?'🦉 Sage ON':'🦉 Sage OFF')+'</button></div>'+
     cloudSection()+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
     '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
@@ -1745,7 +1747,63 @@ function createHero(){
   persist(); applyTheme(); closeModal(); render(); confetti();
   setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
 }
-function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); cloudBootPull(); } else { renderHUDShell(); tut(0); } }
+/* ---------- Sage the guide (mascot) ----------
+   Phase 1: an animated companion that speaks a scripted daily briefing built
+   from your save (RPG.briefing) - no network, no LLM. Phase 2 (real chat via a
+   Supabase Edge Function) plugs into this same panel later. */
+var MASCOT_AURA={happy:'',fired:'🔥',proud:'✨',worried:'💧',urgent:'❗'};
+function mascotOn(){ return state && state.settings.mascot!==false; }
+function ensureMascot(){
+  var host=document.getElementById('mascot');
+  if(!mascotOn()){ if(host) host.style.display='none'; return null; }
+  if(!host){
+    host=document.createElement('div'); host.id='mascot';
+    host.innerHTML='<div class="mbubble" id="mBubble" role="region" aria-label="Sage’s daily briefing" hidden></div>'+
+      '<button class="mbtn" id="mBtn" aria-label="Talk to Sage, your guide" title="Sage - your guide" onclick="toggleMascot()"><span class="mface">🦉</span><span class="maura" aria-hidden="true"></span></button>';
+    document.body.appendChild(host);
+  }
+  host.style.display='';
+  return host;
+}
+function mascotBriefingHtml(){
+  var b=RPG.briefing(state);
+  return '<div class="mhead"><b>'+esc(b.greeting)+'</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
+    '<div class="mlines">'+b.lines.map(function(l){
+      return '<button class="mline" onclick="toggleMascot(false);go(\''+l.tab+'\')"><span>'+l.icon+'</span><span class="grow">'+esc(l.text)+'</span><span class="mgo">▶</span></button>';
+    }).join('')+'</div>'+
+    '<div class="mfoot">🔥 '+b.streak+' day'+(b.streak===1?'':'s')+' · Lv.'+b.level+' · <span class="hint" style="display:inline">tap a line to jump there</span></div>';
+}
+function toggleMascot(force){
+  var host=ensureMascot(); if(!host) return;
+  var bub=document.getElementById('mBubble'), btn=document.getElementById('mBtn');
+  var show=typeof force==='boolean'?force:bub.hidden;
+  if(show){ bub.innerHTML=mascotBriefingHtml(); bub.hidden=false; btn.classList.add('talking'); setTimeout(function(){ btn.classList.remove('talking'); },900); }
+  else bub.hidden=true;
+}
+function mascotMoodSync(){
+  var host=ensureMascot(); if(!host) return;
+  var b=RPG.briefing(state);
+  host.className='m-'+b.mood;
+  var aura=host.querySelector('.maura'); if(aura) aura.textContent=MASCOT_AURA[b.mood]||'';
+}
+function mascotDailyGreet(){
+  if(!mascotOn()) return;
+  var k='sml.mascot.day';
+  try{
+    if(localStorage.getItem(k)===RPG.todayKey()) return;
+    localStorage.setItem(k,RPG.todayKey());
+  }catch(e){ return; }
+  setTimeout(function(){ if(state && !document.querySelector('.modal.show')) toggleMascot(true); }, 1600);
+}
+function toggleMascotSetting(){
+  state.settings.mascot=state.settings.mascot===false?true:false;
+  persist();
+  var host=document.getElementById('mascot');
+  if(host) host.style.display=state.settings.mascot===false?'none':'';
+  if(state.settings.mascot!==false) mascotMoodSync();
+  openSettings();
+}
+function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); tut(0); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);

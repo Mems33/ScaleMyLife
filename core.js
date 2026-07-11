@@ -1170,6 +1170,7 @@
     if (typeof s.settings.reminders !== 'boolean') s.settings.reminders = false;
     if (typeof s.settings.board !== 'boolean') s.settings.board = false;
     if (typeof s.settings.friends !== 'boolean') s.settings.friends = false;
+    if (typeof s.settings.mascot !== 'boolean') s.settings.mascot = true;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
@@ -1195,6 +1196,71 @@
     return s;
   }
 
+  /* ---------- mascot briefing ----------
+     A deterministic "daily update" the guide mascot can speak: what matters most
+     right now, in priority order, capped at 5 lines. No LLM required - phrasing
+     variety comes from a per-day pick so it doesn't feel copy-pasted. */
+  function pickByDay(arr, now) {
+    var k = todayKey(now), h = 0;
+    for (var i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+    return arr[h % arr.length];
+  }
+  function briefing(state, now) {
+    now = now || new Date();
+    var today = todayKey(now), lines = [], mood = 'happy';
+    var hour = now.getHours();
+    var hello = pickByDay(hour < 12
+      ? ['Rise and shine', 'Good morning', 'A new day of adventure', 'Morning, hero']
+      : hour < 18
+      ? ['Good afternoon', 'Welcome back', 'Still fighting the good fight', 'Afternoon, hero']
+      : ['Good evening', 'Evening, hero', 'One last push today', 'The day is almost won'], now);
+    var greeting = hello + ', ' + (state.hero.name || 'Hero') + '!';
+
+    // 1) streak emergency: Quest of Atonement
+    if (state.redemption && state.redemption.on === today) {
+      mood = 'urgent';
+      lines.push({ icon: '🕯', tab: 'today', text: 'Your ' + state.redemption.streak + '-day streak broke! Clear ALL of today’s dailies before midnight to mend it.' });
+    }
+    // 2) wounded / low HP
+    if (state.hero.woundedOn === today) {
+      if (mood === 'happy') mood = 'worried';
+      lines.push({ icon: '🩸', tab: 'market', text: 'You’re wounded - XP is halved today. Rest at the Hotel or log good sleep.' });
+    } else if (state.hero.hp <= maxHpOf(state) * 0.3) {
+      if (mood === 'happy') mood = 'worried';
+      lines.push({ icon: '❤️', tab: 'market', text: 'HP is low (' + state.hero.hp + '/' + maxHpOf(state) + '). A visit to the Hotel would do you good.' });
+    }
+    // 3) boss deadline
+    if (state.boss && !state.boss.doneOn) {
+      var dl = actions.bossDaysLeft(state);
+      if (dl <= 1) { if (mood === 'happy') mood = 'worried'; lines.push({ icon: '🐲', tab: 'quests', text: 'The boss "' + state.boss.title + '" escapes ' + (dl <= 0 ? 'TODAY' : 'tomorrow') + '! Slay it!' }); }
+      else if (dl <= 3) lines.push({ icon: '🐲', tab: 'quests', text: dl + ' days left to slay "' + state.boss.title + '".' });
+    }
+    // 4) overdue / due-today quests
+    var due = actions.agenda(state).filter(function (it) { return it.bucket === 'overdue' || it.bucket === 'today'; });
+    if (due.length) lines.push({ icon: '🔥', tab: 'today', text: due.length === 1 ? '"' + due[0].q.title + '" is due' + (due[0].days < 0 ? ' - it’s late!' : ' today.') : due.length + ' quests are due (or overdue).' });
+    // 5) dailies / chest
+    var chest = actions.chestStatus(state);
+    if (chest.eligible) lines.push({ icon: '🎁', tab: 'today', text: 'All dailies cleared - your chest is ready to open!' });
+    else if (chest.total > 0 && chest.done < chest.total) lines.push({ icon: '🔁', tab: 'today', text: (chest.total - chest.done) + ' of ' + chest.total + ' dailies left. Clear them all to open the chest.' });
+    // 6) habits to check
+    var habitsLeft = state.habits.filter(function (h) { return h.type === 'good' && h.lastDoneOn !== today; }).length;
+    if (habitsLeft) lines.push({ icon: '🌱', tab: 'habits', text: habitsLeft + ' habit' + (habitsLeft === 1 ? '' : 's') + ' to check off today.' });
+    // 7) journal / sleep in the evening
+    if (hour >= 18 && !state.journal[today]) lines.push({ icon: '📔', tab: 'journal', text: 'No journal entry yet - one honest line pays 15 XP.' });
+    // 8) streak flex when things are calm
+    if (!lines.length) {
+      lines.push({ icon: '✨', tab: 'stats', text: pickByDay([
+        'All clear! A perfect moment for a focus run.',
+        'Board’s clean. Want to bank some deep work in Focus?',
+        'Nothing urgent. Check Stats to admire your progress.',
+        'Quiet day. Maybe plan the week’s boss?'], now) });
+      mood = 'proud';
+    }
+    if (state.hero.streak >= 3 && mood === 'happy') mood = 'fired';
+    return { greeting: greeting, mood: mood, lines: lines.slice(0, 5),
+      streak: state.hero.streak, level: state.hero.level };
+  }
+
   function save(state, storage) { storage.setItem(KEY, JSON.stringify(state)); }
   function load(storage) {
     var raw = storage.getItem(KEY);
@@ -1218,7 +1284,7 @@
     grant: grant, damage: damage, ascend: ascend, usePotion: usePotion, addLog: addLog,
     checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,
     insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn, focusByDay: focusByDay,
-    heatmap: heatmap, bossTrophies: bossTrophies,
+    heatmap: heatmap, bossTrophies: bossTrophies, briefing: briefing,
     actions: actions, save: save, load: load
   };
 });

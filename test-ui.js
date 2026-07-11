@@ -855,6 +855,30 @@ setTimeout(function () {
   ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
   w.state.settings.music = 'none';
 
+  console.log('\nSage the guide (v17)');
+  w.render(); // ensure mascot exists via mood sync
+  ok(d.querySelector('#mascot') !== null, 'mascot mounted outside the re-rendered view');
+  ok(d.querySelector('#mBtn') !== null && d.querySelector('#mBtn').getAttribute('aria-label').indexOf('Sage') >= 0, 'mascot button has an accessible name');
+  ok(d.querySelector('#mBubble').hidden === true, 'briefing bubble starts closed');
+  w.toggleMascot(true);
+  ok(d.querySelector('#mBubble').hidden === false, 'tapping Sage opens the briefing');
+  ok(d.querySelector('#mBubble').textContent.indexOf(w.state.hero.name) >= 0, 'briefing greets the hero by name');
+  ok(d.querySelector('#mBubble .mline') !== null, 'briefing shows at least one actionable line');
+  var firstLine = d.querySelector('#mBubble .mline');
+  firstLine.click();
+  ok(d.querySelector('#mBubble').hidden === true, 'tapping a line closes the bubble and navigates');
+  // mood class reflects state
+  w.state.hero.hp = 10; w.render();
+  ok(d.querySelector('#mascot').className.indexOf('m-worried') >= 0 || d.querySelector('#mascot').className.indexOf('m-urgent') >= 0, 'low HP shifts Sage’s mood');
+  w.state.hero.hp = 100; w.render();
+  // settings toggle hides him
+  w.toggleMascotSetting();
+  ok(w.state.settings.mascot === false, 'setting stores mascot off');
+  ok(d.querySelector('#mascot').style.display === 'none', 'mascot hidden when toggled off');
+  w.toggleMascotSetting();
+  ok(w.state.settings.mascot === true && d.querySelector('#mascot').style.display !== 'none', 'mascot returns when toggled back on');
+  w.closeModal();
+
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
   ok(d.querySelector('#toasts').getAttribute('aria-live') === 'polite', 'toasts are an aria-live region');

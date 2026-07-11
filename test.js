@@ -806,6 +806,41 @@ delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
 mig6 = RPG.migrate(mig6);
 ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
 
+section('Mascot briefing (v17)');
+var mbMorning = new Date(); mbMorning.setHours(10, 0, 0, 0); // pin to morning: evening adds a journal nudge
+var mb = RPG.newState('Briefy', '🧙');
+var mbB = RPG.briefing(mb, mbMorning);
+ok(mbB && typeof mbB.greeting === 'string' && mbB.greeting.indexOf('Briefy') >= 0, 'briefing greets the hero by name');
+ok(Array.isArray(mbB.lines) && mbB.lines.length >= 1 && mbB.lines.length <= 5, 'briefing returns 1-5 prioritized lines');
+ok(mbB.lines.every(function (l) { return l.icon && l.text && l.tab; }), 'every line carries icon, text and a target tab');
+// a fully clear board is calm/proud
+ok(mbB.mood === 'proud' && mbB.lines[0].icon === '✨', 'clear board yields the calm "all clear" line');
+// dailies left -> chest line, habits -> habit line
+var mb2 = RPG.seedPreset(RPG.newState('B2', '🧙'), 'general');
+var mbB2 = RPG.briefing(mb2, mbMorning);
+ok(mbB2.lines.some(function (l) { return l.icon === '🔁'; }), 'open dailies produce a chest-progress line');
+ok(mbB2.lines.some(function (l) { return l.icon === '🌱'; }), 'unchecked habits produce a habit line');
+// urgent: broken streak redemption
+var mb3 = RPG.newState('B3', '🧙');
+mb3.redemption = { streak: 9, on: RPG.todayKey() };
+var mbB3 = RPG.briefing(mb3, mbMorning);
+ok(mbB3.mood === 'urgent' && mbB3.lines[0].icon === '🕯', 'active streak-mend offer is the top line and urgent');
+// worried: low HP
+var mb4 = RPG.newState('B4', '🧙'); mb4.hero.hp = 20;
+var mbB4 = RPG.briefing(mb4, mbMorning);
+ok(mbB4.mood === 'worried' && mbB4.lines.some(function (l) { return l.icon === '❤️'; }), 'low HP turns the mood worried with a hotel hint');
+// boss about to escape
+var mb5 = RPG.newState('B5', '🧙');
+mb5.boss = { title: 'Tame the inbox', setOn: RPG.todayKey(), due: RPG.todayKey(), doneOn: null };
+var mbB5 = RPG.briefing(mb5, mbMorning);
+ok(mbB5.lines.some(function (l) { return l.icon === '🐲' && l.text.indexOf('TODAY') >= 0; }), 'boss escaping today is called out');
+// deterministic for a given day
+var mbB6 = RPG.briefing(mb, mbMorning);
+ok(mbB6.greeting === mbB.greeting, 'briefing phrasing is stable within a day');
+// migration seeds the setting
+var mb7 = RPG.newState('B7', '🧙'); delete mb7.settings.mascot;
+ok(RPG.migrate(mb7).settings.mascot === true, 'migration turns the mascot on by default');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a
