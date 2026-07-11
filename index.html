@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ScaleMyLife</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#12101f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -19,15 +19,15 @@
 <body>
 <canvas id="bg" aria-hidden="true"></canvas>
 <div class="wrap" id="wrap">
-  <div class="logo"><b>SCALE MY LIFE</b><button class="gear" onclick="openSettings()" title="Settings">⚙️</button></div>
+  <div class="logo"><b>SCALE MY LIFE</b><button class="gear" onclick="openSettings()" title="Settings" aria-label="Settings">⚙️</button></div>
   <div class="hud" id="hud"></div>
   <div class="skills" id="skillsRow"></div>
   <div class="tabs" id="tabs"></div>
   <div id="view"></div>
 </div>
-<div id="toasts"></div>
-<div id="overlay"></div>
-<div class="modal" id="modal"></div>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+<div id="overlay" role="status" aria-live="polite"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-label="Dialog"></div>
 
 <script src="gradient.js"></script>
 <script src="cloud.js"></script>

@@ -624,8 +624,10 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .boss .btn.ghost{flex:0 0 auto}
   .ag{flex-wrap:wrap}
   .ag .grow{flex:1 1 60%}
-  .btn{padding:10px 14px}
-  .btn.ghost{padding:10px 8px}
+  .btn{padding:10px 14px;min-height:40px}
+  .btn.ghost{padding:10px 10px;min-height:40px;min-width:40px}
+  /* hover-reveal controls have no hover on touch: keep them tappable */
+  .skillcard .del{display:flex;align-items:center;justify-content:center;top:2px;right:2px;min-width:28px;min-height:28px;font-size:13px}
   .goal .t{flex-direction:column;align-items:flex-start}
   .stepadd{flex-wrap:wrap}
   .stepadd select{max-width:none;flex:1}
