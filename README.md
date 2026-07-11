@@ -63,6 +63,12 @@ Plus the existing weekly XP chart, mood strip, achievements and adventure log. T
 
 Race other heroes on **weekly XP**. Strictly opt-in from ⚙️ → Cloud sync: joining shares only your name, avatar, level, rank, weekly XP and best streak — never your save — and leaving deletes your row entirely (row existence *is* the opt-in; see `supabase/leaderboard.sql`). Top 25 shown in Stats with your row highlighted. Degrades gracefully if the table isn't set up yet.
 
+## Friends (private board)
+
+Add specific people by a short **friend code** and race them on a private board — no need to join the public leaderboard. Enable from ⚙️ → Cloud sync → *Enable friends* (requires an account): you get an 8-character code to share, and paste a friend's code to add them. The Stats leaderboard gains a **Global / Friends** toggle so you can flip between the world and just your crew.
+
+It's privacy-first and one-directional: adding someone lets *you* see their public profile card (name, avatar, level, rank, weekly XP, best streak — never their save), and Postgres Row Level Security gates every read so a profile is only visible to itself, to the people who've added it, or to anyone who's on the global board. Codes are looked up through a `SECURITY DEFINER` function so you can add a friend before either of you follows the other. Run `supabase/friends.sql` once to enable it; the app degrades gracefully if you haven't.
+
 ## Comfort & safety
 
 - **Quest of Atonement (streak repair)** — when a 3+ day streak breaks, you get until midnight to mend it: clear all of today's dailies and the flame is relit as if it never went out. Softens the single most rage-quit-inducing moment in any streak app; the Streak Shield still prevents the break entirely. Mending unlocks the *Keeper of the Flame* title, and your **best streak** is tracked forever in Stats.
@@ -78,7 +84,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` (database schema) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (507 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (596 tests).
 
 ## Development
 
@@ -92,4 +98,4 @@ No build step — plain static files. All payouts, prices, curves, prestige boon
 
 ## Roadmap
 
-Cloud accounts + sync shipped (Supabase). Next candidates: true background push notifications (Supabase Edge Functions + Web Push), a premium tier (extra themes/frames, advanced insights), and social features (shared boss fights, accountability parties) — all enabled by the same backend.
+Cloud accounts + sync, opt-in leaderboard and friends-by-code shipped (Supabase). Next candidates: true background push notifications (Supabase Edge Functions + Web Push), a premium tier (extra themes/frames, advanced insights), and deeper social features (shared boss fights, accountability parties) — all enabled by the same backend.

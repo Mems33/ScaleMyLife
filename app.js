@@ -6,6 +6,7 @@ var tab='today', shopTab='market', pendingMood=null, pendingQuality=3;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
+var boardView='global';          // Stats leaderboard: 'global' | 'friends'
 var SKILL_PALETTE=['#5aa2ff','#f5c542','#3ddc84','#b07bff','#ff7854','#59c2ff','#ff5fa2','#7bd88f','#ffb454','#a78bfa','#4dd0e1','#ffd166'];
 function skillColorById(id){
   if(id==='__none') return '#6c6690';
@@ -73,8 +74,9 @@ function scheduleCloudPush(){
   if(!cloudOn()) return;
   clearTimeout(cloudPushTimer);
   cloudPushTimer=setTimeout(function(){
-    SMLCloud.push(state);                                        // full save (private)
-    if(state.settings.board) SMLCloud.pushBoard(boardProfile()); // tiny public snapshot (opt-in)
+    SMLCloud.push(state);                                                   // full save (private)
+    if(state.settings.board || state.settings.friends)                      // tiny profile snapshot
+      SMLCloud.pushBoard(boardProfile(), !!state.settings.board);           // on_board only if opted in
   }, 4000); // debounced; fails soft offline
 }
 /* on boot with a live session: adopt the cloud save if it is newer than this device */
@@ -846,9 +848,22 @@ function boardRowsHtml(rows, me){
 function renderBoardInto(el, rows, me){ if(el) el.innerHTML=boardRowsHtml(rows, me); }
 function leaderboardPanel(){
   if(typeof SMLCloud==='undefined'||!SMLCloud.configured()) return '';
-  var head='<div class="panel" style="margin-top:14px"><h3>🏆 Leaderboard <span class="cnt">weekly XP</span></h3>';
-  if(!cloudOn()) return head+'<div class="empty">Sign in (⚙️ → Cloud sync) and join the leaderboard to race other heroes on weekly XP.</div></div>';
-  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the board yet. Join from ⚙️ → Cloud sync — only your name, avatar, level and weekly XP are shared.</div>'+
+  var friends=boardView==='friends';
+  var toggle='<span class="spantoggle right"><button class="'+(friends?'':'on')+'" onclick="boardView=\'global\';render()">Global</button><button class="'+(friends?'on':'')+'" onclick="boardView=\'friends\';render()">Friends</button></span>';
+  var head='<div class="panel" style="margin-top:14px"><h3>🏆 Leaderboard <span class="cnt">weekly XP</span>'+toggle+'</h3>';
+  if(!cloudOn()) return head+'<div class="empty">Sign in (⚙️ → Cloud sync) and join to race other heroes on weekly XP.</div></div>';
+  if(friends){
+    if(!state.settings.friends) return head+'<div class="empty">Enable friends in ⚙️ Settings, share your code, and race your friends here.</div><button class="btn wide" onclick="openSettings()">🤝 Enable friends</button></div>';
+    setTimeout(function(){
+      SMLCloud.fetchFriendsBoard(boardProfile()).then(function(r){
+        var el=document.getElementById('boardBody'); if(!el) return;
+        if(!r.ok){ el.innerHTML='<div class="empty">Friends board unavailable right now.</div>'; return; }
+        el.innerHTML = r.rows.length>1 ? boardRowsHtml(r.rows, r.me) : '<div class="empty">Just you so far — add friends by code in ⚙️ Settings.</div>';
+      });
+    },0);
+    return head+'<div id="boardBody"><div class="empty">Gathering your friends…</div></div></div>';
+  }
+  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync — only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
     '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
   setTimeout(function(){
     SMLCloud.fetchBoard(25).then(function(r){
@@ -1199,6 +1214,7 @@ function openSettings(){
     '<div class="setrow"><button class="btn" style="border-color:var(--hp);color:var(--hp)" onclick="resetAll()">Reset everything</button>'+
     '<button class="btn" onclick="closeModal()">Close</button></div>'+
     '<div class="hint">Data lives in this browser (localStorage). Export a JSON backup from time to time.</div></div>';
+  if(state.settings.friends && cloudOn()) setTimeout(loadFriendList,0);
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
 function toggleReminders(){
@@ -1344,8 +1360,10 @@ function cloudSection(){
     '<div class="hint">Synced as <b>'+esc(sess.user.email||'')+'</b>'+(ls?' · last sync '+new Date(ls).toLocaleString():'')+'</div>'+
     '<div class="setrow" style="margin-top:6px"><button class="btn go" onclick="cloudSyncNow()">⟳ Sync now</button>'+
     '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
-    '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button></div>'+
-    '<div class="hint">'+(state.settings.board?'Sharing: name, avatar, level, rank, weekly XP, best streak. Tap again to leave — your row is removed.':'Opt-in. Shares only name, avatar, level, rank, weekly XP and best streak — never your save.')+'</div>'+
+    '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button>'+
+    '<button class="btn" onclick="toggleFriends()">'+(state.settings.friends?'🤝 Friends: ON':'🤝 Enable friends')+'</button></div>'+
+    '<div class="hint">'+(state.settings.board?'On the global board — sharing name, avatar, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those six fields — never your save.')+'</div>'+
+    friendsBox()+
     '<div class="hint" id="cMsg"></div>';
 }
 function cloudMsg(t,bad){ var el=$('#cMsg'); if(el) el.innerHTML=bad?'<span class="h">'+esc(t)+'</span>':'<span class="p">'+esc(t)+'</span>'; }
@@ -1404,6 +1422,53 @@ function cloudSyncNow(){
   cloudMsg('Syncing…');
   SMLCloud.push(state).then(function(r){ openSettings(); cloudMsg(r.ok?'Synced ✓':(r.error||'Sync failed'), !r.ok); });
 }
+function toggleFriends(){
+  if(!cloudOn()){ toast('<span class="h">Sign in first to use friends</span>','dmg'); return; }
+  state.settings.friends=!state.settings.friends; persist(); openSettings();
+  if(state.settings.friends){ SMLCloud.pushBoard(boardProfile(), !!state.settings.board).then(function(){ toast('🤝 <span class="c">Friends on — share your code!</span>'); }); }
+}
+function friendsBox(){
+  if(!state.settings.friends) return '<div class="hint">Enable friends to get a shareable code and add people to a private Friends board.</div>';
+  var code=SMLCloud.friendCode();
+  return '<div class="friendbox"><div class="flabel">Your friend code</div>'+
+    '<div class="codebox"><b id="myCode">'+esc(code)+'</b><button class="btn small" onclick="copyCode()">Copy</button></div>'+
+    '<div class="flabel">Add a friend by code</div>'+
+    '<div class="setrow"><input id="frCode" maxlength="8" placeholder="e.g. A1B2C3D4" style="text-transform:uppercase"><button class="btn go" onclick="addFriendByCode()">Add</button></div>'+
+    '<div class="hint" id="frMsg"></div><div id="frList"></div></div>';
+}
+function copyCode(){
+  var c=SMLCloud.friendCode();
+  try{ navigator.clipboard&&navigator.clipboard.writeText(c); }catch(e){}
+  toast('📋 <span class="c">Code copied: '+esc(c)+'</span>');
+}
+function frMsg(t,bad){ var el=$('#frMsg'); if(el) el.innerHTML=bad?'<span class="h">'+esc(t)+'</span>':'<span class="p">'+esc(t)+'</span>'; }
+function addFriendByCode(){
+  var code=($('#frCode')&&$('#frCode').value||'').toUpperCase().trim();
+  if(code.length<4){ frMsg('Enter a friend code',true); return; }
+  if(code===SMLCloud.friendCode()){ frMsg('That’s your own code 🙂',true); return; }
+  frMsg('Looking up…');
+  SMLCloud.findByCode(code).then(function(r){
+    if(!r.ok){ frMsg(r.error,true); return; }
+    if(!r.found){ frMsg('No hero with that code',true); return; }
+    SMLCloud.addFriend(r.profile.user_id).then(function(a){
+      if(!a.ok){ frMsg(a.error,true); return; }
+      frMsg('Added '+(r.profile.name||'a hero')+' ✓'); SND.ach();
+      if($('#frCode')) $('#frCode').value='';
+      loadFriendList();
+    });
+  });
+}
+function loadFriendList(){
+  var host=$('#frList'); if(!host) return;
+  SMLCloud.fetchFriendsBoard(boardProfile()).then(function(r){
+    if(!r.ok || !host) return;
+    var others=r.rows.filter(function(x){return x.user_id!==r.me;});
+    host.innerHTML=others.length?('<div class="flabel">Following ('+others.length+')</div>'+others.map(function(x){
+      return '<div class="frrow"><span class="bav">'+esc(x.avatar||'🧙')+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
+    }).join('')):'<div class="hint">No friends yet — add someone by code above.</div>';
+  });
+}
+function unfriend(id){ SMLCloud.removeFriend(id).then(function(){ loadFriendList(); }); }
 function closeModal(){ $('#modal').className='modal'; }
 
 /* ---------- edit modals ---------- */

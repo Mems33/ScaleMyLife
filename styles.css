@@ -647,3 +647,11 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
 .bmeta{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .bxp{font-family:var(--mono);font-weight:700;color:var(--xp);white-space:nowrap}
 .bxp small{color:var(--muted);font-weight:400}
+
+/* ---------- v12: friends ---------- */
+.friendbox{border:1px solid var(--line);border-radius:10px;padding:12px;margin:8px 0;background:var(--panel2)}
+.codebox{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.codebox b{font-family:var(--mono);font-size:20px;letter-spacing:3px;color:var(--gold);background:var(--bg);border:1px dashed color-mix(in srgb,var(--gold) 45%,var(--line));border-radius:8px;padding:6px 12px}
+.frrow{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent);font-size:14px}
+.frrow .grow{flex:1;min-width:0}
+.frrow .bmeta{font-family:var(--mono);font-size:11px;color:var(--muted)}
