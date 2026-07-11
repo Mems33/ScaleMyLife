@@ -1,14 +1,14 @@
 ---
-description: Instagram saves pipeline — sync, ideate content, check status, refresh session
+description: Instagram saves pipeline — sync, digest saves into insight notes, check status, refresh session
 ---
 
 You are the controller for the "Instagram Saves → Obsidian" pipeline. The user
 ran `/instagram-sync $ARGUMENTS`. Read the requested action from `$ARGUMENTS`
-(default to `ideate` if empty) and perform exactly that action.
+(default to `digest` if empty) and perform exactly that action.
 
 Before anything, read `config.json` in this project to get `obsidian_vault_path`
-(the "Instagram Saves" folder). The "Content Ideas" folder is its sibling
-(`../Content Ideas`).
+(the "Instagram Saves" folder). The "Insights" folder is its sibling
+(`../Insights`).
 
 Use the right Python launcher for the OS:
 - Windows: `.venv\Scripts\python.exe`
@@ -18,10 +18,9 @@ Use the right Python launcher for the OS:
 
 ## Personalisation (edit these before first use)
 
-- **AUDIENCE:** [TON AUDIENCE — e.g. "solo founders learning marketing"]
-- **CONTENT PILLARS:** [tes piliers de contenu]
-- **TONE OF VOICE:** [ton ton — e.g. "direct, tutoyant, un peu fun, zéro corporate"]
-- If a `Patterns.md` exists in the vault, read it and mirror that writing style.
+- **MY GOALS / INTERESTS:** [ce que tu veux tirer de tes saves — e.g. "astuces
+  business, outils IA, idées d'automatisation, conseils fitness"]
+- **OUTPUT LANGUAGE:** français
 
 ---
 
@@ -29,34 +28,46 @@ Use the right Python launcher for the OS:
 1. Run `sync.py` with the correct launcher.
 2. Report the summary line it prints.
 3. If any notes in the Instagram Saves folder have `status: new`, offer to run
-   the `ideate` action next.
+   the `digest` action next.
 
-## Action: `ideate`  (the main pipeline)
+## Action: `digest`  (the main pipeline)
+
+Turn raw saves into exploitable knowledge notes.
+
 1. **Scan** `obsidian_vault_path` for `.md` files whose frontmatter has
    `status: new`. If none, say so and stop.
-2. **For each new save**, generate ONE content idea:
-   - Reframe it for **AUDIENCE**.
-   - Use the `## Transcript` section if present (richer context than the caption).
-   - Write **3 hook options**, labelled: **Curiosity** / **Value** / **Emotional**.
-   - Write an **outline**: HOOK · 3–4 KEY POINTS · CTA.
-   - Write **platform breakdowns**: Instagram Reel, TikTok, YouTube Short.
-3. **Present** every idea to the user, then ask: **approve all / select / skip / modify**.
-4. **For each approved idea**, create a note in the `Content Ideas` folder named
-   `{YYYY-MM-DD}-{slug}.md` with frontmatter:
+2. **For each new save**, read the caption and the `## Transcript` section if
+   present (much richer than the caption), then produce ONE insight note:
+   - **TL;DR** — the core message in 2–3 sentences.
+   - **Key takeaways** — 3 to 6 bullets of the actual substance (methods,
+     numbers, arguments — not fluff).
+   - **Actionable steps** — what the user could concretely DO with this,
+     framed for **MY GOALS / INTERESTS**.
+   - **Tools / resources mentioned** — apps, sites, books, people cited in the
+     reel, as a list (empty if none).
+   - **Worth keeping?** — one honest line: is this substantive or was it
+     engagement-bait with no real content?
+3. **Write** each insight note to the `Insights` folder as
+   `{YYYY-MM-DD}-{slug-of-topic}.md` with frontmatter:
    ```yaml
    ---
-   type: content-idea
+   type: insight
    source: "[[<original save filename>]]"
-   status: idea
-   priority: medium
-   platform: [reel, tiktok, short]
+   author: <original author>
+   topic: <2-4 word topic>
+   status: to-review
    created: <today>
+   tags: [insight, <topic-tag>]
    ---
    ```
-   followed by the hooks, outline and platform breakdowns.
-5. **Update** each processed original save's frontmatter `status:` to `used`
-   (approved) or `reviewed` (skipped).
-6. **Print a summary**: how many ideas created, how many saves marked used/reviewed.
+4. **Update** each processed save's frontmatter `status:` from `new` to
+   `processed`.
+5. **Print a summary**: N insight notes created, N saves marked processed,
+   and flag any saves that had neither caption nor transcript (nothing to
+   extract — mark those `status: empty` instead).
+
+Process in batches: if there are more than 20 new saves, do the 20 oldest and
+tell the user how many remain.
 
 ## Action: `status`
 Read `state.json` (count of synced ids) and the last 20 lines of `sync.log`.

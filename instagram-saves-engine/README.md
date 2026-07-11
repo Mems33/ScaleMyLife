@@ -2,7 +2,8 @@
 
 Transforme tes saves Instagram en second cerveau, en automatique.
 Un pipeline Python qui pull tes saves 2×/jour vers ton vault Obsidian, transcrit
-les reels, et génère des idées de contenu via une slash command Claude Code.
+les reels, et en extrait les infos exploitables (résumés, points clés, actions,
+outils cités) via une slash command Claude Code.
 
 > D'après le guide **« Instagram x Obsidian »** de 0xLoucash. Les scripts que le
 > guide te fait générer avec Claude Code sont **déjà écrits ici** — tu n'as qu'à
@@ -14,7 +15,7 @@ les reels, et génère des idées de contenu via une slash command Claude Code.
 |---|---|
 | `sync.py` | Pull tes Instagram saves → écrit un `.md` par post dans ton vault. Dédup via `state.json`. |
 | `enrich.py` | Transcrit chaque reel via l'API ScrapeCreators → contenu audio recherchable dans Obsidian. |
-| `.claude/commands/instagram-sync.md` | Slash command `/instagram-sync ideate` → transforme tes saves en idées de contenu. |
+| `.claude/commands/instagram-sync.md` | Slash command `/instagram-sync digest` → extrait la substance de tes saves en notes d'insights. |
 | `scheduler/…plist` | Auto-sync 2×/jour sur macOS (launchd). Windows via Task Scheduler (voir plus bas). |
 | `vault-template/` | La structure de dossiers à copier dans ton vault Obsidian. |
 
@@ -22,7 +23,56 @@ les reels, et génère des idées de contenu via une slash command Claude Code.
 
 - Ton `sessionid` Instagram **= ton mot de passe**. Ne le partage jamais, ne le commit jamais.
 - `.gitignore` exclut déjà `config.json`, `state.json`, `sync.log`, `enrich.log`, `.env`, `.venv/`. Ne les commit pas.
-- N'utilise ce système que sur **ton propre compte**. Usage modéré (2×/jour) pour ne pas te faire ban.
+- N'utilise ce système que sur **ton propre compte**.
+
+### Risque de ban Instagram — le vrai topo
+
+Ce script utilise l'API web privée d'Instagram avec tes cookies de session —
+exactement les mêmes appels que ton navigateur fait quand tu ouvres tes saves.
+C'est techniquement contraire aux CGU d'Instagram (automatisation), donc le
+risque n'est **jamais zéro**. Mais il est faible si tu respectes le profil
+d'usage prévu, parce que le script est **read-only** (il ne like pas, ne
+follow pas, ne commente pas, ne poste pas — les comportements qui déclenchent
+les bans) et à **très bas volume**.
+
+Ce qui rend l'usage discret par nature :
+- 2 syncs/jour max, 1 seconde de pause entre les pages, ~50 posts par page.
+- Read-only : aucune action visible côté Instagram.
+- Session de ton vrai navigateur, User-Agent desktop classique.
+
+Ce qui peut arriver en pratique (du plus probable au plus rare) :
+1. **Session invalidée** — Instagram te déconnecte, le script affiche
+   « Invalid session ». Aucune sanction : tu récupères des cookies frais.
+2. **Checkpoint « activité suspecte »** — Instagram te demande de confirmer
+   ton identité à la prochaine connexion. Ennuyeux, pas une sanction.
+3. **Action block temporaire / ban** — quasi inexistant pour du read-only
+   perso à ce volume. Les bans visent l'automatisation d'actions (mass-like,
+   mass-follow, scraping massif de comptes tiers).
+
+Les règles pour rester dans la zone verte :
+- **Lance-le depuis ta machine perso, sur ta connexion habituelle** (pas un
+  VPS, pas un VPN qui saute de pays en pays). Une session vue depuis un
+  datacenter est le signal le plus louche qui soit.
+- **Ne réduis pas les pauses, n'augmente pas la fréquence.** 2×/jour suffit
+  largement — tes saves ne bougent pas si vite.
+- **Premier run** : c'est le plus gros (il paginera tout ton historique de
+  saves). Si tu as 500+ saves, utilise `collections_filter` pour limiter, ou
+  lance-le une fois et laisse-le finir tranquillement — après ça, chaque run
+  ne touche que le delta.
+- **Un seul outil d'automatisation sur le compte.** Si tu utilises déjà un
+  autre bot/scheduler tiers, les signaux s'additionnent.
+- Ne partage jamais le script configuré (avec ton `config.json`) à quelqu'un
+  d'autre, et ne le déploie pas en masse.
+
+**L'alternative 100 % sans risque** : l'export officiel de Meta
+(Instagram → Paramètres → Centre de comptes → Tes informations et
+autorisations → **Télécharger tes informations** → sélectionne « Contenu
+enregistré »). Tu reçois un JSON avec tous tes saves, bannissement impossible
+puisque c'est une fonctionnalité officielle. Inconvénients : c'est manuel (pas
+d'auto-sync), il faut le redemander à chaque fois, et le délai de préparation
+va de quelques minutes à quelques heures. Si le moindre risque t'est
+inacceptable, commence par ça — le pipeline (enrich + digest) fonctionne
+pareil une fois les notes dans Obsidian.
 
 ---
 
@@ -39,7 +89,7 @@ Copie `vault-template/Mémoire Reels/` **dans ton vault Obsidian**. Tu obtiens :
 TonVault/
 └── Mémoire Reels/
     ├── Instagram Saves/      ← sync.py écrit ici
-    ├── Content Ideas/        ← /ideate écrit ici
+    ├── Insights/             ← /digest écrit ici
     └── _Index Mémoire Reels.md
 ```
 
@@ -157,19 +207,20 @@ Ouvre Obsidian → `Mémoire Reels/Instagram Saves/` → des `.md` avec `status:
 Chaque reel gagne une section `## Transcript` + `transcript: true` dans le
 frontmatter. Tu peux planifier `enrich.py` à 9h05 / 21h05 (5 min après le sync).
 
-### 8. Slash command — générer des idées de contenu
+### 8. Slash command — extraire les insights
 
 Ouvre Claude Code dans ce dossier, puis :
 ```
-/instagram-sync ideate
+/instagram-sync digest
 ```
-Claude lit tes saves `status: new` (avec transcripts), génère 3 hooks + outline +
-déclinaisons par plateforme, écrit les idées dans `Content Ideas/`, et marque les
-originaux comme traités.
+Claude lit tes saves `status: new` (avec transcripts), et écrit pour chacun une
+note dans `Insights/` : TL;DR, points clés, actions concrètes, outils/ressources
+cités, et un verdict honnête (substance réelle ou engagement-bait). Les
+originaux passent en `status: processed`.
 
 > **Personnalise d'abord** le haut de `.claude/commands/instagram-sync.md` :
-> ton audience, tes content pillars, ton ton de voix. C'est ce qui rend la
-> commande 10× plus utile.
+> tes objectifs et centres d'intérêt. C'est ce qui oriente l'extraction vers ce
+> qui t'est réellement utile.
 
 Autres actions : `/instagram-sync sync` · `status` · `scheduler` · `refresh` · `recent`.
 

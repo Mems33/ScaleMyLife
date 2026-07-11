@@ -6,13 +6,13 @@ type: index
 
 Ton second cerveau alimenté par tes saves Instagram. `sync.py` remplit
 **Instagram Saves/** deux fois par jour, `enrich.py` y ajoute les transcripts
-des reels, et la slash command `/instagram-sync ideate` transforme ces saves en
-idées de contenu dans **Content Ideas/**.
+des reels, et la slash command `/instagram-sync digest` en extrait la substance
+dans **Insights/** — résumé, points clés, actions concrètes, outils cités.
 
 ## Dossiers
 
-- 📥 **[[Instagram Saves]]** — une note par post/reel saved (écrit par `sync.py`).
-- 💡 **[[Content Ideas]]** — idées de contenu générées à partir des saves.
+- 📥 **Instagram Saves/** — une note par post/reel saved (écrit par `sync.py`).
+- 💡 **Insights/** — les connaissances extraites de tes saves, prêtes à exploiter.
 
 ## À traiter (status: new)
 
@@ -36,12 +36,12 @@ SORT saved_at DESC
 LIMIT 20
 ```
 
-## Idées de contenu en cours
+## Insights à revoir
 
 ```dataview
-TABLE status, priority, platform
-FROM "Mémoire Reels/Content Ideas"
-WHERE status != "published"
+TABLE author, topic
+FROM "Mémoire Reels/Insights"
+WHERE status = "to-review"
 SORT created DESC
 ```
 
@@ -49,4 +49,4 @@ SORT created DESC
 
 `Ctrl/Cmd + F` dans ce dossier pour retrouver n'importe quel mot-clé — y compris
 dans les transcripts audio des reels. Le **graph view** montre les connexions
-entre auteurs, collections et idées.
+entre auteurs, sujets et insights.
