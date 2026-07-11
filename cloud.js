@@ -1,8 +1,8 @@
-/* ScaleMyLife — cloud sync via Supabase (no SDK, no build step).
+/* ScaleMyLife - cloud sync via Supabase (no SDK, no build step).
    Hand-rolled REST client for GoTrue (email/password auth) + PostgREST
    (a single `saves` row per user, protected by Row Level Security).
 
-   The publishable/anon key is PUBLIC by design — all security lives in
+   The publishable/anon key is PUBLIC by design - all security lives in
    Postgres RLS (see supabase/schema.sql). Bake the key into PUBLISHABLE_KEY
    for production, or paste it once in ⚙️ Settings (stored in localStorage,
    never inside the exported save file).
@@ -16,7 +16,7 @@
   'use strict';
 
   var PROJECT_URL = 'https://rbhjqvfuvzpqrxmvfimd.supabase.co';
-  var PUBLISHABLE_KEY = 'sb_publishable_TnkG6FAH-l78na_JJ6E4fg_lAIsm_Ww'; // public by design — security is Postgres RLS
+  var PUBLISHABLE_KEY = 'sb_publishable_TnkG6FAH-l78na_JJ6E4fg_lAIsm_Ww'; // public by design - security is Postgres RLS
   var SESSION_LS = 'sml.cloud.session.v1';
   var KEY_LS = 'sml.cloud.key.v1';
   var SYNC_LS = 'sml.cloud.lastsync.v1';
@@ -166,9 +166,9 @@
 
     /* ---------- opt-in leaderboard ----------
        Having a row IS the opt-in; deleting it is the opt-out. Only the tiny
-       profile snapshot below is ever shared — never the save itself. */
+       profile snapshot below is ever shared - never the save itself. */
 
-    /* a short, shareable code derived from the (immutable) user id — no storage race */
+    /* a short, shareable code derived from the (immutable) user id - no storage race */
     friendCode: function () {
       var s = getSession();
       return s ? s.user.id.replace(/-/g, '').slice(0, 8).toUpperCase() : '';

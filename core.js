@@ -1,4 +1,4 @@
-/* LiFE RPG v2 — core game logic (no DOM). Browser: window.RPG. Node: module.exports. */
+/* LiFE RPG v2 - core game logic (no DOM). Browser: window.RPG. Node: module.exports. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.RPG = factory();
@@ -29,7 +29,7 @@
   var FOCUS_MIN_PAY = 5;          // sessions under 5 worked minutes pay nothing
   var FOCUS_MAX_PAY_MIN = 240;    // cap payout at 4h per session
   var MAX_HP = 100;
-  var ASCEND_LEVEL = 40;          // rank S — the gate for a new season (prestige)
+  var ASCEND_LEVEL = 40;          // rank S - the gate for a new season (prestige)
   var POTION_XP_MULT = 2;         // Focus Elixir doubles XP for the rest of the day
   var MENACE_STEP = 0.2, MENACE_MAX = 2.5, MENACE_DECAY = 0.1; // bad-habit scaling
   /* anti-binge economy: repeat same-day buys of a reward get pricier, so a coin
@@ -60,7 +60,7 @@
   function frameById(id) { for (var i = 0; i < FRAMES.length; i++) if (FRAMES[i].id === id) return FRAMES[i]; return null; }
 
   /* ---------- skill mastery tiers ----------
-     Leveling a life area boosts its own actions. Skill level itself is UNCAPPED —
+     Leveling a life area boosts its own actions. Skill level itself is UNCAPPED -
      XP keeps accumulating and the level keeps rising; these tiers just define the
      bonus, which plateaus at Sage so a maxed area can't run away with the economy. */
   function skillTier(level) {
@@ -222,7 +222,7 @@
       counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0 },
       achievements: [],           // [{id,on}]
       activeFocus: null,
-      redemption: null,           // {streak,on} — offer to mend a freshly broken streak
+      redemption: null,           // {streak,on} - offer to mend a freshly broken streak
       boss: null,                 // {title,setOn,due,doneOn}
       chestClaimedOn: null,
       settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true },
@@ -257,7 +257,7 @@
      every path (Streak Shield, rest items, treats) are appended by seedPreset.
      Skill names are renamed to match the path so tagging feels personal. */
   var PATHS = [
-    { id: 'general', icon: '🧭', name: 'Balanced', blurb: 'A bit of everything — the classic starter board.' },
+    { id: 'general', icon: '🧭', name: 'Balanced', blurb: 'A bit of everything - the classic starter board.' },
     { id: 'student', icon: '📚', name: 'Student', blurb: 'Exams, essays, revision and focus sessions.',
       skills: ['Study', 'Body', 'Craft', 'Social', 'Wealth'],
       quests: [['Plan tomorrow in 10 minutes', 'easy', 0, true], ['Deep work session (50 min)', 'normal', 2, true], ['Review today\'s lecture notes', 'normal', 0, true]],
@@ -265,9 +265,9 @@
       badHabits: ['Doomscrolling', 'Late-night YouTube'],
       market: [['Gaming: 1 hour', 60], ['1 episode of a series', 40], ['Night out with friends', 150]] },
     { id: 'athlete', icon: '💪', name: 'Athlete', blurb: 'Training, nutrition, sleep and recovery.',
-      skills: ['Mind', 'Strength', 'Mobility', 'Social', 'Wealth'],
-      quests: [['Complete today\'s training', 'hard', 1, true], ['Hit protein & water target', 'easy', 1, true], ['Mobility / stretch 10 min', 'easy', 2, true]],
-      goodHabits: [['Workout', 1, 5], ['8h sleep', 0, 7], ['Meal prep', 4, 2]],
+      skills: ['Mind', 'Body', 'Nutrition', 'Social', 'Wealth'],
+      quests: [['Complete today\'s training', 'hard', 1, true], ['Hit protein & water target', 'easy', 2, true], ['Mobility / stretch 10 min', 'easy', 1, true]],
+      goodHabits: [['Workout', 1, 5], ['8h sleep', 1, 7], ['Meal prep', 2, 2]],
       badHabits: ['Skipping warm-up', 'Junk food'],
       market: [['Cheat meal', 90], ['Rest day movie', 60], ['New training gear (save up)', 400]] },
     { id: 'founder', icon: '🚀', name: 'Founder', blurb: 'Shipping, outreach, deep work and momentum.',
@@ -394,7 +394,7 @@
     state.hero.level = 1;
     state.hero.xp = 0;
     state.hero.hp = maxHpOf(state);
-    addLog(state, '♻️', 'Season ' + (state.hero.ascension) + ' begins — Ascended from Lv.' + reachedLevel + ', chose ' + boonById(boonId).name + '.');
+    addLog(state, '♻️', 'Season ' + (state.hero.ascension) + ' begins - Ascended from Lv.' + reachedLevel + ', chose ' + boonById(boonId).name + '.');
     return { ascension: state.hero.ascension, boon: boonById(boonId), fromLevel: reachedLevel };
   }
 
@@ -404,7 +404,7 @@
     state.inventory.potion--;
     state.hero.buffs = state.hero.buffs || [];
     state.hero.buffs.push({ stat: 'xp', mult: POTION_XP_MULT, until: todayKey(), since: todayKey() });
-    addLog(state, '🧪', 'Focus Elixir quaffed — XP ×' + POTION_XP_MULT + ' for the rest of today.');
+    addLog(state, '🧪', 'Focus Elixir quaffed - XP ×' + POTION_XP_MULT + ' for the rest of today.');
     return { buff: true, mult: POTION_XP_MULT };
   }
 
@@ -447,12 +447,12 @@
       if ((state.hero.shields || 0) > 0 && state.hero.streak > 0) {
         state.hero.shields--;
         state.hero.lastActiveDay = todayKey(y); // shield bridges the gap: next action continues the streak
-        addLog(state, '🛡', 'Streak Shield consumed — your ' + state.hero.streak + '-day streak survives!');
+        addLog(state, '🛡', 'Streak Shield consumed - your ' + state.hero.streak + '-day streak survives!');
       } else {
         /* a real streak deserves a second chance: clear ALL of today's dailies to mend it */
         if (state.hero.streak >= 3) {
           state.redemption = { streak: state.hero.streak, on: today };
-          addLog(state, '🕯', 'Your ' + state.hero.streak + '-day streak broke — a Quest of Atonement is open until midnight.');
+          addLog(state, '🕯', 'Your ' + state.hero.streak + '-day streak broke - a Quest of Atonement is open until midnight.');
         }
         state.hero.streak = 0;
       }
@@ -463,7 +463,7 @@
     }
     state.hero.woundedOn = null; // wounds heal overnight
     state.lastSeenDay = today;
-    addLog(state, '🌅', 'A new day begins — dailies and habits are fresh.');
+    addLog(state, '🌅', 'A new day begins - dailies and habits are fresh.');
     return true;
   }
 
@@ -566,7 +566,7 @@
         var hf = avg(hi.map(function (k) { return m.per[k].focus; }));
         var lf = avg(lo.map(function (k) { return m.per[k].focus; }));
         if (Math.abs(hf - lf) >= 10) findings.push({ icon: '⏳', kind: 'focus',
-          text: 'Good days average ' + Math.round(hf) + ' min of focus vs ' + Math.round(lf) + ' on low days — deep work tracks with how you feel.' });
+          text: 'Good days average ' + Math.round(hf) + ' min of focus vs ' + Math.round(lf) + ' on low days - deep work tracks with how you feel.' });
         var hq = avg(hi.map(function (k) { return m.per[k].quests; }));
         var lq = avg(lo.map(function (k) { return m.per[k].quests; }));
         if (hq - lq >= 0.5) findings.push({ icon: '⚔️', kind: 'quests',
@@ -576,7 +576,7 @@
       var hiSlips = avg(hi.map(function (k) { return m.per[k].slips; }));
       var loSlips = avg(lo.map(function (k) { return m.per[k].slips; }));
       if (loSlips - hiSlips >= 0.4) findings.push({ icon: '👾', kind: 'slips',
-        text: 'Monster slips cluster on low-mood days (' + loSlips.toFixed(1) + ' vs ' + hiSlips.toFixed(1) + ') — mood and slips feed each other.' });
+        text: 'Monster slips cluster on low-mood days (' + loSlips.toFixed(1) + ' vs ' + hiSlips.toFixed(1) + ') - mood and slips feed each other.' });
     }
     /* best sleep target: mood-weighted sleep */
     var withBoth = m.days.filter(function (k) { return m.per[k].mood > 0 && m.per[k].sleep != null; });
@@ -643,8 +643,8 @@
     var ins = insights(state);
     var suggestion;
     if (worstMonster && worstN >= 2) suggestion = 'Your toughest monster this week was “' + worstMonster + '” (' + worstN + ' slips). Make beating it your weekly boss.';
-    else if (ins.bestSleep) suggestion = 'You feel best around ' + ins.bestSleep.toFixed(1) + 'h of sleep — protect that this week.';
-    else if (w.tot.focusMin < 120) suggestion = 'Only ' + Math.round(w.tot.focusMin) + ' min of focus this week — book two deep-work blocks.';
+    else if (ins.bestSleep) suggestion = 'You feel best around ' + ins.bestSleep.toFixed(1) + 'h of sleep - protect that this week.';
+    else if (w.tot.focusMin < 120) suggestion = 'Only ' + Math.round(w.tot.focusMin) + ' min of focus this week - book two deep-work blocks.';
     else suggestion = 'Strong week. Name a weekly boss and keep the streak alive.';
     return { week: w, bestDay: bestDay, bestXp: Math.max(0, bestXp), worstMonster: worstMonster, worstN: worstN, insights: ins, suggestion: suggestion };
   }
@@ -680,7 +680,7 @@
       state.quests = state.quests.filter(function (q) { return q.id !== id; });
     },
 
-    /* edit a quest in place (title/diff/skill/due/schedule) — does not touch progress */
+    /* edit a quest in place (title/diff/skill/due/schedule) - does not touch progress */
     editQuest: function (state, id, o) {
       var q = state.quests.find(function (x) { return x.id === id; });
       if (!q) return null;
@@ -804,7 +804,7 @@
       return res;
     },
 
-    /* bad habit: log a slip — the monster hits you. The more you feed it, the
+    /* bad habit: log a slip - the monster hits you. The more you feed it, the
        harder it hits (menace grows per slip, decays on clean days). Warden softens it. */
     slipHabit: function (state, id) {
       var h = state.habits.find(function (x) { return x.id === id; });
@@ -895,7 +895,7 @@
       var skillId = f.skillId;
       state.activeFocus = null;
       if (paid < FOCUS_MIN_PAY) {
-        addLog(state, '🏳️', 'Focus session stopped at ' + minutes + ' min (under ' + FOCUS_MIN_PAY + ' — no reward)');
+        addLog(state, '🏳️', 'Focus session stopped at ' + minutes + ' min (under ' + FOCUS_MIN_PAY + ' - no reward)');
         return { minutes: minutes, tooShort: true };
       }
       state.counters.focusMin += paid;
@@ -905,7 +905,7 @@
         var g = state.goals.find(function (x) { return x.id === f.goalId && !x.doneOn; });
         if (g) { g.focusMin = (g.focusMin || 0) + paid; res.goalTitle = g.title; }
       }
-      addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' — ' + label : ''), { xp: res.xp, coins: res.coins, min: paid, sk: skillId, label: label });
+      addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' - ' + label : ''), { xp: res.xp, coins: res.coins, min: paid, sk: skillId, label: label });
       res.minutes = paid;
       return res;
     },
@@ -986,7 +986,7 @@
       state.counters.chests++;
       var coins = CHEST_COIN_MIN + Math.floor(rng() * (CHEST_COIN_SPREAD + 1));
       var res = grant(state, { xp: CHEST_XP, coins: coins }, null);
-      /* bonus loot roll — reported under res.loot so res.coins stays the base drop */
+      /* bonus loot roll - reported under res.loot so res.coins stays the base drop */
       var loot = actions.rollChestLoot(state, rng());
       if (loot.type === 'jackpot') {
         var extra = CHEST_JACKPOT_MIN + Math.floor(rng() * (CHEST_JACKPOT_SPREAD + 1));
@@ -1030,7 +1030,7 @@
       state.hero.lastActiveDay = todayKey();
       state.redemption = null;
       state.counters.mends = (state.counters.mends || 0) + 1;
-      addLog(state, '🕯', 'Streak mended — the flame burns again at ' + state.hero.streak + ' days.');
+      addLog(state, '🕯', 'Streak mended - the flame burns again at ' + state.hero.streak + ' days.');
       return { streak: state.hero.streak };
     },
 

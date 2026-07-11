@@ -19,8 +19,9 @@ function skillLabelById(id){
   var s=state.skills.find(function(k){return k.id===id;}); return s? s.icon+' '+esc(s.name) : '?';
 }
 function fmtHm(min){ var h=Math.floor(min/60), m=Math.round(min%60); return (h?h+'h ':'')+m+'m'; }
-var focusMode={work:50,brk:10};
+var focusMode={work:50,brk:10,custom:false};
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
 var pickedPath='general';        // onboarding path
 
@@ -31,8 +32,8 @@ var THEMES={
   forest:   {name:'Forest',   bg:'#0d1712',panel:'#14231b',panel2:'#1a2f23',line:'#28492f',accent:'#7bd88f'},
   crimson:  {name:'Crimson',  bg:'#1a0d12',panel:'#26141b',panel2:'#321a23',line:'#4a2532',accent:'#ff7854'},
   ocean:    {name:'Ocean',    bg:'#0a1220',panel:'#101c30',panel2:'#15263f',line:'#22395c',accent:'#59c2ff'},
-  daylight: {name:'Daylight', bg:'#f3efe6',panel:'#fdfbf5',panel2:'#efe9db',line:'#dcd2bd',accent:'#a4700c',
-             ink:'#2c2536',muted:'#71687f',light:true}
+  daylight: {name:'Daylight', bg:'#f1ece1',panel:'#ffffff',panel2:'#f5f0e6',line:'#d9cfba',accent:'#b4740a',
+             ink:'#20192b',muted:'#5c5468',light:true}
 };
 var MUSIC={
   none:{name:'🔇 No music',id:null},
@@ -219,9 +220,9 @@ function chestScreen(res){
   var loot='';
   if(res.loot){
     confetti(true);
-    if(res.loot.type==='jackpot') loot='<div class="lootline gold">💰 <b>COIN JACKPOT</b> — +'+res.loot.coins+' bonus coins!</div>';
-    else if(res.loot.type==='potion') loot='<div class="lootline">🧪 Rare drop: <b>Focus Elixir</b> — quaff it any day for ×2 XP.</div>';
-    else if(res.loot.type==='frame') loot='<div class="lootline" style="color:'+res.loot.frame.color+'">🖼 Rare drop: <b>'+esc(res.loot.frame.name)+' frame</b> — equip it on your avatar.</div>';
+    if(res.loot.type==='jackpot') loot='<div class="lootline gold">💰 <b>COIN JACKPOT</b> - +'+res.loot.coins+' bonus coins!</div>';
+    else if(res.loot.type==='potion') loot='<div class="lootline">🧪 Rare drop: <b>Focus Elixir</b> - quaff it any day for ×2 XP.</div>';
+    else if(res.loot.type==='frame') loot='<div class="lootline" style="color:'+res.loot.frame.color+'">🖼 Rare drop: <b>'+esc(res.loot.frame.name)+' frame</b> - equip it on your avatar.</div>';
   }
   var o=$('#overlay'); o.className='show';
   o.innerHTML='<div class="levelbox"><div class="big">🎁 DAILY CHEST</div>'+
@@ -232,7 +233,7 @@ function chestScreen(res){
 }
 function usePotion(){
   var r=RPG.usePotion(state); persist(); render();
-  if(r){ SND.chest(); sparks('🧪'); toast('🧪 <span class="p">Focus Elixir — XP ×'+r.mult+' for the rest of today</span>'); }
+  if(r){ SND.chest(); sparks('🧪'); toast('🧪 <span class="p">Focus Elixir - XP ×'+r.mult+' for the rest of today</span>'); }
 }
 function closeOverlay(){ $('#overlay').className=''; render(); }
 
@@ -256,13 +257,13 @@ function renderHUD(){
   var maxHp=RPG.maxHpOf(state);
   var fr=h.frame?RPG.frameById(h.frame):null;
   var avStyle=fr?('border-color:'+fr.color+';box-shadow:0 0 12px '+fr.glow+', inset 0 0 8px '+fr.glow):('border-color:'+col);
-  var asc=(h.ascension||0)>0?'<span class="season" title="Season '+h.ascension+' — you have ascended '+h.ascension+' time'+(h.ascension===1?'':'s')+'">✦ S'+h.ascension+'</span>':'';
-  var cloudChip=cloudOn()?'<span class="cloudchip on" title="Cloud sync on — tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>':'';
+  var asc=(h.ascension||0)>0?'<span class="season" title="Season '+h.ascension+' - you have ascended '+h.ascension+' time'+(h.ascension===1?'':'s')+'">✦ S'+h.ascension+'</span>':'';
+  var cloudChip=cloudOn()?'<span class="cloudchip on" title="Cloud sync on - tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>':'';
   var buffM=RPG.buffXpMult(state);
-  var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active — XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
+  var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
     '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" onclick="openCharacter()" title="Customize character">'+h.avatar+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+'">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
+    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" onclick="openRanks()">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
@@ -274,14 +275,14 @@ function renderHUD(){
       todayGlance()+
       buff+
       (h.woundedOn===RPG.todayKey()?'<div class="nextrank" style="color:var(--hp)">🩸 wounded · ×0.5 XP</div>':'')+
-      (nr?'<div class="nextrank">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank" style="color:var(--gold);cursor:pointer" onclick="openAscend()">✦ MAX — Ascend ▶</div>')+'</div>';
+      (nr?'<div class="nextrank" style="cursor:pointer" onclick="openRanks()">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank" style="color:var(--gold);cursor:pointer" onclick="openAscend()">✦ MAX - Ascend ▶</div>')+'</div>';
 }
 
 function renderSkills(){
   var html = state.skills.map(function(s){
     var need=RPG.skillXpForLevel(s.level);
     var tier=RPG.skillTier(s.level);
-    var tierChip=tier.name?'<span class="tier" title="'+tier.name+' — +'+Math.round((tier.xp-1)*100)+'% XP'+(tier.coins>1?', +'+Math.round((tier.coins-1)*100)+'% coins':'')+' on this area’s actions">'+tier.name+'</span>':'';
+    var tierChip=tier.name?'<span class="tier" title="'+tier.name+' - +'+Math.round((tier.xp-1)*100)+'% XP'+(tier.coins>1?', +'+Math.round((tier.coins-1)*100)+'% coins':'')+' on this area’s actions">'+tier.name+'</span>':'';
     return '<div class="skillcard"><div class="t"><span>'+s.icon+' '+esc(s.name)+'</span><small>Lv.'+s.level+'</small></div>'+
       '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+tierChip+
       '<button class="del" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
@@ -290,7 +291,7 @@ function renderSkills(){
   $('#skillsRow').innerHTML = html;
 }
 
-var TABS=[['today','☀','TODAY','pri'],['quests','⚔','QUESTS','pri'],['habits','🌱','HABITS','pri'],['focus','⏳','FOCUS','sec'],['market','🏪','MARKET','sec'],['journal','📔','JOURNAL','sec'],['stats','📊','STATS','sec']];
+var TABS=[['today','🏠','TODAY','pri home'],['quests','📜','QUESTS','pri'],['habits','🌱','HABITS','pri'],['focus','⏳','FOCUS','sec'],['market','🏪','MARKET','sec'],['journal','📔','JOURNAL','sec'],['stats','📊','STATS','sec']];
 function renderTabs(){
   var chest=A.chestStatus(state);
   $('#tabs').innerHTML = TABS.map(function(t){
@@ -302,20 +303,20 @@ function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; rend
 
 function diffChip(d){ return '<span class="chip '+d+'">'+RPG.DIFF[d].label+' · '+RPG.DIFF[d].xp+'xp/'+RPG.DIFF[d].coins+'💰</span>'; }
 function skillOptions(sel){
-  return '<option value="">— skill —</option>'+state.skills.map(function(s){
+  return '<option value="">- skill -</option>'+state.skills.map(function(s){
     return '<option value="'+s.id+'"'+(sel===s.id?' selected':'')+'>'+s.icon+' '+esc(s.name)+'</option>';}).join('');
 }
 
 /* ---------- presets ---------- */
 var PRESETS={
   quest:[
-    ['Série de tests code de la route','normal'],['Essay: outline & thesis','easy'],['Essay: draft one section','hard'],
-    ['Essay: final edit & submit','epic'],['Apply to 1 internship','hard'],['Inbox zero + admin','easy'],['Clean room / desk','easy']
+    ['Organize photo library','easy'],['Book a dentist appointment','easy'],['Draft the report outline','normal'],
+    ['Deep clean the kitchen','normal'],['Reply to overdue emails','easy'],['Fix that one nagging task','hard'],['Plan the week ahead','easy']
   ],
-  good:['20 min code de la route','Read 20 pages','Gym / 30 min walk','French flashcards','Plan tomorrow (5 min)','In bed by 23:30','Batch-cook Sunday'],
+  good:['Read 20 pages','Gym / 30 min walk','Study / practice 20 min','Plan tomorrow (5 min)','In bed by 23:30','Drink 2L water','Batch-cook Sunday'],
   bad:['Instagram before 1 PM','Doomscrolling','Late-night YouTube','Snoozing alarm','Gaming before work is done'],
   shop:{
-    market:[['🛡 Streak Shield — auto-saves one missed day',200,0,0,'shield'],['Gaming: 1 hour',60],['Gaming: full evening',150],['1 episode of a series',40],['Movie night',80],['Café treat',35],['Sweet treat',30],['Takeaway',120],['Sleep-in Saturday',100],['New game (save up!)',600]],
+    market:[['🛡 Streak Shield - auto-saves one missed day',200,0,0,'shield'],['Gaming: 1 hour',60],['Gaming: full evening',150],['1 episode of a series',40],['Movie night',80],['Café treat',35],['Sweet treat',30],['Takeaway',120],['Sleep-in Saturday',100],['New game (save up!)',600]],
     hotel:[['Power nap (20 min)',25,15],['Walk outside',15,10],['Long shower / bath',40,20],['Full rest evening',90,40],['Massage / spa',200,60]],
     black:[['Instagram before 1 PM (1h)',120,0,8],['Gaming before work is done (1h)',100,0,8],['Junk food feast',90,0,10],['Netflix past midnight',110,0,12],['Skip-the-gym pass',70,0,6]]
   }
@@ -341,7 +342,7 @@ function questRow(q){
   var activeToday=RPG.questActiveOn(q,new Date());
   var meta=[diffChip(q.diff)];
   if(q.skillId&&skillName(q.skillId)) meta.push('<span class="chip skill">'+skillName(q.skillId)+'</span>');
-  if(q.recurring&&q.days&&q.days.length) meta.push('<span class="chip sched" title="Repeats on selected days">🗓 '+q.days.slice().sort().map(function(n){return DOW[n][0];}).join('')+'</span>');
+  if(q.recurring&&q.days&&q.days.length) meta.push('<span class="chip sched" title="Repeats on selected days">🗓 '+MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n][0];}).join('')+'</span>');
   if(q.due){ meta.push('<span class="chip '+(q.due<today?'late':'due')+'">'+(q.due<today?'⚠ late ':'due ')+q.due+'</span>'); }
   var action = done ? '<span style="color:var(--good);font-weight:700">✓</span>'
     : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
@@ -368,8 +369,10 @@ function goalCard(g){
   var steps=state.quests.filter(function(q){return q.main===g.id && !q.recurring;});
   var stepHtml=steps.map(function(q){
     var done=!!q.doneOn;
+    var today=RPG.todayKey();
+    var dueChip=q.due?' <span class="chip '+(q.due<today?'late':'due')+'" style="margin-left:4px">'+(q.due<today?'⚠ ':'due ')+q.due+'</span>':'';
     return '<div class="step'+(done?' done':'')+'"><span>'+(done?'✅':'▫️')+'</span>'+
-      '<div class="grow">'+esc(q.title)+' <span class="chip '+q.diff+'" style="margin-left:6px">'+RPG.DIFF[q.diff].label+'</span></div>'+
+      '<div class="grow">'+esc(q.title)+' <span class="chip '+q.diff+'" style="margin-left:6px">'+RPG.DIFF[q.diff].label+'</span>'+dueChip+'</div>'+
       (done?'':'<button class="btn go small" onclick="doQuest(\''+q.id+'\')">Clear · '+RPG.DIFF[q.diff].xp+'xp</button>')+
       '<button class="btn ghost small" title="Edit" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
       '<button class="btn ghost small" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
@@ -384,6 +387,7 @@ function goalCard(g){
     '<div class="steps">'+stepHtml+'</div>'+
     '<div class="stepadd"><input id="step_'+g.id+'" placeholder="Add a step to this main quest…">'+
     '<select id="stepd_'+g.id+'"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
+    '<input type="date" id="stepdue_'+g.id+'" title="Due date (optional)">'+
     '<button class="btn small" onclick="addStep(\''+g.id+'\')">+ Step</button></div></div>';
 }
 
@@ -394,34 +398,40 @@ function renderQuests(){
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
   var goalsOpen=state.goals.filter(function(g){return !g.doneOn;});
   var goalHtml=goalsOpen.map(goalCard).join('') ||
-    '<div class="empty">A main quest is a big goal — the code exam, an essay, an internship offer. Add one below and break it into steps.</div>';
+    '<div class="empty">A main quest is a big goal - the code exam, an essay, an internship offer. Add one below and break it into steps.</div>';
 
   $('#view').innerHTML=bossStrip()+
-    '<div class="panel" style="border-color:var(--gold);margin-bottom:14px"><h3 style="color:var(--gold)">🏆 Main quests — the big goals</h3>'+goalHtml+
-      '<div class="form"><div class="row"><input id="gTitle" placeholder="New main quest… (e.g. Pass code de la route)">'+
+    '<div class="panel" style="border-color:var(--gold);margin-bottom:14px"><h3 style="color:var(--gold)">🏆 Main quests - the big goals</h3>'+goalHtml+
+      '<div class="form"><div class="row"><input id="gTitle" placeholder="New main quest… (e.g. Pass my driving test)">'+
       '<button class="btn" onclick="addGoal()">+ Main quest</button></div>'+
       '<input id="gNote" placeholder="Why it matters (optional)"></div></div>'+
     '<div class="grid two">'+
-    '<div><div class="panel"><h3>☀️ Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
-      (dailies.map(questRow).join('')||'<div class="empty">No dailies. Add a recurring quest — it resets every morning and feeds the chest.</div>')+'</div>'+
+    '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
+      '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
+      (dailies.map(questRow).join('')||'<div class="empty">No dailies yet. Add a repeating task below - it resets every morning and feeds the chest.</div>')+
+      '<div class="form"><input id="dTitle" placeholder="New daily quest…">'+
+      '<div class="row"><select id="dDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
+      '<select id="dSkill">'+skillOptions()+'</select></div>'+
+      '<div class="daysrow"><span class="plabel">repeat on:</span>'+MON_ORDER.map(function(i){
+        return '<button type="button" class="dow'+(pendingDays.indexOf(i)>=0?' on':'')+'" onclick="toggleDow('+i+')">'+DOW[i][0]+'</button>';
+      }).join('')+'<span class="hint">none selected = every day</span></div>'+
+      '<button class="btn wide go" onclick="addDaily()">+ Add daily</button></div></div>'+
     '<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div></div>'+
-    '<div class="panel"><h3>🗡 Side quests <span class="cnt">'+sides.length+'</span>'+
+    '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span>'+
       '<button class="btn small right" onclick="exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">📅 Export due dates</button></h3>'+
-      (sides.map(questRow).join('')||'<div class="empty">One-off tasks live here. The ⬆ button upgrades one into a main quest.</div>')+
+      '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
+      (sides.map(questRow).join('')||'<div class="empty">No side quests. Add a one-off task below. The ⬆ button upgrades one into a main quest.</div>')+
       '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
       '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
-      '<select id="qSkill">'+skillOptions()+'</select></div>'+
-      '<div class="row"><input type="date" id="qDue"><label><input type="checkbox" id="qRec"> repeat</label></div>'+
-      '<div class="daysrow"><span class="plabel">repeat on:</span>'+DOW.map(function(d,i){
-        return '<button type="button" class="dow'+(pendingDays.indexOf(i)>=0?' on':'')+'" onclick="toggleDow('+i+')">'+d[0]+'</button>';
-      }).join('')+'<span class="hint">none selected = every day (needs “repeat” ticked)</span></div>'+
-      '<button class="btn wide go" onclick="addQuest()">+ Add quest</button>'+presetChips('quest')+'</div></div></div>';
+      '<select id="qSkill">'+skillOptions()+'</select>'+
+      '<input type="date" id="qDue" title="Due date (optional)"></div>'+
+      '<button class="btn wide go" onclick="addQuest()">+ Add side quest</button></div></div></div>';
 }
-/* toggle a weekday chip in place — must NOT re-render, or it wipes the half-typed quest form */
+/* toggle a weekday chip in place - must NOT re-render, or it wipes the half-typed quest form */
 function toggleDow(n){
   var i=pendingDays.indexOf(n); if(i>=0) pendingDays.splice(i,1); else pendingDays.push(n);
   var btns=document.querySelectorAll('.daysrow .dow');
-  for(var k=0;k<btns.length;k++){ btns[k].className='dow'+(pendingDays.indexOf(k)>=0?' on':''); }
+  for(var k=0;k<btns.length;k++){ var day=MON_ORDER[k]; btns[k].className='dow'+(pendingDays.indexOf(day)>=0?' on':''); }
 }
 
 function bossStrip(){
@@ -432,12 +442,12 @@ function bossStrip(){
     return '<div class="boss"><span class="ic">🐲</span><div class="grow">'+
       '<div class="t">WEEKLY BOSS: '+esc(b.title)+'</div>'+
       '<div class="sub"><b>'+when+'</b> · slay it for 500xp / 250💰 · escapes after 7 days</div></div>'+
-      '<button class="btn slip" onclick="slayBoss()">⚔ SLAY</button>'+
+      '<button class="btn slip" onclick="slayBoss()">🗡️ SLAY</button>'+
       '<button class="btn ghost" onclick="abandonBoss()">✕</button></div>';
   }
   return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
     '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
-    '<div class="sub">Pick THE task of the week — worth 500xp / 250💰. Ideal during Friday planning.</div></div>'+
+    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰. Ideal during Friday planning.</div></div>'+
     '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:260px">'+
     '<button class="btn" onclick="setBoss()">🐲 Name it</button></div>';
 }
@@ -452,7 +462,7 @@ function slayBoss(){
   if(r){ bossKillScreen(r); flyCoins(r.coins); } afterAction();
 }
 function abandonBoss(){
-  if(confirm('Let the boss go? No reward, no penalty — just the shame.')){ A.abandonBoss(state); persist(); render(); }
+  if(confirm('Let the boss go? No reward, no penalty - just the shame.')){ A.abandonBoss(state); persist(); render(); }
 }
 function bossKillScreen(r){
   SND.rankup(); confetti(true); shake();
@@ -493,19 +503,21 @@ function renderToday(){
   $('#view').innerHTML=
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
-    (wounded?'<div class="woundbar">🩸 <b>Wounded</b> — XP halved today. Rest at the Hotel or log good sleep to recover.</div>':'')+
+    (wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':'')+
     redemptionBar()+
-    (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> — your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
+    (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> - your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
-    (due.length?'<div class="panel" style="border-color:var(--orange);margin-bottom:14px"><h3 style="color:var(--orange)">🔥 Due now</h3>'+
+    (due.length?'<div class="panel" style="border-color:var(--orange);margin-bottom:14px"><h3 style="color:var(--orange)">🔥 Due today</h3>'+
       due.map(function(it){
-        return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
+        var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
+        var mainTag=mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'';
+        return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+mainTag+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
         '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
       }).join('')+'</div>':'')+
     '<div class="grid two">'+
     '<div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
-      (dailies.map(questRow).join('')||'<div class="empty">No dailies yet — add recurring quests in the Quests tab.</div>')+'</div>'+
+      (dailies.map(questRow).join('')||'<div class="empty">No dailies yet - add recurring quests in the Quests tab.</div>')+'</div>'+
     '<div class="panel"><h3>🌱 Habits to check <span class="cnt">'+(habits.length-todo.length)+'/'+habits.length+'</span></h3>'+
       (habits.map(function(hb){
         var done=hb.lastDoneOn===today;
@@ -514,7 +526,7 @@ function renderToday(){
           '<div class="meta">'+habitDots(hb)+wk+'</div></div>'+
           (done?'<span style="color:var(--good);font-weight:700">✓</span>'
             :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
-      }).join('')||'<div class="empty">No habits yet — plant some in the Habits tab.</div>')+
+      }).join('')||'<div class="empty">No habits yet - plant some in the Habits tab.</div>')+
     '<div class="quick">'+
       '<button class="'+(j?'done':'')+'" onclick="go(\'journal\')">'+(j?'📔 Journal ✓':'📔 Log mood · +15xp')+'</button>'+
       '<button class="'+(sl?'done':'')+'" onclick="go(\'journal\')">'+(sl?'🌙 Sleep ✓':'🌙 Log sleep · heals ❤️')+'</button>'+
@@ -538,7 +550,7 @@ function renderHabits(){
   var good=state.habits.filter(function(h){return h.type==='good';});
   var bad=state.habits.filter(function(h){return h.type==='bad';});
   $('#view').innerHTML='<div class="grid two">'+
-    '<div class="panel"><h3>🌱 Grow — good habits <span class="hint" style="margin-left:auto">checkable again every morning</span></h3>'+
+    '<div class="panel"><h3>🌱 Grow - good habits <span class="hint" style="margin-left:auto">checkable again every morning</span></h3>'+
     (good.map(function(h){
       var done=h.lastDoneOn===today;
       return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
@@ -556,7 +568,7 @@ function renderHabits(){
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
     '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
     '<button class="btn go" onclick="addHabit(\'good\')">+ Add</button></div>'+presetChips('good')+'</div></div>'+
-    '<div class="panel"><h3>👾 Fight — bad habits</h3>'+
+    '<div class="panel"><h3>👾 Fight - bad habits</h3>'+
     (bad.map(function(h){
       var days=A.cleanDays(h);
       var best=Math.max(h.bestClean||0,days);
@@ -573,7 +585,7 @@ function renderHabits(){
         '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
         '<button class="btn ghost" title="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
         '<button class="btn ghost" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP — the more you feed a monster, the harder it hits back.</div>')+
+    }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP - the more you feed a monster, the harder it hits back.</div>')+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
 }
@@ -595,11 +607,11 @@ function ytEmbed(){
   var id=musicId();
   if(!id) return '';
   if(location.protocol==='file:'){
-    return '<div class="hint" style="margin-top:14px">YouTube blocks embedded players on local files (error 153) — use the pop-out player instead:</div>'+
+    return '<div class="hint" style="margin-top:14px">YouTube blocks embedded players on local files (error 153) - use the pop-out player instead:</div>'+
       '<button class="btn" style="margin-top:8px" onclick="openMusicWin()">🎵 Open music player window</button>';
   }
   return '<div class="yt"><iframe src="https://www.youtube.com/embed/'+id+'?autoplay=1&playsinline=1" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe></div>'+
-    '<div class="hint">needs internet — pick another stream or paste any YouTube URL in setup</div>';
+    '<div class="hint">needs internet - pick another stream or paste any YouTube URL in setup</div>';
 }
 function openMusicWin(){
   var id=musicId(); if(!id) return;
@@ -626,7 +638,7 @@ function renderFocus(){
     var left=f.phaseEnd-Date.now(), pct=RPG.clamp(1-left/phaseTotal,0,1);
     if(f.phase==='work'){
       $('#view').innerHTML='<div class="panel focusbox">'+
-        '<div class="phase work">⚔ WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):'')+'</div>'+
+        '<div class="phase work">🎯 WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):'')+'</div>'+
         '<div class="focusring">'+ringSvg(pct,'work')+'<div class="time" id="countdown">'+fmtTime(left)+'</div></div>'+
         (f.label?'<div class="doing">Fighting: <b>'+esc(f.label)+'</b></div>':'')+
         sessionStats(f)+
@@ -635,7 +647,7 @@ function renderFocus(){
         '<button class="btn buy" style="margin-top:14px" onclick="stopFocus()">⏹ Stop & collect</button></div>';
     } else {
       $('#view').innerHTML='<div class="panel focusbox break">'+
-        '<div class="phase brk">🏕 BREAK — REST AT THE CAMPFIRE</div>'+
+        '<div class="phase brk">🏕 BREAK - REST AT THE CAMPFIRE</div>'+
         '<div class="campfire"><span class="tent">⛺</span><span class="fire">🔥</span><span class="moon">🌙</span>'+
         '<span class="z">💤</span><span class="z z2">💤</span><span class="sp">✨</span><span class="sp sp2">✨</span><span class="sp sp3">✨</span></div>'+
         '<div class="focusring brk" style="width:130px;height:130px">'+ringSvg(pct,'brk',130)+'<div class="time" id="countdown" style="font-size:20px">'+fmtTime(left)+'</div></div>'+
@@ -648,51 +660,54 @@ function renderFocus(){
   } else {
     var modes=[[25,5,'25 / 5'],[50,10,'50 / 10'],[90,15,'90 / 15'],[50,0,'FREE RUN']];
     $('#view').innerHTML='<div class="panel focusbox">'+
-      '<h3 style="justify-content:center">⏳ Focus — get paid for deep work</h3>'+
-      '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP + 0.6 💰 — you collect when you hit stop, whether that is after 20 minutes or 3 hours. Breaks heal +3 ❤️.</div>'+
+      '<h3 style="justify-content:center">⏳ Focus - get paid for deep work</h3>'+
+      '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP + 0.6 💰 - you collect when you hit stop, whether that is after 20 minutes or 3 hours. Breaks heal +3 ❤️. <b>You need to focus at least 5 minutes before any XP or coins are earned.</b></div>'+
       '<div class="durchips">'+modes.map(function(m){
-        var on=focusMode.work===m[0]&&focusMode.brk===m[1];
-        return '<button class="'+(on?'on':'')+'" onclick="focusMode={work:'+m[0]+',brk:'+m[1]+'};render()">'+m[2]+'</button>';}).join('')+
+        var on=!focusMode.custom&&focusMode.work===m[0]&&focusMode.brk===m[1];
+        return '<button class="'+(on?'on':'')+'" onclick="focusMode={work:'+m[0]+',brk:'+m[1]+',custom:false};render()">'+m[2]+'</button>';}).join('')+
+        '<button class="'+(focusMode.custom?'on':'')+'" onclick="focusMode={work:focusMode.work,brk:focusMode.brk,custom:true};render()">⚙ Custom</button>'+
       '</div>'+
       '<div class="form" style="max-width:460px;margin:0 auto;border:none;padding-top:0">'+
       '<input id="fLabel" placeholder="What are you working on? (e.g. Essay draft)">'+
       '<div class="row"><select id="fSkill">'+skillOptions()+'</select>'+
-      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest"><option value="">— main quest —</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'">🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
-      '<input id="fWork" type="number" min="5" max="180" placeholder="work min" style="max-width:100px">'+
-      '<input id="fBrk" type="number" min="0" max="60" placeholder="break" style="max-width:80px"></div>'+
+      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest"><option value="">- main quest -</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'">🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
+      '</div>'+
+      (focusMode.custom?'<div class="row"><label style="font-size:12px;color:var(--muted)">Work<input id="fWork" type="number" min="5" max="180" value="'+focusMode.work+'" placeholder="work min" style="max-width:90px"></label>'+
+        '<label style="font-size:12px;color:var(--muted)">Break<input id="fBrk" type="number" min="0" max="60" value="'+focusMode.brk+'" placeholder="break" style="max-width:80px"></label></div>':'')+
       '<div class="flabel" style="text-align:left">Study music / background</div>'+
       '<div class="row"><select id="fMusic" onchange="state.settings.music=this.value;persist();render()">'+
       Object.keys(MUSIC).map(function(k){return '<option value="'+k+'"'+(state.settings.music===k?' selected':'')+'>'+MUSIC[k].name+'</option>';}).join('')+
       '</select></div>'+
       (state.settings.music==='custom'?'<input id="fUrl" placeholder="Paste a YouTube URL (lofi, Zelda & Chill, Minecraft ambience…)" value="'+esc(state.settings.musicUrl)+'" onchange="state.settings.musicUrl=this.value;persist()">':'')+
-      '<button class="btn wide go" onclick="startFocus()">▶ START — '+focusMode.work+' min work'+(focusMode.brk?' / '+focusMode.brk+' min break':' · no breaks')+', loops until stopped</button></div>'+
+      '<button class="btn wide go" onclick="startFocus()">▶ START - '+focusMode.work+' min work'+(focusMode.brk?' / '+focusMode.brk+' min break':' · no breaks')+', loops until stopped</button></div>'+
       '<div class="payline" style="margin-top:14px">Lifetime focus: <b>'+Math.floor(state.counters.focusMin/60)+'h '+(state.counters.focusMin%60)+'m</b></div></div>';
   }
 }
 function startFocus(){
-  var w=Number($('#fWork').value)||focusMode.work;
-  var b=$('#fBrk').value===''?focusMode.brk:Number($('#fBrk').value);
+  var wEl=$('#fWork'), bEl=$('#fBrk');
+  var w=wEl?(Number(wEl.value)||focusMode.work):focusMode.work;
+  var b=bEl?(bEl.value===''?focusMode.brk:Number(bEl.value)):focusMode.brk;
   A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,goalId:($('#fGoal')||{}).value||null,label:$('#fLabel').value});
   persist(); render();
 }
 function stopFocus(){
   var r=A.stopFocus(state); persist(); render();
   if(!r) return;
-  if(r.tooShort){ toast('<span class="h">Stopped at '+r.minutes+' min — under 5, nothing earned</span>','dmg'); return; }
+  if(r.tooShort){ toast('<span class="h">Stopped at '+r.minutes+' min - under 5, nothing earned</span>','dmg'); return; }
   SND.chest(); confetti(); fx(r);
   toast('⏳ <span class="p">'+r.minutes+' min of real work collected</span>');
   if(r.goalTitle) toast('🏆 <span class="c">'+fmtHm(r.minutes)+' banked on “'+esc(r.goalTitle)+'”</span>');
   afterAction();
 }
-function skipBreak(){ var ev=A.skipBreak(state); persist(); render(); if(ev&&ev.healed) toast('<span class="hg">+'+ev.healed+' HP — rested</span>'); SND.resume(); }
+function skipBreak(){ var ev=A.skipBreak(state); persist(); render(); if(ev&&ev.healed) toast('<span class="hg">+'+ev.healed+' HP - rested</span>'); SND.resume(); }
 function checkFocus(){
   var f=state.activeFocus;
   if(!f) return;
   var ev=A.tickFocus(state);
   if(ev){
     persist(); render();
-    if(ev.event==='break'){ SND.brk(); toast('🏕 <span style="color:var(--orange)">Break time — rest at the campfire</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🏕 Break time — stretch, water, look far away.'); }
-    else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('⚔ <span class="p">Back to work — cycle '+state.activeFocus.cycles+'</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','⚔ Break over — back to the quest.'); }
+    if(ev.event==='break'){ SND.brk(); toast('🏕 <span style="color:var(--orange)">Break time - rest at the campfire</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🏕 Break time - stretch, water, look far away.'); }
+    else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('🎯 <span class="p">Back to work - cycle '+state.activeFocus.cycles+'</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🎯 Break over - back to the quest.'); }
     return;
   }
   if(tab==='focus'){
@@ -713,9 +728,9 @@ function renderMarket(){
   var tabs=[['market','🛒 Market'],['hotel','🛏️ Hotel'],['black','🕶️ Black Market']];
   var items=state.shop.filter(function(i){return i.tab===shopTab;});
   var escOn=state.settings.escalate!==false;
-  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free — that is the whole point.'+(escOn?' Repeat the same treat in one day and its price climbs — indulge, don’t binge.':''),
-    hotel:'Rest and recovery. Hotel items restore ❤️ HP — no surge, rest all you like.',
-    black:'Break your own rules — the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
+  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free - that is the whole point.'+(escOn?' Repeat the same treat in one day and its price climbs - indulge, don’t binge.':''),
+    hotel:'Rest and recovery. Hotel items restore ❤️ HP - no surge, rest all you like.',
+    black:'Break your own rules - the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
   $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span>'+
     '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
     '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+'</div>'+
@@ -744,7 +759,7 @@ function renderMarket(){
         '<span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
         '<button class="btn buy" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(info.capped?'Capped':'Buy')+'</button>'+
         '<button class="btn ghost" onclick="delShop(\''+i.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Empty shelf. Stock rewards you actually want — that is what makes coins matter.</div>')+
+    }).join('')||'<div class="empty">Empty shelf. Stock rewards you actually want - that is what makes coins matter.</div>')+
     '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
     '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
     (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
@@ -779,13 +794,13 @@ function insightsPanel(){
   var iv=RPG.insights(state);
   var body;
   if(!iv.enough){
-    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and ScaleMyLife starts showing what actually moves your mood — sleep, focus, slips.</div>';
+    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and ScaleMyLife starts showing what actually moves your mood - sleep, focus, slips.</div>';
   } else if(!iv.findings.length){
-    body='<div class="empty">No strong patterns yet across your good and low days. Keep logging — the signal sharpens with more data.</div>';
+    body='<div class="empty">No strong patterns yet across your good and low days. Keep logging - the signal sharpens with more data.</div>';
   } else {
     body=iv.findings.map(function(f){ return '<div class="insight"><span class="ic">'+f.icon+'</span><span>'+esc(f.text)+'</span></div>'; }).join('');
   }
-  return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights — what moves your mood</h3>'+body+'</div>';
+  return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights - what moves your mood</h3>'+body+'</div>';
 }
 function focusPanel(){
   var month=focusSpan===30;
@@ -793,7 +808,7 @@ function focusPanel(){
   var toggle='<span class="spantoggle right"><button class="'+(month?'':'on')+'" onclick="focusSpan=7;render()">Week</button><button class="'+(month?'on':'')+'" onclick="focusSpan=30;render()">Month</button></span>';
   var body;
   if(!f.totalMin){
-    body='<div class="empty">No focus sessions in this window. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown — what you actually worked on — appears here.</div>';
+    body='<div class="empty">No focus sessions in this window. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown - what you actually worked on - appears here.</div>';
   } else {
     var legend='<div class="focuslegend">'+f.skills.map(function(id){
       return '<span><i style="background:'+skillColorById(id)+'"></i>'+skillLabelById(id)+'</span>';
@@ -811,16 +826,16 @@ function focusPanel(){
     }).join('');
     body='<div class="hint" style="margin-bottom:8px">Total this '+(month?'month':'week')+': <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
   }
-  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area — what you worked on'+toggle+'</h3>'+body+'</div>';
+  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area - what you worked on'+toggle+'</h3>'+body+'</div>';
 }
 /* GitHub-style consistency heatmap: 12 weeks of daily XP */
 function heatmapPanel(){
   var h=RPG.heatmap(state,12);
-  if(!h.total) return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency — last 12 weeks</h3><div class="empty">Every day you earn XP lights a square. Come back in a few days and watch the wall fill up.</div></div>';
+  if(!h.total) return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks</h3><div class="empty">Every day you earn XP lights a square. Come back in a few days and watch the wall fill up.</div></div>';
   var cells=h.cells.map(function(c){
     return '<i class="hc l'+c.level+(c.future?' fut':'')+'" title="'+c.day+(c.future?'':' · '+c.xp+' XP')+'"></i>';
   }).join('');
-  return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency — last 12 weeks '+
+  return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks '+
     '<span class="cnt">'+h.activeDays+' active days · '+h.total+' XP</span></h3>'+
     '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
     '<div class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></div></div>';
@@ -846,7 +861,7 @@ function boardRowsHtml(rows, me){
       '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
       '<div class="bmeta">'+esc(r.rank_code||'E')+' · Lv.'+(r.level||1)+((r.ascension||0)>0?' · ✦S'+r.ascension:'')+' · 🔥best '+(r.best_streak||0)+'</div></div>'+
       '<span class="bxp">'+(r.week_xp||0)+' <small>xp/wk</small></span></div>';
-  }).join('')||'<div class="empty">The board is empty — be the first hero on it.</div>';
+  }).join('')||'<div class="empty">The board is empty - be the first hero on it.</div>';
 }
 function renderBoardInto(el, rows, me){ if(el) el.innerHTML=boardRowsHtml(rows, me); }
 function leaderboardPanel(){
@@ -861,17 +876,17 @@ function leaderboardPanel(){
       SMLCloud.fetchFriendsBoard(boardProfile()).then(function(r){
         var el=document.getElementById('boardBody'); if(!el) return;
         if(!r.ok){ el.innerHTML='<div class="empty">Friends board unavailable right now.</div>'; return; }
-        el.innerHTML = r.rows.length>1 ? boardRowsHtml(r.rows, r.me) : '<div class="empty">Just you so far — add friends by code in ⚙️ Settings.</div>';
+        el.innerHTML = r.rows.length>1 ? boardRowsHtml(r.rows, r.me) : '<div class="empty">Just you so far - add friends by code in ⚙️ Settings.</div>';
       });
     },0);
     return head+'<div id="boardBody"><div class="empty">Gathering your friends…</div></div></div>';
   }
-  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync — only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
+  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync - only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
     '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
   setTimeout(function(){
     SMLCloud.fetchBoard(25).then(function(r){
       var el=document.getElementById('boardBody'); if(!el) return;
-      if(!r.ok){ el.innerHTML='<div class="empty">Leaderboard unavailable right now — it\u2019ll be back.</div>'; return; }
+      if(!r.ok){ el.innerHTML='<div class="empty">Leaderboard unavailable right now - it\u2019ll be back.</div>'; return; }
       renderBoardInto(el, r.rows, r.me);
     });
   },0);
@@ -879,7 +894,7 @@ function leaderboardPanel(){
 }
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
-  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}):'—';
+  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}):'-';
   return '<div class="review">'+
     '<div class="rv"><span class="k">🏅 Best day</span><span class="v">'+best+' · '+rev.bestXp+' XP</span></div>'+
     (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
@@ -899,7 +914,7 @@ function journalArchive(){
         var e=state.journal[d], mo=RPG.MOODS.find(function(x){return x.key===e.mood;});
         var s=state.sleep[d];
         return '<div class="jrow jarch"><span class="d">'+d.slice(5)+'</span><span>'+(mo?mo.emoji:'')+'</span>'+
-          '<span style="flex:1">'+esc(e.note||'—')+'</span>'+
+          '<span style="flex:1">'+esc(e.note||'-')+'</span>'+
           (s?'<span class="hint">🌙'+s.hours+'h</span>':'')+'</div>';
       }).join('');
       return '<details class="jmonth"'+(m===cur?' open':'')+'><summary>'+label+' <span class="cnt">'+by[m].length+'</span></summary>'+rows+'</details>';
@@ -944,7 +959,7 @@ function renderStats(){
       }).join('');
   }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
 
-  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review — for your Friday planning'+
+  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review - for your Friday planning'+
     '<button class="btn small right" onclick="shareRecap()" title="Create a shareable image of your week">📸 Share my week</button></h3>'+
     reviewBox()+
     '<div class="statgrid">'+
@@ -973,7 +988,7 @@ function renderStats(){
 
 var seenDay = null;
 function render(){
-  if(RPG.dailyReset(state) && seenDay){ toast('🌅 <span class="p">New day — dailies are fresh</span>'); }
+  if(RPG.dailyReset(state) && seenDay){ toast('🌅 <span class="p">New day - dailies are fresh</span>'); }
   seenDay = state.lastSeenDay;
   persist();
   applyLegend();
@@ -1016,15 +1031,21 @@ function promoteQ(id){
 }
 function addQuest(){
   var t=$('#qTitle').value.trim(); if(!t) return;
-  var rec=$('#qRec').checked;
   A.addQuest(state,{title:t,diff:$('#qDiff').value,skillId:$('#qSkill').value||null,
-    due:$('#qDue').value||null,recurring:rec,days:rec?pendingDays.slice():null,main:null});
+    due:$('#qDue').value||null,recurring:false,days:null,main:null});
+  persist(); render();
+}
+function addDaily(){
+  var t=$('#dTitle').value.trim(); if(!t) return;
+  A.addQuest(state,{title:t,diff:$('#dDiff').value,skillId:$('#dSkill').value||null,
+    due:null,recurring:true,days:pendingDays.slice(),main:null});
   pendingDays=[];
   persist(); render();
 }
 function addStep(goalId){
   var el=$('#step_'+goalId), t=el?el.value.trim():''; if(!t) return;
-  A.addQuest(state,{title:t,diff:$('#stepd_'+goalId).value,main:goalId});
+  var dueEl=$('#stepdue_'+goalId);
+  A.addQuest(state,{title:t,diff:$('#stepd_'+goalId).value,due:(dueEl&&dueEl.value)||null,main:goalId});
   persist(); render();
 }
 function addGoal(){ var t=$('#gTitle').value.trim(); if(!t) return;
@@ -1040,7 +1061,7 @@ function delGoal(id){
 }
 function doHabit(id){ var r=A.doHabit(state,id); persist(); render(); fx(r); afterAction(); }
 function slip(id){
-  undoSnap=JSON.stringify(state); // misclicks happen — honesty still wins
+  undoSnap=JSON.stringify(state); // misclicks happen - honesty still wins
   var r=A.slipHabit(state,id); persist(); render(); fx(r); afterAction();
   var t=document.createElement('div'); t.className='toast undo';
   t.innerHTML='<span>👾 Slip logged</span><button onclick="doUndo(this)">↩ Misclick? Undo</button>';
@@ -1059,10 +1080,10 @@ function delHabit(id){
 }
 function buy(id){
   var r=A.buy(state,id);
-  if(r&&r.fail==='coins'){ toast('<span class="h">Not enough coins — go earn them</span>','dmg'); return; }
+  if(r&&r.fail==='coins'){ toast('<span class="h">Not enough coins - go earn them</span>','dmg'); return; }
   if(r&&r.fail==='shield'){ toast('<span class="h">You already carry a Streak Shield</span>','dmg'); return; }
-  if(r&&r.fail==='limit'){ toast('<span class="h">Daily cap reached — come back tomorrow</span>','dmg'); return; }
-  if(r&&r.shield){ persist(); render(); toast('🛡 <span class="c">Streak Shield equipped — one missed day is covered</span>'); SND.buy(); afterAction(); return; }
+  if(r&&r.fail==='limit'){ toast('<span class="h">Daily cap reached - come back tomorrow</span>','dmg'); return; }
+  if(r&&r.shield){ persist(); render(); toast('🛡 <span class="c">Streak Shield equipped - one missed day is covered</span>'); SND.buy(); afterAction(); return; }
   persist(); render(); fx(r); afterAction();
 }
 function addShop(){
@@ -1105,11 +1126,12 @@ function exportICS(){
   var blob=new Blob([ics],{type:'text/calendar'});
   var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download='scalemylife-quests.ics'; a.click();
-  toast('<span class="p">📅 Calendar file downloaded — open it to import</span>');
+  toast('<span class="p">📅 Calendar file downloaded - open it to import</span>');
 }
 
 /* ---------- character customization ---------- */
-var AVATARS=['🧙','🦸','🥷','🤺','🧝','🧑‍🚀','🦊','🐺','🐉','⚔️','🛡️','🏹','🧛','🤖','👑','🐯','🦅','🔥','🌟','🎮','🧗','🏋️','📚','🚀'];
+var AVATARS=['🧙','🦸','🥷','🤺','🧝','🧑‍🚀','🦊','🐺','🐉','🦁','🛡️','🏹','🧛','🤖','👑','🐯','🦅','🔥','🌟','🎮','🧗','🏋️','📚','🚀',
+  '🧚','🧜','🧞','🦄','🐲','🦉','🐢','🦋','🌸','🍀','⚡','💫','🎨','🎸','⚽','🏀','🧑‍🍳','🧑‍⚕️','🧑‍💻','🧑‍🎓','🧑‍🔬','🕵️','🦹','🐼'];
 var pickedAv=null;
 function openCharacter(){
   pickedAv=pickedAv||state.hero.avatar;
@@ -1127,7 +1149,7 @@ function openCharacter(){
     }).join('')+'</div>'+
     frameChips()+
     boonChips()+
-    (RPG.ascendReady(state)?'<div class="ascendbox"><b>♻️ Ready to ascend</b><span>You’re Lv.'+state.hero.level+' — start a new season for a permanent boon.</span><button class="btn ascend" onclick="closeModal();openAscend()">Ascend to Season '+((state.hero.ascension||0)+1)+' ▶</button></div>':'')+
+    (RPG.ascendReady(state)?'<div class="ascendbox"><b>♻️ Ready to ascend</b><span>You’re Lv.'+state.hero.level+' - start a new season for a permanent boon.</span><button class="btn ascend" onclick="closeModal();openAscend()">Ascend to Season '+((state.hero.ascension||0)+1)+' ▶</button></div>':'')+
     '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveCharacter()">Save</button>'+
     '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
 }
@@ -1148,11 +1170,30 @@ function boonChips(){
     keys.map(function(k){ var bo=RPG.boonById(k); return bo?'<span class="boonchip" title="'+esc(bo.desc)+'">'+bo.icon+' '+esc(bo.name)+(b[k]>1?' ×'+b[k]:'')+'</span>':''; }).join('')+'</div>';
 }
 /* ---------- ascension (prestige) ---------- */
+function openRanks(){
+  var lvl=state.hero.level, cur=RPG.rankFor(lvl).code;
+  var rows=RPG.RANKS.map(function(rk,i){
+    var next=RPG.RANKS[i+1];
+    var span=next?('Lv.'+rk.min+'-'+(next.min-1)):('Lv.'+rk.min+'+');
+    var isCur=rk.code===cur;
+    var c=RANK_COLORS[rk.code]||'var(--gold)';
+    return '<div class="rankrow'+(isCur?' cur':'')+'"><span class="rk" style="color:'+c+';border-color:'+c+'">'+rk.code+'</span>'+
+      '<div class="grow"><b>'+esc(rk.name)+'</b>'+(isCur?' <span class="chip muted">you are here</span>':'')+'</div>'+
+      '<span class="rl">'+span+'</span></div>';
+  }).join('');
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>🎖️ RANKS & PRESTIGE</h2>'+
+    '<div class="hint">Every level you gain lifts your rank. Ranks run from <b>E</b> (Novice) up to <b>SS</b> (Legend). Your rank shows on your card and the leaderboard.</div>'+
+    '<div class="ranklist">'+rows+'</div>'+
+    '<div class="flabel" style="margin-top:14px">♻️ Prestige (Ascension)</div>'+
+    '<div class="hint">At <b>Lv.'+RPG.ASCEND_LEVEL+' (rank S)</b> you can <b>Ascend</b> into a new season: your level and rank reset to the bottom for a fresh climb, but you keep everything else - coins, quests, habits, streak, titles and cosmetics. Each ascension grants a <b>permanent boon</b> (like +8% XP forever) that stacks every season. The ✦S badge on your card shows how many times you have ascended.</div>'+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="closeModal()">Got it</button></div></div>';
+}
 function openAscend(){
   if(!RPG.ascendReady(state)){ toast('<span class="h">Reach Lv.'+RPG.ASCEND_LEVEL+' (rank S) to ascend</span>','dmg'); return; }
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box"><h2>♻️ ASCEND — SEASON '+((state.hero.ascension||0)+1)+'</h2>'+
-    '<div class="hint">You’re Lv.'+state.hero.level+'. Ascending resets your level and rank for a fresh climb — but you keep your coins, quests, habits, streak, titles, badges and cosmetics. In return you choose a <b>permanent boon</b> that stacks every season.</div>'+
+  m.innerHTML='<div class="box"><h2>♻️ ASCEND - SEASON '+((state.hero.ascension||0)+1)+'</h2>'+
+    '<div class="hint">You’re Lv.'+state.hero.level+'. Ascending resets your level and rank for a fresh climb - but you keep your coins, quests, habits, streak, titles, badges and cosmetics. In return you choose a <b>permanent boon</b> that stacks every season.</div>'+
     '<div class="boonpick">'+RPG.BOONS.map(function(bo){
       var have=(state.hero.boons&&state.hero.boons[bo.id])||0;
       return '<button onclick="doAscend(\''+bo.id+'\')"><span class="bi">'+bo.icon+'</span><b>'+esc(bo.name)+(have?' · owned ×'+have:'')+'</b><small>'+esc(bo.desc)+'</small></button>';
@@ -1172,7 +1213,7 @@ function ascendScreen(r){
     '<div class="big" style="color:var(--gold)">ASCENDED</div>'+
     '<div class="rankname" style="color:var(--gold)">SEASON '+r.ascension+'</div>'+
     '<div class="sub">A new climb begins from Lv.1. Permanent boon gained:</div>'+
-    '<div class="sub"><b>'+r.boon.icon+' '+esc(r.boon.name)+'</b> — '+esc(r.boon.desc)+'</div>'+
+    '<div class="sub"><b>'+r.boon.icon+' '+esc(r.boon.name)+'</b> - '+esc(r.boon.desc)+'</div>'+
     '<button class="btn go" onclick="closeOverlay()">Begin ▶</button></div>';
 }
 function titleChips(){
@@ -1181,7 +1222,7 @@ function titleChips(){
   }).filter(Boolean);
   var locked=RPG.ACHIEVEMENTS.length-unlocked.length;
   if(!unlocked.length) return '<div class="hint">Earn achievements to unlock wearable titles ('+locked+' locked).</div>';
-  return '<div class="hint" style="margin-top:6px">Unlocked titles — tap to wear:</div><div class="titlechips">'+
+  return '<div class="hint" style="margin-top:6px">Unlocked titles - tap to wear:</div><div class="titlechips">'+
     unlocked.map(function(a){
       return '<button onclick="wearTitle(\''+a.id+'\')">'+a.icon+' '+esc(a.name)+'</button>';
     }).join('')+'</div>'+(locked?'<div class="hint">'+locked+' more locked in 📊 Stats → Achievements.</div>':'');
@@ -1224,8 +1265,8 @@ function toggleReminders(){
   if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
   if(typeof Notification==='undefined'){ toast('<span class="h">Notifications not supported in this browser</span>','dmg'); return; }
   Notification.requestPermission().then(function(p){
-    if(p==='granted'){ state.settings.reminders=true; persist(); openSettings(); toast('🔔 <span class="p">Reminders on — evening nudge + focus alerts</span>'); }
-    else toast('<span class="h">Permission denied — enable notifications in your browser settings</span>','dmg');
+    if(p==='granted'){ state.settings.reminders=true; persist(); openSettings(); toast('🔔 <span class="p">Reminders on - evening nudge + focus alerts</span>'); }
+    else toast('<span class="h">Permission denied - enable notifications in your browser settings</span>','dmg');
   });
 }
 
@@ -1234,7 +1275,7 @@ function redemptionBar(){
   var e=A.redeemEligible(state);
   if(!e.active) return '';
   var progress=e.total>0?('Clear all of today\u2019s dailies ('+e.done+'/'+e.total+')'):'Earn some XP today';
-  return '<div class="redeembar">🕯 <b>Quest of Atonement</b> — your '+e.streak+'-day streak lies broken. '+progress+' and mend it before midnight.'+
+  return '<div class="redeembar">🕯 <b>Quest of Atonement</b> - your '+e.streak+'-day streak lies broken. '+progress+' and mend it before midnight.'+
     '<span class="nb">'+(e.eligible
       ?'<button class="btn small go" onclick="mendStreak()">🕯 Mend the streak</button>'
       :'<span class="chip muted">'+(e.total>0?e.done+'/'+e.total+' done':'no XP yet')+'</span>')+'</span></div>';
@@ -1246,7 +1287,7 @@ function mendStreak(){
   var o=$('#overlay'); o.className='show';
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="font-size:64px">🕯</div>'+
     '<div class="big" style="color:var(--orange)">STREAK MENDED</div>'+
-    '<div class="sub">The flame burns again — <b style="color:var(--orange)">'+r.streak+' days</b> and counting.</div>'+
+    '<div class="sub">The flame burns again - <b style="color:var(--orange)">'+r.streak+' days</b> and counting.</div>'+
     '<button class="btn go" onclick="closeOverlay()">Onward ▶</button></div>';
   afterAction();
 }
@@ -1256,7 +1297,7 @@ function cloudNudgeDue(){
     (state.hero.level>=3 || state.hero.streak>=3);
 }
 
-/* ---------- reminders (Notification API — fires while the app is open) ---------- */
+/* ---------- reminders (Notification API - fires while the app is open) ---------- */
 function notifyNow(title, body){
   try{ if(typeof Notification!=='undefined' && Notification.permission==='granted') new Notification(title,{body:body,icon:'icon-192.png',tag:'sml'}); }catch(e){}
 }
@@ -1303,7 +1344,7 @@ function shareRecap(){
   ctx.fillText('S C A L E   M Y   L I F E',540,120);
   ctx.fillStyle=C.muted; ctx.font='500 30px "IBM Plex Mono", monospace';
   var d0=new Date(w.days[0]+'T00:00:00'), d1=new Date(w.days[6]+'T00:00:00');
-  ctx.fillText(d0.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' — '+d1.toLocaleDateString(undefined,{month:'short',day:'numeric'}),540,168);
+  ctx.fillText(d0.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' - '+d1.toLocaleDateString(undefined,{month:'short',day:'numeric'}),540,168);
   // avatar + name
   ctx.font='150px serif'; ctx.fillText(h.avatar,540,340);
   ctx.fillStyle=C.ink; ctx.font='700 56px Karla, sans-serif'; ctx.fillText(h.name,540,430);
@@ -1334,7 +1375,7 @@ function shareRecap(){
       navigator.share({files:[file],title:'My week in ScaleMyLife'}).catch(function(){});
     } else {
       var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='scalemylife-week.png'; a.click();
-      toast('📸 <span class="p">Recap image saved — post it anywhere</span>');
+      toast('📸 <span class="p">Recap image saved - post it anywhere</span>');
     }
     SND.chest();
   },'image/png');
@@ -1365,7 +1406,7 @@ function cloudSection(){
     '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
     '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button>'+
     '<button class="btn" onclick="toggleFriends()">'+(state.settings.friends?'🤝 Friends: ON':'🤝 Enable friends')+'</button></div>'+
-    '<div class="hint">'+(state.settings.board?'On the global board — sharing name, avatar, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those six fields — never your save.')+'</div>'+
+    '<div class="hint">'+(state.settings.board?'On the global board - sharing name, avatar, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those six fields - never your save.')+'</div>'+
     friendsBox()+
     '<div class="hint" id="cMsg"></div>';
 }
@@ -1373,7 +1414,7 @@ function cloudMsg(t,bad){ var el=$('#cMsg'); if(el) el.innerHTML=bad?'<span clas
 function cloudSaveKey(){
   var k=($('#cKey').value||'').trim(); if(!k) return;
   SMLCloud.setKey(k); openSettings();
-  toast('☁️ <span class="p">Cloud sync enabled — now create your account</span>');
+  toast('☁️ <span class="p">Cloud sync enabled - now create your account</span>');
 }
 function cloudSignUp(){
   var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
@@ -1381,7 +1422,7 @@ function cloudSignUp(){
   cloudMsg('Creating account…');
   SMLCloud.signUp(e,p).then(function(r){
     if(!r.ok){ cloudMsg(r.error,true); return; }
-    if(r.needsConfirm){ cloudMsg('Almost there — confirm the email we sent you, then press Sign in.'); return; }
+    if(r.needsConfirm){ cloudMsg('Almost there - confirm the email we sent you, then press Sign in.'); return; }
     afterCloudSignIn();
   });
 }
@@ -1399,7 +1440,7 @@ function afterCloudSignIn(){
   SMLCloud.pull().then(function(r){
     if(r.ok && r.exists && r.data && r.data.hero){
       var lv=r.data.hero.level||1, when=(r.data.updatedAt||'').slice(0,10);
-      if(confirm('A cloud save exists ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', saved '+when:'')+').\n\nOK — load the cloud save on this device\nCancel — keep this device’s progress and overwrite the cloud')){
+      if(confirm('A cloud save exists ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', saved '+when:'')+').\n\nOK - load the cloud save on this device\nCancel - keep this device’s progress and overwrite the cloud')){
         localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state));
         state=RPG.migrate(r.data);
       }
@@ -1408,12 +1449,12 @@ function afterCloudSignIn(){
     toast('☁️ <span class="p">Cloud sync is on</span>'); SND.ach();
   });
 }
-function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out — save stays on this device'); }); }
+function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out - save stays on this device'); }); }
 function toggleBoard(){
   if(!cloudOn()){ toast('<span class="h">Sign in first to join the leaderboard</span>','dmg'); return; }
   if(state.settings.board){
     state.settings.board=false; persist(); openSettings();
-    SMLCloud.leaveBoard().then(function(){ toast('🏆 Left the leaderboard — your row is gone'); });
+    SMLCloud.leaveBoard().then(function(){ toast('🏆 Left the leaderboard - your row is gone'); });
   } else {
     state.settings.board=true; persist(); openSettings();
     SMLCloud.pushBoard(boardProfile()).then(function(r){
@@ -1428,7 +1469,7 @@ function cloudSyncNow(){
 function toggleFriends(){
   if(!cloudOn()){ toast('<span class="h">Sign in first to use friends</span>','dmg'); return; }
   state.settings.friends=!state.settings.friends; persist(); openSettings();
-  if(state.settings.friends){ SMLCloud.pushBoard(boardProfile(), !!state.settings.board).then(function(){ toast('🤝 <span class="c">Friends on — share your code!</span>'); }); }
+  if(state.settings.friends){ SMLCloud.pushBoard(boardProfile(), !!state.settings.board).then(function(){ toast('🤝 <span class="c">Friends on - share your code!</span>'); }); }
 }
 function friendsBox(){
   if(!state.settings.friends) return '<div class="hint">Enable friends to get a shareable code and add people to a private Friends board.</div>';
@@ -1468,7 +1509,7 @@ function loadFriendList(){
     var others=r.rows.filter(function(x){return x.user_id!==r.me;});
     host.innerHTML=others.length?('<div class="flabel">Following ('+others.length+')</div>'+others.map(function(x){
       return '<div class="frrow"><span class="bav">'+esc(x.avatar||'🧙')+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
-    }).join('')):'<div class="hint">No friends yet — add someone by code above.</div>';
+    }).join('')):'<div class="hint">No friends yet - add someone by code above.</div>';
   });
 }
 function unfriend(id){ SMLCloud.removeFriend(id).then(function(){ loadFriendList(); }); }
@@ -1492,7 +1533,7 @@ function showProfile(id){
     '<div class="pmeta"><span class="chip">'+esc(r.rank_code||'E')+'</span> Lv.'+(r.level||1)+stars+'</div></div>';
   var body;
   if(mine){
-    body='<div class="hint" style="text-align:center">This is your card exactly as friends see it — only these stats are ever shared, never your save.</div>';
+    body='<div class="hint" style="text-align:center">This is your card exactly as friends see it - only these stats are ever shared, never your save.</div>';
   } else {
     body='<div class="h2h"><div class="hrow head"><span class="hlabel"></span><span class="hval">'+esc(r.avatar||'🧙')+'</span><span class="hvs"></span><span class="hval">you</span></div>'+
       h2hRow('Level', r.level||1, me.level)+
@@ -1621,7 +1662,7 @@ function tourNext(){ tourStep++; showTourStep(); }
 function tourPrev(){ tourStep--; showTourStep(); }
 function endTour(done){
   var h=document.getElementById('tour'); if(h){ h.className=''; h.innerHTML=''; }
-  if(done===true){ toast('🎉 <span class="p">You’re all set — go clear a quest!</span>'); go('today'); }
+  if(done===true){ toast('🎉 <span class="p">You’re all set - go clear a quest!</span>'); go('today'); }
 }
 
 function exportSave(){
@@ -1646,10 +1687,11 @@ function resetAll(){
 
 /* ---------- tutorial ---------- */
 var TUT=[
-  {icon:'⚔',title:'YOUR LIFE IS THE GAME',body:'ScaleMyLife turns real life into an RPG. Doing real work — tasks, habits, focused study — earns XP and coins. XP levels you up through ranks E to SS. Coins buy real pleasures, guilt-free, because you earned them.'},
-  {icon:'🏆',title:'QUESTS & HABITS',body:'Main quests are your big goals, broken into steps. Daily quests reset every morning — clear them all and a bonus chest opens. Good habits build streaks; bad habits are monsters that hit your HP when you slip. Honesty is part of the game.'},
-  {icon:'⏳',title:'FOCUS & THE MARKET',body:'The Focus tab runs pomodoro cycles and pays you for every worked minute. Spend your coins in the Market on rewards YOU define — gaming, series, treats. The Hotel restores HP. The Black Market sells breaking your own rules… for coins AND HP.'},
-  {icon:'☀️',title:'EVERY DAY',body:'The Today tab is your home base: dailies, habit checks, deadlines and quick actions in one place. Log your mood and sleep, keep the streak alive — each consecutive day multiplies all XP up to ×1.5. That is the whole loop. Ready?'}
+  {icon:'🎮',title:'YOUR LIFE IS THE GAME',body:'ScaleMyLife turns real life into a game (an "RPG" - a role-playing game where a character grows stronger over time). Here, that character is you. Doing real things - tasks, habits, focused study - earns points. The more you do, the more your character levels up.'},
+  {icon:'⭐',title:'XP, LEVELS & COINS',body:'XP means "experience points" - you earn them for every task you finish, and enough XP bumps you up a level (and a rank, from E all the way to SS). You also earn coins, which you spend on real-world treats you choose yourself - guilt-free, because you earned them.'},
+  {icon:'❤️',title:'HABITS & HP',body:'HP means "health points" - your energy bar. Good habits build streaks. Bad habits you want to quit are treated like monsters: each time you slip and log it honestly, they knock down your HP. Rest and good sleep heal it back. Being honest is what makes it work.'},
+  {icon:'⏳',title:'FOCUS & THE MARKET',body:'The Focus tab runs a "Pomodoro" timer - a simple technique of working in focused blocks (say 25 minutes) with short breaks between. You get paid in XP and coins for every minute you focus. Spend those coins in the Market on rewards you set yourself.'},
+  {icon:'🏠',title:'EVERY DAY',body:'The Today tab is your home base: daily tasks, habit check-ins and quick actions in one place. Log your mood and sleep and keep your daily streak alive - each day in a row multiplies all your XP, up to 1.5 times. That is the whole loop. Ready?'}
 ];
 function tut(i){
   var m=$('#modal'); m.className='modal show';
@@ -1671,21 +1713,32 @@ function onboarding(){
   var prev=$('#obName'); var keep=prev?prev.value:'';
   pickedAv=pickedAv||'🧙';
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box"><h2>⚔ SCALEMYLIFE<br><span style="font-size:10px;color:var(--muted)">CREATE YOUR HERO</span></h2>'+
+  m.innerHTML='<div class="box"><h2>🎮 SCALEMYLIFE<br><span style="font-size:10px;color:var(--muted)">CREATE YOUR HERO</span></h2>'+
     '<div class="hint" style="margin-bottom:6px">Your real life is the game. Name your character:</div>'+
-    '<input id="obName" placeholder="Hero name" maxlength="24" value="'+esc(keep)+'">'+
-    '<div class="avpick">'+AVATARS.slice(0,12).map(function(a){
+    '<input id="obName" placeholder="Hero name (required)" maxlength="24" value="'+esc(keep)+'" oninput="obNameCheck()">'+
+    '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
+    '<div class="flabel">Pick an avatar</div>'+
+    '<div class="avpick scroll">'+AVATARS.map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';onboarding()">'+a+'</button>';}).join('')+'</div>'+
-    '<div class="flabel">Choose your path — it tailors your starting quests, habits, life areas and rewards</div>'+
+    '<div class="flabel">Choose your path - it tailors your starting quests, habits, life areas and rewards</div>'+
     '<div class="pathpick">'+RPG.PATHS.map(function(p){
       return '<button class="'+(pickedPath===p.id?'on':'')+'" onclick="pickedPath=\''+p.id+'\';onboarding()"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
     }).join('')+'</div>'+
-    '<button class="btn wide go" onclick="createHero()">▶ START ADVENTURE</button>'+
-    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your path — edit everything. Full customization lives behind your avatar.</div></div>';
+    '<button class="btn wide go" id="obStart" onclick="createHero()">▶ START ADVENTURE</button>'+
+    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your path - edit everything. Full customization lives behind your avatar.</div></div>';
   var inp=$('#obName'); if(inp && !inp.value) inp.focus();
+  obNameCheck();
+}
+function obNameCheck(){
+  var inp=$('#obName'), btn=$('#obStart'); if(!inp||!btn) return true;
+  var ok=inp.value.trim().length>0;
+  btn.disabled=!ok; btn.style.opacity=ok?'':'0.5'; btn.style.cursor=ok?'':'not-allowed';
+  return ok;
 }
 function createHero(){
-  var n=$('#obName').value.trim()||'Hero';
+  var raw=($('#obName')&&$('#obName').value||'').trim();
+  if(!raw){ var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); var i=$('#obName'); if(i) i.focus(); return; }
+  var n=raw;
   state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPath||'general');
   pickedAv=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');

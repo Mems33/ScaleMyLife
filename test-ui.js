@@ -43,7 +43,7 @@ setTimeout(function () {
   ok(!!d.querySelector('#modal.show'), 'tutorial modal shows on first run');
   ok(d.querySelector('.tdots') !== null, 'tutorial step dots visible');
   ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'skip button offered');
-  w.tut(1); w.tut(2); w.tut(3);
+  w.tut(1); w.tut(2); w.tut(3); w.tut(4);
   ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last step leads to hero creation');
   w.tutSkip();
   ok(d.querySelector('#obName') !== null, 'skip lands on character creation');
@@ -343,7 +343,7 @@ setTimeout(function () {
   ok(w.state.goals.some(function (g) { return g.title === 'Promote me'; }), 'side quest promoted to main quest from UI');
   ok(d.querySelector('#view').textContent.indexOf('Promote me') >= 0, 'promoted goal visible in main quests');
   w.go('today');
-  ok(d.querySelector('#view').textContent.indexOf('Due now') >= 0, 'today tab surfaces overdue work');
+  ok(d.querySelector('#view').textContent.indexOf('Due today') >= 0, 'today tab surfaces overdue work');
 
   console.log('\nWeekly-target habits UI');
   w.go('habits');
@@ -380,7 +380,7 @@ setTimeout(function () {
   ok(d.querySelector('#modal').textContent.indexOf('How it works') >= 0 && d.querySelector('#modal').textContent.indexOf('Interactive tour') >= 0, 'tutorial + interactive tour available in settings');
   w.tut(0);
   ok(d.querySelector('.tdots') !== null, 'tutorial replays');
-  w.tut(3);
+  w.tut(4);
   ok(d.querySelector('#modal').textContent.indexOf('Done') >= 0, 'replay ends with Done when hero exists');
   w.tutSkip();
   ok(d.querySelector('#modal.show') === null, 'tutorial closes back to app');
@@ -448,9 +448,8 @@ setTimeout(function () {
   ok(d.querySelector('.daysrow') !== null, 'weekday scheduler in the quest form');
   var wdNow = new Date().getDay(), wdOther = (wdNow + 3) % 7;
   w.pendingDays = [wdOther];
-  d.querySelector('#qTitle').value = 'Gym day';
-  d.querySelector('#qRec').checked = true;
-  w.addQuest();
+  d.querySelector('#dTitle').value = 'Gym day';
+  w.addDaily();
   var sched = w.state.quests.find(function (q) { return q.title === 'Gym day'; });
   ok(sched && Array.isArray(sched.days) && sched.days.indexOf(wdOther) >= 0, 'quest saved with a weekday schedule');
   ok(w.pendingDays.length === 0, 'pending days reset after add');
@@ -562,14 +561,13 @@ setTimeout(function () {
   d.querySelector('#jNote').value = 'final'; w.pendingNote = 'final'; w.saveJournal();
   ok(w.pendingNote === null, 'journal draft cleared after saving');
   w.go('quests');
-  d.querySelector('#qTitle').value = 'My scheduled quest';
-  d.querySelector('#qRec').checked = true;
+  d.querySelector('#dTitle').value = 'My scheduled quest';
   w.toggleDow(1);                         // must NOT wipe the half-typed title
-  ok(d.querySelector('#qTitle').value === 'My scheduled quest', 'side-quest title survives a weekday toggle');
+  ok(d.querySelector('#dTitle').value === 'My scheduled quest', 'daily-quest title survives a weekday toggle');
   ok(w.pendingDays.indexOf(1) >= 0, 'weekday recorded without a full re-render');
-  w.addQuest();
+  w.addDaily();
   var sq = w.state.quests.find(function (q) { return q.title === 'My scheduled quest'; });
-  ok(sq && sq.recurring && sq.days && sq.days.indexOf(1) >= 0, 'scheduled quest added with its weekday');
+  ok(sq && sq.recurring && sq.days && sq.days.indexOf(1) >= 0, 'scheduled daily added with its weekday');
 
   console.log('\nEdit quests / goals / habits (v6)');
   w.go('quests');
@@ -662,7 +660,7 @@ setTimeout(function () {
   w.setTheme('daylight');
   ok(w.state.settings.theme === 'daylight', 'daylight theme selected');
   ok(d.body.classList.contains('light'), 'body switches to light mode');
-  ok(d.documentElement.style.getPropertyValue('--ink') === '#2c2536', 'light ink colour applied');
+  ok(d.documentElement.style.getPropertyValue('--ink') === '#20192b', 'light ink colour applied');
   w.setTheme('dungeon');
   ok(!d.body.classList.contains('light'), 'dark themes remove light mode');
   w.closeModal();
@@ -812,6 +810,58 @@ setTimeout(function () {
   w.boardView = 'global';
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.SMLCloud.configure({ fetch: null });
+
+  console.log('\nBatch UX polish (v14)');
+  // ranks + prestige explainer
+  w.openRanks();
+  var rk = d.querySelector('#modal');
+  ok(rk.querySelector('.ranklist') !== null && rk.textContent.indexOf('Legend') >= 0, 'ranks modal lists every rank');
+  ok(rk.textContent.indexOf('Prestige') >= 0 && rk.textContent.indexOf('Ascend') >= 0, 'ranks modal explains prestige');
+  ok(rk.querySelector('.rankrow.cur') !== null, 'current rank highlighted');
+  w.closeModal();
+  // daily vs side-quest split
+  w.go('quests');
+  ok(d.querySelector('#dTitle') !== null && d.querySelector('#qTitle') !== null, 'separate daily and side-quest add forms');
+  ok(d.querySelector('#qRec') === null, 'no repeat checkbox on the side-quest form');
+  var qn = w.state.quests.length;
+  d.querySelector('#qTitle').value = 'One-off side task'; w.addQuest();
+  var oneoff = w.state.quests.find(function (q) { return q.title === 'One-off side task'; });
+  ok(oneoff && !oneoff.recurring, 'side-quest form creates a one-off (non-recurring) quest');
+  w.pendingDays = [];
+  d.querySelector('#dTitle').value = 'Daily thing'; w.addDaily();
+  var dq = w.state.quests.find(function (q) { return q.title === 'Daily thing'; });
+  ok(dq && dq.recurring, 'daily form creates a recurring quest');
+  // no quest quick-adds on the side panel
+  ok(d.querySelector('#view').textContent.indexOf('quick add') < 0, 'side-quest quick-adds removed');
+  // main-quest step with a due date
+  var g = w.RPG.addGoal ? null : null;
+  w.state.goals.push({ id: 'gv14', title: 'Big goal', note: '', createdOn: w.RPG.todayKey(), doneOn: null, focusMin: 0 });
+  w.render();
+  d.querySelector('#step_gv14').value = 'Step with deadline';
+  d.querySelector('#stepdue_gv14').value = '2026-09-01';
+  w.addStep('gv14');
+  var st = w.state.quests.find(function (q) { return q.title === 'Step with deadline'; });
+  ok(st && st.due === '2026-09-01' && st.main === 'gv14', 'main-quest step saves its due date');
+  // focus custom slots
+  w.go('focus');
+  ok(d.querySelector('#fWork') === null, 'focus work/break inputs hidden until Custom is picked');
+  w.focusMode = { work: 40, brk: 8, custom: true }; w.render();
+  ok(d.querySelector('#fWork') !== null && d.querySelector('#fBrk') !== null, 'Custom reveals the work/break inputs');
+  ok(d.querySelector('#view').textContent.indexOf('at least 5 minutes') >= 0, 'focus notes the 5-minute minimum');
+  w.focusMode = { work: 50, brk: 10, custom: false };
+  // name required at hero creation is covered by createHero refusing empty names
+  var before = w.state; w.state = null; w.renderHUDShell(); w.tut(0); w.tutSkip();
+  d.querySelector('#obName').value = '   ';
+  w.createHero();
+  ok(w.state === null, 'createHero refuses a blank name');
+  d.querySelector('#obName').value = 'Named Hero';
+  w.createHero();
+  ok(w.state && w.state.hero.name === 'Named Hero', 'createHero proceeds once a name is given');
+  w.state = before; w.render();
+  // athlete preset no longer splits Strength/Mobility
+  var athlete = w.RPG.seedPreset(w.RPG.newState('A', '💪'), 'athlete');
+  var names = athlete.skills.map(function (s) { return s.name; });
+  ok(names.indexOf('Mobility') < 0 && names.indexOf('Nutrition') >= 0, 'athlete life areas use Body + Nutrition, not Strength/Mobility');
 
   console.log('\nWebGL gradient background (v5)');
   ok(d.querySelector('#bg') !== null, 'background canvas present in the DOM');
