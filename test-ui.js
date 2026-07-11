@@ -793,6 +793,22 @@ setTimeout(function () {
     { user_id: '11112222-3333-4444-5555-666677778888', name: 'Me', avatar: '🧙', level: 14, rank_code: 'C', week_xp: 1433, best_streak: 15, ascension: 0 }
   ], '11112222-3333-4444-5555-666677778888');
   ok(d.querySelectorAll('.brow').length === 2 && d.querySelector('.brow.me') !== null, 'friends board renders rows with self highlighted');
+  ok(d.querySelector('.brow.tap[onclick*="showProfile"]') !== null, 'board rows are tappable to open a profile');
+  // tap a friend -> head-to-head profile modal
+  var spOk = false; try { w.showProfile('friend-abc'); spOk = true; } catch (e) {}
+  ok(spOk, 'showProfile runs without error');
+  var pm = d.querySelector('#modal');
+  ok(pm.textContent.indexOf('Rival') >= 0 && pm.querySelector('.h2h') !== null, 'profile modal shows the friend and a head-to-head table');
+  ok(pm.textContent.indexOf('Remove friend') >= 0, 'Remove friend offered from a friends-board profile');
+  ok(pm.querySelectorAll('.hval.win').length >= 1, 'head-to-head highlights the leader per metric');
+  // tapping your own row shows the "this is you" card with no remove
+  w.showProfile('11112222-3333-4444-5555-666677778888');
+  pm = d.querySelector('#modal');
+  ok(pm.textContent.indexOf('you') >= 0 && pm.textContent.indexOf('Remove friend') < 0, 'own profile shows "you" and no remove button');
+  ok(pm.querySelector('.h2h') === null, 'own profile skips the head-to-head comparison');
+  w.showProfile('does-not-exist'); // unknown id is a safe no-op
+  ok(true, 'showProfile with an unknown id does not throw');
+  w.closeModal();
   w.boardView = 'global';
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.SMLCloud.configure({ fetch: null });

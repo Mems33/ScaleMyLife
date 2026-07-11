@@ -38,11 +38,16 @@ create policy "profiles: read visible" on public.leaderboard for select using (
 );
 
 -- 4) exact-code lookup that bypasses RLS (knowing the secret code grants a peek,
---    which is how you add someone before you follow them)
+--    which is how you add someone before you follow them). Signed-in only: the
+--    app requires an account before adding friends, so anon has no reason to
+--    call this and keeping it off shrinks the brute-force surface.
 create or replace function public.find_by_friend_code(code text)
 returns table (user_id uuid, name text, avatar text, level int, rank_code text, week_xp int, best_streak int, ascension int)
 language sql security definer set search_path = public as $$
   select user_id, name, avatar, level, rank_code, week_xp, best_streak, ascension
   from public.leaderboard where friend_code = upper(code) limit 1;
 $$;
-grant execute on function public.find_by_friend_code(text) to anon, authenticated;
+-- (Postgres grants EXECUTE to PUBLIC by default, which anon inherits — revoke it.)
+revoke execute on function public.find_by_friend_code(text) from public;
+revoke execute on function public.find_by_friend_code(text) from anon;
+grant execute on function public.find_by_friend_code(text) to authenticated;

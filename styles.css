@@ -655,3 +655,21 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
 .frrow{display:flex;align-items:center;gap:10px;padding:7px 4px;border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent);font-size:14px}
 .frrow .grow{flex:1;min-width:0}
 .frrow .bmeta{font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+/* ---------- v13: friend profile card (tap a board row) ---------- */
+.brow.tap{cursor:pointer;transition:border-color .12s,transform .08s}
+.brow.tap:hover{border-color:color-mix(in srgb,var(--xp) 55%,var(--line))}
+.brow.tap:active{transform:scale(.99)}
+.pcard{text-align:center;margin-bottom:14px}
+.pcard .pav{font-size:52px;line-height:1}
+.pcard .pname{font-weight:800;font-size:20px;margin-top:6px}
+.pcard .pmeta{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:2px}
+.pcard .asc{color:var(--gold)}
+.h2h{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel2)}
+.hrow{display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.hrow:last-child{border-bottom:none}
+.hrow.head{background:var(--bg);font-size:18px;padding-top:7px;padding-bottom:7px}
+.hlabel{font-size:13px;color:var(--muted)}
+.hval{font-family:var(--mono);font-weight:700;min-width:56px;text-align:right}
+.hval.win{color:var(--xp)}
+.hvs{font-size:11px;color:var(--muted)}
