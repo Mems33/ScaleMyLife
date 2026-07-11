@@ -1,4 +1,4 @@
-/* ScaleMyLife — animated shader-gradient background (vanilla WebGL, no deps).
+/* ScaleMyLife - animated shader-gradient background (vanilla WebGL, no deps).
    A slow, theme-tinted flowing mesh gradient behind the app, inspired by the
    shadergradient aesthetic but hand-written so it stays dependency-free,
    build-free, offline-capable and CSP-safe.

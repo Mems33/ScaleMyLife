@@ -136,6 +136,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .tabs .tl{letter-spacing:.5px}
 .tabs button.pri{color:var(--ink);border-color:color-mix(in srgb,var(--gold) 40%,var(--line));background:color-mix(in srgb,var(--gold) 5%,var(--panel))}
 .tabs button.on{color:var(--ink);border-color:var(--gold);background:var(--panel2);box-shadow:0 0 12px color-mix(in srgb,var(--gold) 20%,transparent)}
+/* Today is home base: always visually distinct */
+.tabs button.home{color:var(--ink);border-color:var(--gold);background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 16%,var(--panel)),var(--panel));font-weight:700}
+.tabs button.home .ti{font-size:15px}
+.tabs button.home.on{background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 26%,var(--panel2)),var(--panel2));box-shadow:0 0 14px color-mix(in srgb,var(--gold) 32%,transparent)}
 .tabs button .dot{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{transform:scale(1.5);opacity:.5}}
 
@@ -423,7 +427,7 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
   filter:blur(44px);opacity:.55;animation:aurora 26s cubic-bezier(.45,.05,.55,.95) infinite alternate}
 @keyframes aurora{0%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(2%,-2%,0) scale(1.12)}100%{transform:translate3d(-2%,2%,0) scale(1.06)}}
 
-/* glass surfaces — translucent + machined "double-bezel" highlight, but NO backdrop-blur
+/* glass surfaces - translucent + machined "double-bezel" highlight, but NO backdrop-blur
    on these large scrolling panels (blur on scrolling content tanks mobile GPU) */
 .panel{background-color:color-mix(in srgb,var(--panel) 92%,transparent);
   border-radius:14px;border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
@@ -522,8 +526,11 @@ body.light .bar{background:#e8e1d0;border-color:var(--line)}
 body.light .bar b{color:#241d10;text-shadow:0 1px 0 rgba(255,255,255,.5)}
 body.light .hud{box-shadow:0 0 0 2px var(--bg),0 0 0 4px color-mix(in srgb,var(--line) 80%,var(--gold)),0 10px 26px rgba(96,74,26,.18)}
 body.light .panel{box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 10px 24px -14px rgba(96,74,26,.25)}
-body.light ::placeholder{color:#9a8fae}
-body.light .empty{color:#8d8398}
+body.light ::placeholder{color:#8b8298}
+body.light .empty{color:#726a80}
+body.light .logo{color:#1c1526}
+body.light .hint{color:#6a6278}
+body.light .tabs button.pri{background:color-mix(in srgb,var(--gold) 10%,var(--panel))}
 body.light .frow .ftrack,body.light .menacebar,body.light .skillcard .bar{background:#e8e1d0}
 body.light .chart .colbar{background:linear-gradient(180deg,#2fae6d,#1d7a4c)}
 body.light .toast{box-shadow:0 8px 30px rgba(96,74,26,.25)}
@@ -673,3 +680,14 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
 .hval{font-family:var(--mono);font-weight:700;min-width:56px;text-align:right}
 .hval.win{color:var(--xp)}
 .hvs{font-size:11px;color:var(--muted)}
+
+/* ---------- v14: ranks modal, richer onboarding, step sub-meta ---------- */
+.ranklist{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--panel2);margin-top:4px}
+.rankrow{display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
+.rankrow:last-child{border-bottom:none}
+.rankrow.cur{background:color-mix(in srgb,var(--gold) 12%,transparent)}
+.rankrow .rk{font-family:var(--px);font-size:12px;font-weight:700;border:1.5px solid;border-radius:5px;padding:4px 8px;min-width:38px;text-align:center}
+.rankrow .grow{flex:1;min-width:0;font-size:14px}
+.rankrow .rl{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+.avpick.scroll{max-height:132px;overflow-y:auto;flex-wrap:wrap}
+.submeta{font-size:12px;color:var(--gold);margin-top:2px;opacity:.9}
