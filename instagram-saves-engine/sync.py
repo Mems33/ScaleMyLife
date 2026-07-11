@@ -7,7 +7,7 @@ It talks to Instagram's private *web* API the same way a desktop browser does
 (using the session cookies you paste into config.json), fetches your saved
 posts, and writes one Markdown note per *new* save into your Obsidian vault.
 Already-synced posts are remembered in state.json, so every run only writes
-what's new. Designed to be run twice a day by a scheduler (see the README).
+what's new. Designed to be run once a day by a scheduler (see the README).
 
 Usage:
     python sync.py            # normal run
@@ -244,13 +244,13 @@ def render_markdown(fields: dict) -> str:
             "",
             f"# {fields['author']} — {fields['ig_type']}",
             "",
-            f"**Auteur :** [@{fields['author']}](https://instagram.com/{fields['author']}/)",
-            f"**Collection :** {fields['collection']}",
-            f"**Lien :** {fields['url']}",
+            f"**Author:** [@{fields['author']}](https://instagram.com/{fields['author']}/)",
+            f"**Collection:** {fields['collection']}",
+            f"**Link:** {fields['url']}",
             "",
             "## Caption",
             "",
-            truncated if truncated else "_(pas de caption)_",
+            truncated if truncated else "_(no caption)_",
             "",
         ]
     )

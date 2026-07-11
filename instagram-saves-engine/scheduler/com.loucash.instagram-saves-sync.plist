@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  macOS launchd agent: runs sync.py at 09:00 and 21:00 every day.
+  macOS launchd agent: runs sync.py at 09:00 every day.
 
   Before installing, replace ABSOLUTE_PROJECT_PATH below with the real absolute
-  path to this project (run `pwd` inside instagram-saves-engine to get it),
-  e.g. /Users/yourname/Code/instagram-saves-engine.
+  path to this project (run `pwd` inside the project folder to get it),
+  e.g. /Users/yourname/Code/obsidian-insta-brain.
 
   Install:
     cp scheduler/com.loucash.instagram-saves-sync.plist ~/Library/LaunchAgents/
@@ -31,16 +31,10 @@
     </array>
 
     <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Hour</key><integer>9</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-        <dict>
-            <key>Hour</key><integer>21</integer>
-            <key>Minute</key><integer>0</integer>
-        </dict>
-    </array>
+    <dict>
+        <key>Hour</key><integer>9</integer>
+        <key>Minute</key><integer>0</integer>
+    </dict>
 
     <key>StandardOutPath</key>
     <string>ABSOLUTE_PROJECT_PATH/launchd-stdout.log</string>

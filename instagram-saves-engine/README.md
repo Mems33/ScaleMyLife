@@ -1,245 +1,243 @@
-# Instagram Saves → Obsidian
+# Obsidian Insta Brain
 
-Transforme tes saves Instagram en second cerveau, en automatique.
-Un pipeline Python qui pull tes saves 2×/jour vers ton vault Obsidian, transcrit
-les reels, et en extrait les infos exploitables (résumés, points clés, actions,
-outils cités) via une slash command Claude Code.
+Turn your Instagram saves into a second brain, automatically.
+A Python pipeline that pulls your saved posts once a day into your Obsidian
+vault, transcribes reels, and extracts the exploitable information (summaries,
+key points, concrete actions, tools mentioned) via a Claude Code slash command.
 
-> D'après le guide **« Instagram x Obsidian »** de 0xLoucash. Les scripts que le
-> guide te fait générer avec Claude Code sont **déjà écrits ici** — tu n'as qu'à
-> configurer et lancer.
+> Based on the **"Instagram x Obsidian"** guide by 0xLoucash. The scripts the
+> guide has you generate with Claude Code are **already written here** — you
+> only configure and run.
 
-## Ce que ça fait
+## What it does
 
-| Fichier | Rôle |
+| File | Role |
 |---|---|
-| `sync.py` | Pull tes Instagram saves → écrit un `.md` par post dans ton vault. Dédup via `state.json`. |
-| `enrich.py` | Transcrit chaque reel via l'API ScrapeCreators → contenu audio recherchable dans Obsidian. |
-| `.claude/commands/instagram-sync.md` | Slash command `/instagram-sync digest` → extrait la substance de tes saves en notes d'insights. |
-| `scheduler/…plist` | Auto-sync 2×/jour sur macOS (launchd). Windows via Task Scheduler (voir plus bas). |
-| `vault-template/` | La structure de dossiers à copier dans ton vault Obsidian. |
+| `sync.py` | Pulls your Instagram saves → writes one `.md` per post into your vault. Dedups via `state.json`. |
+| `enrich.py` | Transcribes each reel via the ScrapeCreators API → the audio content becomes searchable in Obsidian. |
+| `.claude/commands/instagram-sync.md` | Slash command `/instagram-sync digest` → extracts the substance of your saves into insight notes. |
+| `scheduler/…plist` | Daily auto-sync on macOS (launchd). Windows uses Task Scheduler (below). |
+| `vault-template/` | The folder structure to copy into your Obsidian vault. |
 
-## Sécurité — à lire en premier
+## Security — read this first
 
-- Ton `sessionid` Instagram **= ton mot de passe**. Ne le partage jamais, ne le commit jamais.
-- `.gitignore` exclut déjà `config.json`, `state.json`, `sync.log`, `enrich.log`, `.env`, `.venv/`. Ne les commit pas.
-- N'utilise ce système que sur **ton propre compte**.
+- Your Instagram `sessionid` **= your password**. Never share it, never commit it.
+- `.gitignore` already excludes `config.json`, `state.json`, `sync.log`, `enrich.log`, `.env`, `.venv/`. Keep it that way.
+- Only use this on **your own account**.
 
-### Risque de ban Instagram — le vrai topo
+### Instagram ban risk — the honest picture
 
-Ce script utilise l'API web privée d'Instagram avec tes cookies de session —
-exactement les mêmes appels que ton navigateur fait quand tu ouvres tes saves.
-C'est techniquement contraire aux CGU d'Instagram (automatisation), donc le
-risque n'est **jamais zéro**. Mais il est faible si tu respectes le profil
-d'usage prévu, parce que le script est **read-only** (il ne like pas, ne
-follow pas, ne commente pas, ne poste pas — les comportements qui déclenchent
-les bans) et à **très bas volume**.
+This script uses Instagram's private web API with your session cookies — the
+exact same calls your browser makes when you open your saves. It technically
+goes against Instagram's ToS (automation), so the risk is **never zero**. But
+it is low if you stick to the intended usage profile, because the script is
+**read-only** (it never likes, follows, comments or posts — the behaviours
+that actually trigger bans) and **very low volume**.
 
-Ce qui rend l'usage discret par nature :
-- 2 syncs/jour max, 1 seconde de pause entre les pages, ~50 posts par page.
-- Read-only : aucune action visible côté Instagram.
-- Session de ton vrai navigateur, User-Agent desktop classique.
+What keeps it quiet by nature:
+- 1 sync/day, a 1-second pause between pages, ~50 posts per page.
+- Read-only: no visible action on Instagram's side.
+- Your real browser's session, a standard desktop User-Agent.
 
-Ce qui peut arriver en pratique (du plus probable au plus rare) :
-1. **Session invalidée** — Instagram te déconnecte, le script affiche
-   « Invalid session ». Aucune sanction : tu récupères des cookies frais.
-2. **Checkpoint « activité suspecte »** — Instagram te demande de confirmer
-   ton identité à la prochaine connexion. Ennuyeux, pas une sanction.
-3. **Action block temporaire / ban** — quasi inexistant pour du read-only
-   perso à ce volume. Les bans visent l'automatisation d'actions (mass-like,
-   mass-follow, scraping massif de comptes tiers).
+What can happen in practice (most likely first):
+1. **Session invalidated** — Instagram logs you out, the script prints
+   "Invalid session". No sanction: just grab fresh cookies.
+2. **"Suspicious activity" checkpoint** — Instagram asks you to confirm your
+   identity at next login. Annoying, not a sanction.
+3. **Temporary action block / ban** — essentially unheard of for personal
+   read-only use at this volume. Bans target action automation (mass-like,
+   mass-follow, large-scale scraping of other accounts).
 
-Les règles pour rester dans la zone verte :
-- **Lance-le depuis ta machine perso, sur ta connexion habituelle** (pas un
-  VPS, pas un VPN qui saute de pays en pays). Une session vue depuis un
-  datacenter est le signal le plus louche qui soit.
-- **Ne réduis pas les pauses, n'augmente pas la fréquence.** 2×/jour suffit
-  largement — tes saves ne bougent pas si vite.
-- **Premier run** : c'est le plus gros (il paginera tout ton historique de
-  saves). Si tu as 500+ saves, utilise `collections_filter` pour limiter, ou
-  lance-le une fois et laisse-le finir tranquillement — après ça, chaque run
-  ne touche que le delta.
-- **Un seul outil d'automatisation sur le compte.** Si tu utilises déjà un
-  autre bot/scheduler tiers, les signaux s'additionnent.
-- Ne partage jamais le script configuré (avec ton `config.json`) à quelqu'un
-  d'autre, et ne le déploie pas en masse.
+Rules to stay in the green zone:
+- **Run it from your own computer, on your home connection** (not a VPS, not
+  a country-hopping VPN). A session appearing from a datacenter IP is the
+  single most suspicious signal there is.
+- **Don't shorten the pauses, don't raise the frequency.** Once a day is
+  plenty — your saves don't move that fast.
+- **First run is the biggest** (it pages through your whole save history).
+  With 500+ saves, use `collections_filter` to narrow it down, or let it run
+  once and finish quietly — after that, every run only touches the delta.
+- **One automation tool per account.** If another bot/scheduler already runs
+  on this account, the signals add up.
+- Never share your configured copy (with `config.json`) with anyone, and
+  don't deploy it at scale.
 
-**L'alternative 100 % sans risque** : l'export officiel de Meta
-(Instagram → Paramètres → Centre de comptes → Tes informations et
-autorisations → **Télécharger tes informations** → sélectionne « Contenu
-enregistré »). Tu reçois un JSON avec tous tes saves, bannissement impossible
-puisque c'est une fonctionnalité officielle. Inconvénients : c'est manuel (pas
-d'auto-sync), il faut le redemander à chaque fois, et le délai de préparation
-va de quelques minutes à quelques heures. Si le moindre risque t'est
-inacceptable, commence par ça — le pipeline (enrich + digest) fonctionne
-pareil une fois les notes dans Obsidian.
+**The 100% risk-free alternative**: Meta's official export (Instagram →
+Settings → Accounts Center → Your information and permissions → **Download
+your information** → select "Saved" content). You get a JSON of all your
+saves through an official feature — a ban is impossible. Downsides: it's
+manual (no auto-sync), you must re-request it each time, and preparation
+takes minutes to hours. If any risk at all is unacceptable to you, start
+there — the rest of the pipeline (enrich + digest) works the same once the
+notes are in Obsidian.
 
 ---
 
 ## Setup (30–45 min)
 
-### 1. Architecture — sépare le code du vault
+### 1. Architecture — keep the code out of the vault
 
-Ce dossier `instagram-saves-engine/` est le **code**. Il doit vivre **hors** de ton
-vault Obsidian (p. ex. `~/Code/` ou `C:\Users\TonNom\Code\`).
+This project folder is the **code**. It must live **outside** your Obsidian
+vault (e.g. `~/Code/` or `C:\Users\YourName\Code\`).
 
-Copie `vault-template/Mémoire Reels/` **dans ton vault Obsidian**. Tu obtiens :
+Copy the **contents** of `vault-template/` into your vault. You end up with:
 
 ```
-TonVault/
-└── Mémoire Reels/
-    ├── Instagram Saves/      ← sync.py écrit ici
-    ├── Insights/             ← /digest écrit ici
-    └── _Index Mémoire Reels.md
+Insta Brain/                  ← your Obsidian vault
+├── Instagram Saves/          ← sync.py writes here
+├── Insights/                 ← /digest writes here
+└── _Index - Insta Brain.md
 ```
 
-> Si le dossier code atterrit par accident dans le vault, crée un fichier
-> `.obsidianignore` à la racine du vault contenant `instagram-saves-engine/`.
+> If the code folder ever ends up inside the vault by accident, create a
+> `.obsidianignore` file at the vault root containing the folder name.
 
-### 2. Récupère tes cookies Instagram (3 min)
+### 2. Grab your Instagram cookies (3 min)
 
-1. Chrome → connecte-toi sur **instagram.com**.
-2. `F12` (Win) / `Cmd+Option+I` (Mac) → onglet **Application**.
-3. Sidebar → **Cookies** → `https://www.instagram.com`.
-4. Copie la **Value** de ces 3 cookies :
+1. In Chrome, log in at **instagram.com**.
+2. Press `F12` (Windows) / `Cmd+Option+I` (Mac) → **Application** tab.
+3. Left sidebar → **Cookies** → `https://www.instagram.com`.
+4. Copy the **Value** of these 3 cookies:
 
-| Cookie | Contenu |
+| Cookie | What it looks like |
 |---|---|
-| `sessionid` | toute la valeur (`78230401234%3AABC...`) |
-| `csrftoken` | ~32 caractères |
-| `ds_user_id` | un nombre (ton Instagram user ID) |
+| `sessionid` | the whole value (`78230401234%3AABC...`) |
+| `csrftoken` | ~32 characters |
+| `ds_user_id` | a number (your Instagram user ID) |
 
-> ⚠️ Ces cookies expirent toutes les **2 à 4 semaines**. Quand le sync affiche
-> « Invalid session », refais juste cette étape.
+> ⚠️ These cookies expire every **2–4 weeks**. When the sync says
+> "Invalid session", just redo this step.
 
-### 3. Configure `config.json`
+### 3. Fill in `config.json`
 
 ```bash
-cp config.example.json config.json          # macOS/Linux
+cp config.example.json config.json           # macOS/Linux
 Copy-Item config.example.json config.json    # Windows PowerShell
 ```
 
-Remplis-le avec tes vraies valeurs. **`obsidian_vault_path` doit pointer
-EXACTEMENT vers le sous-dossier `Instagram Saves`**, pas le parent :
+Fill it with your real values. **`obsidian_vault_path` must point EXACTLY at
+the `Instagram Saves` subfolder**, not its parent:
 
 ```json
 {
   "ig_session_id": "…",
   "ig_csrftoken": "…",
   "ig_user_id": "…",
-  "obsidian_vault_path": "C:/Users/TonNom/Documents/TonVault/Mémoire Reels/Instagram Saves",
-  "collections_filter": [],
+  "obsidian_vault_path": "C:/Users/YourName/Documents/Insta Brain/Instagram Saves",
+  "collections_filter": ["Inspiration", "To Process"],
   "scrapecreators_api_key": "PASTE_YOUR_SCRAPECREATORS_KEY_HERE"
 }
 ```
 
-`collections_filter: []` pull tout. Mets `["Inspiration", "Hooks"]` pour ne
-synchroniser que certaines collections Instagram.
+**`collections_filter`** syncs only the Instagram collections you name (create
+collections in the Instagram app first: long-press the save icon on a post →
+save to a collection). Match the names exactly as they appear in Instagram.
+Use `[]` to pull everything.
 
-### 4. Installe les dépendances
+### 4. Install dependencies
 
-**macOS / Linux :**
+**macOS / Linux:**
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Windows (PowerShell) :**
+**Windows (PowerShell):**
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-> Si PowerShell bloque `Activate.ps1`, pas grave : utilise directement
-> `.\.venv\Scripts\python.exe` pour toutes les commandes.
+> If PowerShell blocks `Activate.ps1`, no problem: just use
+> `.\.venv\Scripts\python.exe` directly for every command.
 
-### 5. Premier sync
+### 5. First sync
 
 ```bash
 python sync.py                       # macOS/Linux
 .\.venv\Scripts\python.exe sync.py   # Windows
 ```
 
-Tu devrais voir :
+You should see:
 ```
-Instagram session valid for @ton_username
+Instagram session valid for @your_username
 Fetching saved posts...
 Found 3 collections
 Sync complete: 47 new | 0 skipped | 47 total | 0 errors
 ```
 
-Ouvre Obsidian → `Mémoire Reels/Instagram Saves/` → des `.md` avec `status: new`. 🎉
+Open Obsidian → `Instagram Saves/` → `.md` files with `status: new`. 🎉
 
-### 6. Auto-sync 2×/jour
+### 6. Daily auto-sync
 
-**macOS (launchd) :**
-1. Édite `scheduler/com.loucash.instagram-saves-sync.plist` : remplace
-   `ABSOLUTE_PROJECT_PATH` par le chemin absolu de ce dossier (`pwd`).
-2. Installe :
+**macOS (launchd):**
+1. Edit `scheduler/com.loucash.instagram-saves-sync.plist`: replace
+   `ABSOLUTE_PROJECT_PATH` with this folder's absolute path (`pwd`).
+2. Install:
    ```bash
    cp scheduler/com.loucash.instagram-saves-sync.plist ~/Library/LaunchAgents/
    launchctl load ~/Library/LaunchAgents/com.loucash.instagram-saves-sync.plist
-   launchctl list | grep instagram-saves   # vérifier
+   launchctl list | grep instagram-saves   # verify
    ```
 
-**Windows (Task Scheduler) :**
-- Planificateur de tâches → **Créer une tâche** (pas « tâche de base »).
-- **Général** : nom `Instagram Saves Sync`, cocher « Exécuter même si l'utilisateur n'est pas connecté ».
-- **Déclencheurs** → Nouveau : Quotidien, 9h00, cocher « Répéter chaque » **12 heures**.
-- **Actions** → Nouveau :
-  - Programme : `C:\Users\TonNom\Code\instagram-saves-engine\.venv\Scripts\python.exe`
-  - Arguments : `sync.py`
-  - Démarrer dans : `C:\Users\TonNom\Code\instagram-saves-engine`
-- Vérifier : `schtasks /Query /TN "Instagram Saves Sync"`
+**Windows (Task Scheduler):**
+- Task Scheduler → **Create Task** (not "Basic Task").
+- **General**: name `Instagram Saves Sync`, tick "Run whether user is logged on or not".
+- **Triggers** → New: Daily, 9:00 AM, recur every 1 day.
+- **Actions** → New:
+  - Program: `C:\Users\YourName\Code\obsidian-insta-brain\.venv\Scripts\python.exe`
+  - Arguments: `sync.py`
+  - Start in: `C:\Users\YourName\Code\obsidian-insta-brain`
+- Verify: `schtasks /Query /TN "Instagram Saves Sync"`
 
-> Utilise toujours des chemins **absolus** dans le scheduler.
+> Always use **absolute** paths in the scheduler.
 
-### 7. Bonus — transcripts (ScrapeCreators)
+### 7. Bonus — reel transcripts (ScrapeCreators)
 
-1. Crée un compte sur **scrapecreators.com**, récupère ta clé API (gratuit pour tester).
-2. Ajoute-la dans `config.json` → `scrapecreators_api_key`.
-3. Lance :
+1. Create an account at **scrapecreators.com**, grab your API key (free to try).
+2. Put it in `config.json` → `scrapecreators_api_key`.
+3. Run:
    ```bash
    python enrich.py                       # macOS/Linux
    .\.venv\Scripts\python.exe enrich.py   # Windows
    ```
-Chaque reel gagne une section `## Transcript` + `transcript: true` dans le
-frontmatter. Tu peux planifier `enrich.py` à 9h05 / 21h05 (5 min après le sync).
+Each reel gains a `## Transcript` section + `transcript: true` in its
+frontmatter. You can schedule `enrich.py` 5 minutes after the daily sync.
 
-### 8. Slash command — extraire les insights
+### 8. Slash command — extract the insights
 
-Ouvre Claude Code dans ce dossier, puis :
+Open Claude Code in this folder, then:
 ```
 /instagram-sync digest
 ```
-Claude lit tes saves `status: new` (avec transcripts), et écrit pour chacun une
-note dans `Insights/` : TL;DR, points clés, actions concrètes, outils/ressources
-cités, et un verdict honnête (substance réelle ou engagement-bait). Les
-originaux passent en `status: processed`.
+Claude reads your `status: new` saves (with transcripts) and writes one note
+per save into `Insights/`: TL;DR, key takeaways, concrete actions,
+tools/resources mentioned, and an honest verdict (real substance or
+engagement bait). Originals are marked `status: processed`.
 
-> **Personnalise d'abord** le haut de `.claude/commands/instagram-sync.md` :
-> tes objectifs et centres d'intérêt. C'est ce qui oriente l'extraction vers ce
-> qui t'est réellement utile.
+> **Personalise first**: edit the top of `.claude/commands/instagram-sync.md`
+> with your goals and interests — that's what steers the extraction toward
+> what's actually useful to you.
 
-Autres actions : `/instagram-sync sync` · `status` · `scheduler` · `refresh` · `recent`.
+Other actions: `/instagram-sync sync` · `status` · `scheduler` · `refresh` · `recent`.
 
 ---
 
-## Dépannage
+## Troubleshooting
 
-| Problème | Fix |
+| Problem | Fix |
 |---|---|
-| PowerShell bloque `Activate.ps1` | Utilise `.\.venv\Scripts\python.exe` directement. |
-| `python` non reconnu | Réinstalle Python (coche « Add to PATH »). Sur Mac : `python3`. |
-| `Invalid session` | Cookies expirés → refais l'étape 2, update `config.json`. |
-| 0 nouveaux saves | Normal (`state.json` track l'historique). Pour tout resync : `python sync.py --reset`. |
-| Path avec accents (Mémoire, Idées) | Windows : `chcp 65001` avant de lancer (force l'UTF-8). |
-| ScrapeCreators 401 | Clé API invalide/mal copiée (espaces ?). |
-| Task Scheduler ne lance rien | Chemins **absolus** obligatoires (programme ET « démarrer dans »). |
+| PowerShell blocks `Activate.ps1` | Use `.\.venv\Scripts\python.exe` directly. |
+| `python` not recognised | Reinstall Python (tick "Add to PATH"). On Mac: `python3`. |
+| `Invalid session` | Cookies expired → redo step 2, update `config.json`. |
+| 0 new saves | Normal (`state.json` tracks history). Full resync: `python sync.py --reset`. |
+| Accented folder names break on Windows | Run `chcp 65001` first (forces UTF-8). |
+| ScrapeCreators 401 | Invalid/badly-pasted API key (stray spaces?). |
+| Task Scheduler does nothing | **Absolute** paths required (program AND "start in"). |
 
-## Conseil de déploiement
+## Rollout advice
 
-Ne setup pas tout d'un coup. Fais d'abord les **étapes 1–5** (sync basique),
-laisse tourner 1 semaine, **puis** ajoute l'enrichment, **puis** la slash command.
-Un sync basique 2×/jour = déjà 80 % de la valeur.
+Don't set everything up at once. Do **steps 1–5** (basic sync) first, let it
+run for a week, **then** add transcripts, **then** the digest command. A basic
+daily sync is already 80% of the system's value.

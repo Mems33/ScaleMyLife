@@ -18,9 +18,9 @@ Use the right Python launcher for the OS:
 
 ## Personalisation (edit these before first use)
 
-- **MY GOALS / INTERESTS:** [ce que tu veux tirer de tes saves — e.g. "astuces
-  business, outils IA, idées d'automatisation, conseils fitness"]
-- **OUTPUT LANGUAGE:** français
+- **MY GOALS / INTERESTS:** [what you want to get out of your saves — e.g.
+  "business tactics, AI tools, automation ideas, fitness advice"]
+- **OUTPUT LANGUAGE:** [language for the insight notes — e.g. English]
 
 ---
 
