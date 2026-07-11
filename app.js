@@ -7,6 +7,7 @@ var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var boardView='global';          // Stats leaderboard: 'global' | 'friends'
+var lastBoardRows=[], lastBoardMe=null;   // cached so a board row can open a friend's profile
 var SKILL_PALETTE=['#5aa2ff','#f5c542','#3ddc84','#b07bff','#ff7854','#59c2ff','#ff5fa2','#7bd88f','#ffb454','#a78bfa','#4dd0e1','#ffd166'];
 function skillColorById(id){
   if(id==='__none') return '#6c6690';
@@ -835,10 +836,12 @@ function trophyShelf(){
 }
 /* ---------- leaderboard (Stats) ---------- */
 function boardRowsHtml(rows, me){
+  lastBoardRows=rows||[]; lastBoardMe=me||null;
   var medals=['🥇','🥈','🥉'];
   return rows.map(function(r,i){
     var mine=me&&r.user_id===me;
-    return '<div class="brow'+(mine?' me':'')+'"><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
+    var tap=r.user_id?' role="button" tabindex="0" onclick="showProfile(\''+r.user_id+'\')"':'';
+    return '<div class="brow'+(mine?' me':'')+(r.user_id?' tap':'')+'"'+tap+'><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
       '<span class="bav">'+esc(r.avatar||'🧙')+'</span>'+
       '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
       '<div class="bmeta">'+esc(r.rank_code||'E')+' · Lv.'+(r.level||1)+((r.ascension||0)>0?' · ✦S'+r.ascension:'')+' · 🔥best '+(r.best_streak||0)+'</div></div>'+
@@ -1469,6 +1472,42 @@ function loadFriendList(){
   });
 }
 function unfriend(id){ SMLCloud.removeFriend(id).then(function(){ loadFriendList(); }); }
+/* ---------- friend profile (tap a board row) ---------- */
+function h2hRow(label, them, you){
+  var lead=them>you?'them':(you>them?'you':'tie');
+  return '<div class="hrow"><span class="hlabel">'+label+'</span>'+
+    '<span class="hval'+(lead==='them'?' win':'')+'">'+them+'</span>'+
+    '<span class="hvs">vs</span>'+
+    '<span class="hval'+(lead==='you'?' win':'')+'">'+you+'</span></div>';
+}
+function showProfile(id){
+  var r=null; for(var i=0;i<lastBoardRows.length;i++){ if(lastBoardRows[i].user_id===id){ r=lastBoardRows[i]; break; } }
+  if(!r) return;
+  var mine=(id===lastBoardMe);
+  var canRemove=!mine && boardView==='friends';
+  var me=boardProfile();
+  var stars=(r.ascension||0)>0?' <span class="asc">✦S'+r.ascension+'</span>':'';
+  var head='<div class="pcard"><div class="pav">'+esc(r.avatar||'🧙')+'</div>'+
+    '<div class="pname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
+    '<div class="pmeta"><span class="chip">'+esc(r.rank_code||'E')+'</span> Lv.'+(r.level||1)+stars+'</div></div>';
+  var body;
+  if(mine){
+    body='<div class="hint" style="text-align:center">This is your card exactly as friends see it — only these stats are ever shared, never your save.</div>';
+  } else {
+    body='<div class="h2h"><div class="hrow head"><span class="hlabel"></span><span class="hval">'+esc(r.avatar||'🧙')+'</span><span class="hvs"></span><span class="hval">you</span></div>'+
+      h2hRow('Level', r.level||1, me.level)+
+      h2hRow('Weekly XP', r.week_xp||0, me.weekXp)+
+      h2hRow('Best streak', r.best_streak||0, me.bestStreak)+
+      (((r.ascension||0)||me.ascension)?h2hRow('Ascension', r.ascension||0, me.ascension):'')+
+      '</div>';
+  }
+  var foot='<div class="setrow" style="margin-top:14px">'+
+    (canRemove?'<button class="btn ghost" onclick="unfriendFrom(\''+id+'\')">Remove friend</button>':'')+
+    '<button class="btn go" onclick="closeModal()">Close</button></div>';
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box">'+head+body+foot+'</div>';
+}
+function unfriendFrom(id){ SMLCloud.removeFriend(id).then(function(){ closeModal(); toast('🤝 <span class="c">Friend removed</span>'); render(); }); }
 function closeModal(){ $('#modal').className='modal'; }
 
 /* ---------- edit modals ---------- */

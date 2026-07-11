@@ -67,7 +67,9 @@ Race other heroes on **weekly XP**. Strictly opt-in from ⚙️ → Cloud sync: 
 
 Add specific people by a short **friend code** and race them on a private board — no need to join the public leaderboard. Enable from ⚙️ → Cloud sync → *Enable friends* (requires an account): you get an 8-character code to share, and paste a friend's code to add them. The Stats leaderboard gains a **Global / Friends** toggle so you can flip between the world and just your crew.
 
-It's privacy-first and one-directional: adding someone lets *you* see their public profile card (name, avatar, level, rank, weekly XP, best streak — never their save), and Postgres Row Level Security gates every read so a profile is only visible to itself, to the people who've added it, or to anyone who's on the global board. Codes are looked up through a `SECURITY DEFINER` function so you can add a friend before either of you follows the other. Run `supabase/friends.sql` once to enable it; the app degrades gracefully if you haven't.
+It's privacy-first and one-directional: adding someone lets *you* see their public profile card (name, avatar, level, rank, weekly XP, best streak — never their save), and Postgres Row Level Security gates every read so a profile is only visible to itself, to the people who've added it, or to anyone who's on the global board. Codes are looked up through a `SECURITY DEFINER` function (callable only by signed-in users) so you can add a friend before either of you follows the other. Run `supabase/friends.sql` once to enable it; the app degrades gracefully if you haven't.
+
+**Tap any board row** — global or friends — to open that hero's profile: a big card plus a **head-to-head** table pitting their level, weekly XP, best streak and ascension against yours, with the leader of each metric highlighted. From a friend's card you can remove them in one tap; tapping your own row previews the exact card others see.
 
 ## Comfort & safety
 
@@ -84,7 +86,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (596 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (604 tests).
 
 ## Development
 
