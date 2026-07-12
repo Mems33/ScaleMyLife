@@ -20,6 +20,7 @@ function skillLabelById(id){
 }
 function fmtHm(min){ var h=Math.floor(min/60), m=Math.round(min%60); return (h?h+'h ':'')+m+'m'; }
 var focusMode={work:50,brk:10,custom:false};
+var navAnim=false, navTimer=null;   // cascade the view only on tab changes, not in-tab updates
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
@@ -299,7 +300,7 @@ function renderTabs(){
     return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+t[1]+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
   }).join('');
 }
-function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; render(); }
+function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; navAnim=true; render(); }
 
 function diffChip(d){ return '<span class="chip '+d+'">'+RPG.DIFF[d].label+' · '+RPG.DIFF[d].xp+'xp/'+RPG.DIFF[d].coins+'💰</span>'; }
 function skillOptions(sel){
@@ -995,6 +996,10 @@ function render(){
   renderHUD(); renderSkills(); renderTabs();
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
   if(typeof mascotMoodSync==='function') mascotMoodSync();
+  // Satisfying cascade only when the tab actually changes; in-tab updates stay calm (no flicker).
+  var vw=$('#view');
+  if(vw && navAnim){ vw.classList.add('view-nav'); clearTimeout(navTimer); navTimer=setTimeout(function(){ vw.classList.remove('view-nav'); }, 520); }
+  navAnim=false;
 }
 
 function afterAction(){
@@ -1803,7 +1808,7 @@ function toggleMascotSetting(){
   if(state.settings.mascot!==false) mascotMoodSync();
   openSettings();
 }
-function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; render(); checkFocus(); cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); tut(0); } }
+function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); tut(0); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);

@@ -727,3 +727,63 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   #mascot .mbtn{width:52px;height:52px}
   #mascot .mface{font-size:26px}
 }
+
+/* ==========================================================================
+   v18: Feel & finish - one coherent motion + depth + rhythm layer.
+   Keeps the retro-RPG identity; adds the craft: springy tactile press,
+   quiet tinted depth, calm in-tab updates with a satisfying tab-change
+   cascade, and consistent breathing room. Purely additive (later CSS wins).
+   ========================================================================== */
+:root{
+  --ease:cubic-bezier(.22,1,.36,1);      /* premium deceleration */
+  --spring:cubic-bezier(.34,1.5,.5,1);   /* gentle overshoot for presses */
+  --elev1:0 1px 2px rgba(0,0,0,.16), 0 8px 22px -14px rgba(0,0,0,.5);
+  --elev2:0 2px 8px rgba(0,0,0,.2), 0 22px 48px -20px rgba(0,0,0,.6);
+  --hair:color-mix(in srgb,#fff 6%,transparent);   /* top inset highlight */
+}
+body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26,.22);
+  --elev2:0 2px 8px rgba(96,74,26,.1), 0 22px 48px -20px rgba(96,74,26,.28);
+  --hair:color-mix(in srgb,#fff 70%,transparent)}
+
+/* generous, consistent rhythm */
+.grid{gap:16px}
+.panel{padding:16px;box-shadow:inset 0 1px 0 var(--hair),var(--elev1)}
+
+/* springy tactile press across every tappable control */
+.btn,.quick button,.chip,.mline,.dow,.durchips button,.themes button,.moods button,.titlechips button,.spantoggle button{
+  transition:transform .18s var(--spring),border-color .16s var(--ease),background .16s var(--ease),color .16s var(--ease),box-shadow .18s var(--ease),filter .16s var(--ease)}
+.btn:active,.quick button:active,.mline:active,.dow:active,.durchips button:active,.moods button:active,.themes button:active,.titlechips button:active{transform:scale(.96)}
+.btn.wide:active,.btn.go.wide:active{transform:scale(.985)}
+.btn.go:active{filter:brightness(1.05)}
+
+/* quiet depth + a soft lift on pointer devices (no movement on touch) */
+@media (hover:hover){
+  .item,.skillcard,.brow.tap,.goal,.stat,.frrow{transition:transform .2s var(--ease),border-color .18s var(--ease),box-shadow .22s var(--ease)}
+  .item:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--gold) 28%,var(--line));box-shadow:var(--elev1)}
+  .skillcard:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--skill) 34%,var(--line));box-shadow:var(--elev1)}
+  .brow.tap:hover{box-shadow:var(--elev1)}
+  .stat:hover{transform:translateY(-1px);box-shadow:var(--elev1)}
+}
+
+/* Calm in-tab updates: items no longer re-animate on every action.
+   The satisfying entrance now plays once, on tab change, as a block cascade. */
+.item{animation:none}
+#view.view-nav>*{animation:cascade .42s var(--ease) both}
+#view.view-nav>*:nth-child(2){animation-delay:.05s}
+#view.view-nav>*:nth-child(3){animation-delay:.1s}
+#view.view-nav>*:nth-child(4){animation-delay:.15s}
+#view.view-nav>*:nth-child(n+5){animation-delay:.19s}
+@keyframes cascade{from{opacity:0;transform:translateY(10px)}}
+
+/* refined selection + desktop scrollbars */
+::selection{background:color-mix(in srgb,var(--gold) 32%,transparent);color:var(--ink)}
+@media (hover:hover){
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--line) 85%,var(--muted));border-radius:8px;border:3px solid var(--bg)}
+  ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+}
+
+@media (prefers-reduced-motion: reduce){
+  #view.view-nav>*{animation:none}
+}
