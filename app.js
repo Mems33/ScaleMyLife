@@ -195,7 +195,7 @@ function fx(res){
   (res.skillUps||[]).forEach(function(u){ toast('<span class="p">'+u.icon+' '+esc(u.name)+' → Lv.'+u.level+'</span>'); });
   if(res.newRank){ rankUp(res.newRank, res.levelUps[res.levelUps.length-1]); }
   else if(res.levelUps && res.levelUps.length){ levelUp(res.levelUps[res.levelUps.length-1]); }
-  if(res.ko) koScreen();
+  if(res.ko) defeatScreen(res);
 }
 function announceAchievements(list){
   (list||[]).forEach(function(a,i){
@@ -221,12 +221,33 @@ function rankUp(rank, lv){
     '<div class="sub" style="color:var(--good)">❤️ HP fully restored · badge added</div>'+
     '<button class="btn go" onclick="closeOverlay()">Rise ▶</button></div>';
 }
-function koScreen(){
-  var o=$('#overlay'); o.className='show';
-  o.innerHTML='<div class="levelbox"><div class="big" style="color:var(--hp)">💀 KNOCKED OUT</div>'+
-    '<div class="sub">The monsters got you. You wake up at the inn with 25 HP.</div>'+
-    '<div class="sub" style="color:var(--muted)">Rest up: sleep well or visit the 🛏️ Hotel.</div>'+
+function defeatScreen(res){
+  SND.dmg(); shake(); hurtBar(); if(!reduceMotion()) sparks('💀');
+  var o=$('#overlay'); o.className='show defeat';
+  var cost=(res&&res.cost)||0;
+  o.innerHTML='<div class="levelbox defeatbox"><div class="big" style="color:var(--hp)">💀 DEFEATED</div>'+
+    '<div class="sub">The monsters dragged you down. You’re <b style="color:var(--hp)">Downed</b>.</div>'+
+    (cost>0?'<div class="sub" style="color:var(--hp)">You lost <b>'+cost+' 💰</b> in the fall.</div>':'')+
+    '<div class="sub" style="color:var(--muted)">While downed: <b>half XP</b> and <b>no coins</b> earned. Rest back to <b>full HP</b> - sleep well or heal at the 🛏️ Hotel - to <b>rise</b>.</div>'+
+    '<button class="btn go" onclick="closeOverlay();go(\'market\');shopTab=\'hotel\';render()">🛏️ Go rest</button>'+
     '<button class="btn" onclick="closeOverlay()">Get up</button></div>';
+}
+function riseScreen(cb){
+  SND.rankup(); confetti(true); if(!reduceMotion()){ setTimeout(function(){confetti(true);},400); }
+  var o=$('#overlay'); o.className='show';
+  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--orange);font-size:60px">🔥</div>'+
+    '<div class="big" style="color:var(--orange)">YOU ROSE AGAIN</div>'+
+    '<div class="sub">Back to full strength. Comeback #'+(cb&&cb.comebacks||1)+'.</div>'+
+    '<div class="sub" style="color:var(--good)">+'+((cb&&cb.xp)||0)+' XP comeback bonus</div>'+
+    '<button class="btn go" onclick="closeOverlay()">Rise ▶</button></div>';
+}
+function maybeRise(){
+  if(state.hero.downed && state.hero.hp>=RPG.maxHpOf(state)){
+    var cb=RPG.rise(state); persist(); render();
+    if(cb && cb.comeback){ riseScreen(cb); }
+    return true;
+  }
+  return false;
 }
 function chestScreen(res){
   SND.chest(); confetti();
@@ -275,7 +296,7 @@ function renderHUD(){
   var buffM=RPG.buffXpMult(state);
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
-    '<div class="avatar'+(fr?' framed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+h.avatar+'</div>'+
+    '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+h.avatar+'</div>'+
     '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
@@ -516,7 +537,9 @@ function renderToday(){
   $('#view').innerHTML=
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
-    (wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':'')+
+    (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - defeated by the monsters. Half XP and <b>no coins</b> until you rest to full HP ('+state.hero.hp+'/'+RPG.maxHpOf(state)+') and rise.'+
+      '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()">🛏️ Rest</button></span></div>'
+      :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
     (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> - your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
@@ -990,6 +1013,8 @@ function renderStats(){
     '<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>'+
     '<div class="stat"><div class="v b">'+Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60)+'</div><div class="k">focus time</div></div>'+
     '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.hero.bestStreak||0)+'d</div><div class="k">best streak</div></div>'+
+    ((state.counters.deaths||0)>0?'<div class="stat"><div class="v r">'+state.counters.deaths+'</div><div class="k">defeats</div></div>'+
+      '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.counters.comebacks||0)+'</div><div class="k">🔥 comebacks</div></div>':'')+
     '</div>'+
     '<div class="chart">'+chart+'</div>'+
     '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
@@ -1021,6 +1046,7 @@ function render(){
 }
 
 function afterAction(){
+  if(state.hero.downed && state.hero.hp>=RPG.maxHpOf(state)){ maybeRise(); }
   var fresh=RPG.checkAchievements(state);
   if(fresh.length){ persist(); renderTabs(); announceAchievements(fresh); }
 }
@@ -1276,6 +1302,8 @@ function openSettings(){
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
     '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+
     '<button class="btn" onclick="toggleMascotSetting()">'+(state.settings.mascot!==false?'🦉 Sage ON':'🦉 Sage OFF')+'</button></div>'+
+    '<div class="setrow"><button class="btn'+(state.settings.hardcore?' hcon':'')+'" onclick="toggleHardcore()" title="Defeat costs half your coins and revives you at just 10 HP">'+(state.settings.hardcore?'💀 Hardcore ON':'🛡️ Hardcore OFF')+'</button>'+
+    '<span class="hint" style="flex:1;align-self:center">Defeat bites harder: bigger coin loss, lower revival HP.</span></div>'+
     cloudSection()+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
     '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
@@ -1286,6 +1314,11 @@ function openSettings(){
   if(state.settings.friends && cloudOn()) setTimeout(loadFriendList,0);
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
+function toggleHardcore(){
+  if(!state.settings.hardcore && !confirm('Turn on Hardcore? Being defeated will cost half your coins and revive you at just 10 HP. You can turn it off any time.')) return;
+  state.settings.hardcore=!state.settings.hardcore; persist(); openSettings();
+  toast(state.settings.hardcore?'💀 <span class="h">Hardcore ON - defeat bites hard now</span>':'🛡️ <span class="p">Hardcore off</span>');
+}
 function toggleReminders(){
   if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
   if(typeof Notification==='undefined'){ toast('<span class="h">Notifications not supported in this browser</span>','dmg'); return; }

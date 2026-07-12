@@ -29,7 +29,19 @@
   var FOCUS_MIN_PAY = 5;          // sessions under 5 worked minutes pay nothing
   var FOCUS_MAX_PAY_MIN = 240;    // cap payout at 4h per session
   var MAX_HP = 100;
+  /* ---------- defeat / Last Stand ----------
+     Dropping to 0 HP knocks you DOWN, not out for good. Death must sting enough
+     to matter but never destroy honest progress (you never lose levels/XP), and
+     always has a clear way back - otherwise people stop logging slips honestly.
+     Downed = half XP and zero coin earnings until you rest back to full HP.
+     Hardcore mode (opt-in) makes the sting bigger for players who want stakes. */
+  var DEATH_COST_SOFT = 0.25;     // lose 25% of coins on defeat (a real but survivable sting)
+  var DEATH_COST_HARD = 0.5;      // hardcore: half your purse
+  var DEATH_COST_CAP = 150;       // never bill more than this in one defeat
+  var REVIVE_HP_SOFT = 25, REVIVE_HP_HARD = 10;
+  var COMEBACK_XP = 60;           // reward for rising from defeat
   var ASCEND_LEVEL = 40;          // rank S - the gate for a new season (prestige)
+  var POTION_XP_MULT = 2;         // Focus Elixir doubles XP for the rest of the day
   var POTION_XP_MULT = 2;         // Focus Elixir doubles XP for the rest of the day
   var MENACE_STEP = 0.2, MENACE_MAX = 2.5, MENACE_DECAY = 0.1; // bad-habit scaling
   /* anti-binge economy: repeat same-day buys of a reward get pricier, so a coin
@@ -114,7 +126,8 @@
     { id: 'skill_sage',  icon: '🌌', name: 'Sage',             desc: 'Take a life area to Lv.20',     cond: function (s) { return s.skills.some(function (k) { return k.level >= 20; }); } },
     { id: 'ascend_1',    icon: '♻️', name: 'Reborn',          desc: 'Ascend into a new season',      cond: function (s) { return (s.hero.ascension || 0) >= 1; } },
     { id: 'legend',      icon: '🌟', name: 'Living Legend',   desc: 'Reach rank SS',                 cond: function (s) { return s.hero.level >= 60; } },
-    { id: 'mended',      icon: '🕯️', name: 'Keeper of the Flame', desc: 'Mend a broken streak',      cond: function (s) { return (s.counters.mends || 0) >= 1; } }
+    { id: 'mended',      icon: '🕯️', name: 'Keeper of the Flame', desc: 'Mend a broken streak',      cond: function (s) { return (s.counters.mends || 0) >= 1; } },
+    { id: 'phoenix',     icon: '🔥', name: 'Phoenix',          desc: 'Rise from a defeat',            cond: function (s) { return (s.counters.comebacks || 0) >= 1; } }
   ];
 
   /* ---------- helpers ---------- */
@@ -213,13 +226,13 @@
     return {
       schema: SCHEMA,
       hero: { name: heroName || 'Hero', avatar: avatar || '🧙', title: '', level: 1, xp: 0, coins: 50, hp: MAX_HP, streak: 0, bestStreak: 0, lastActiveDay: null, badges: [], shields: 0, woundedOn: null,
-        boons: {}, ascension: 0, buffs: [], frame: '' },
+        boons: {}, ascension: 0, buffs: [], frame: '', downed: null },
       skills: defaultSkills(),
       quests: [], goals: [], habits: [], shop: [],
       journal: {}, sleep: {}, log: [],
       inventory: { potion: 0 },
       cosmetics: { frames: [] },
-      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0 },
+      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0, deaths: 0, comebacks: 0 },
       achievements: [],           // [{id,on}]
       activeFocus: null,
       redemption: null,           // {streak,on} - offer to mend a freshly broken streak
@@ -346,6 +359,8 @@
     var coins = Math.round((base.coins || 0) * coinBoonMult(state) * tier.coins);
     var res = { xp: xp, coins: coins, levelUps: [], skillUps: [], mult: mult };
     if (state.hero.woundedOn === todayKey()) { xp = Math.round(xp * 0.5); res.xp = xp; res.wounded = true; }
+    /* Downed: half XP and no coins until you rest back to full and Rise. */
+    if (state.hero.downed) { xp = Math.round(xp * 0.5); coins = 0; res.xp = xp; res.coins = 0; res.downed = true; }
     state.hero.coins += coins;
     state.hero.xp += xp;
     var cap = maxHpOf(state);
@@ -375,9 +390,32 @@
   function damage(state, hp, coins) {
     state.hero.hp = clamp(state.hero.hp - hp, 0, maxHpOf(state));
     state.hero.coins = Math.max(0, state.hero.coins - (coins || 0));
-    var ko = state.hero.hp === 0;
-    if (ko) { state.hero.hp = 25; state.hero.woundedOn = todayKey(); }
-    return { ko: ko };
+    if (state.hero.hp > 0) return { ko: false };
+    // HP hit zero. If already downed from an earlier defeat, don't re-KO - just
+    // hold at 1 HP (no second bill, no death spiral in a single bad day).
+    if (state.hero.downed) { state.hero.hp = 1; return { ko: false, alreadyDowned: true }; }
+    var hard = !!(state.settings && state.settings.hardcore);
+    var cost = Math.min(DEATH_COST_CAP, Math.round(state.hero.coins * (hard ? DEATH_COST_HARD : DEATH_COST_SOFT)));
+    state.hero.coins = Math.max(0, state.hero.coins - cost);
+    state.hero.hp = hard ? REVIVE_HP_HARD : REVIVE_HP_SOFT;
+    state.hero.woundedOn = todayKey();
+    state.hero.downed = { on: todayKey(), cost: cost };
+    state.counters.deaths = (state.counters.deaths || 0) + 1;
+    addLog(state, '💀', 'Defeated by the monsters' + (cost > 0 ? ' - lost ' + cost + ' coins' : ''), { coins: -cost });
+    return { ko: true, downed: true, cost: cost, hp: state.hero.hp, hardcore: hard };
+  }
+  /* Rise from defeat: only possible once you've rested back to full HP. Clears
+     the Downed state, heals fully and pays a comeback bonus. */
+  function rise(state) {
+    if (!state.hero.downed) return null;
+    if (state.hero.hp < maxHpOf(state)) return { notYet: true, hp: state.hero.hp, need: maxHpOf(state) };
+    state.hero.downed = null;
+    state.hero.woundedOn = null;
+    state.counters.comebacks = (state.counters.comebacks || 0) + 1;
+    var res = grant(state, { xp: COMEBACK_XP, coins: 0 }, null); // downed cleared -> full reward
+    addLog(state, '🔥', 'Rose from defeat - comeback #' + state.counters.comebacks, { xp: res.xp });
+    res.comeback = true; res.comebacks = state.counters.comebacks;
+    return res;
   }
 
   /* ---------- prestige: ascend into a new season ----------
@@ -818,7 +856,7 @@
       var hit = damage(state, dmgHp, SLIP_COINS);
       h.menace = clamp(men + MENACE_STEP, 1, MENACE_MAX);
       addLog(state, '👾', 'Monster hit: ' + h.title, { hp: -dmgHp, coins: -SLIP_COINS });
-      return { hp: -dmgHp, coins: -SLIP_COINS, ko: hit.ko, title: h.title, menace: h.menace };
+      return { hp: -dmgHp, coins: -SLIP_COINS, ko: hit.ko, downed: hit.downed, cost: hit.cost, hardcore: hit.hardcore, title: h.title, menace: h.menace };
     },
 
     cleanDays: function (h) { return cleanDaysOf(h); },
@@ -1142,7 +1180,8 @@
     if (!s.sleep) s.sleep = {};
     if (!s.journal) s.journal = {};
     if (!s.counters) s.counters = { quests: 0, focusMin: 0, purchases: 0, chests: 0 };
-    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions', 'mends'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
+    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions', 'mends', 'deaths', 'comebacks'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
+    if (!('downed' in s.hero)) s.hero.downed = null;
     /* v5: prestige, inventory, cosmetics, buffs, menace, scheduled dailies */
     if (!s.hero.boons || typeof s.hero.boons !== 'object') s.hero.boons = {};
     if (typeof s.hero.ascension !== 'number') s.hero.ascension = 0;
@@ -1171,6 +1210,7 @@
     if (typeof s.settings.board !== 'boolean') s.settings.board = false;
     if (typeof s.settings.friends !== 'boolean') s.settings.friends = false;
     if (typeof s.settings.mascot !== 'boolean') s.settings.mascot = true;
+    if (typeof s.settings.hardcore !== 'boolean') s.settings.hardcore = false;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
@@ -1216,6 +1256,11 @@
       : ['Good evening', 'Evening, hero', 'One last push today', 'The day is almost won'], now);
     var greeting = hello + ', ' + (state.hero.name || 'Hero') + '!';
 
+    // 0) defeated: the single most urgent thing
+    if (state.hero.downed) {
+      mood = 'urgent';
+      lines.push({ icon: '💀', tab: 'market', text: 'You were defeated - half XP and no coins until you rest to full HP and rise. Heal at the 🛏️ Hotel or sleep well.' });
+    }
     // 1) streak emergency: Quest of Atonement
     if (state.redemption && state.redemption.on === today) {
       mood = 'urgent';
@@ -1281,7 +1326,7 @@
     boonCount: boonCount, maxHpOf: maxHpOf, menaceOf: menaceOf, ascendReady: ascendReady, buffXpMult: buffXpMult,
     buyInfo: buyInfo, buyPrice: buyPrice, buyCount: buyCount,
     newState: newState, seed: seed, seedPreset: seedPreset, dailyReset: dailyReset, migrate: migrate,
-    grant: grant, damage: damage, ascend: ascend, usePotion: usePotion, addLog: addLog,
+    grant: grant, damage: damage, ascend: ascend, rise: rise, usePotion: usePotion, addLog: addLog,
     checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,
     insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn, focusByDay: focusByDay,
     heatmap: heatmap, bossTrophies: bossTrophies, briefing: briefing,

@@ -364,8 +364,8 @@ setTimeout(function () {
   ok(w.state.hero.woundedOn === w.RPG.todayKey(), 'KO wounds the hero');
   ok(d.querySelector('#hud').textContent.indexOf('wounded') >= 0, 'wounded status in HUD');
   w.go('today');
-  ok(d.querySelector('.woundbar') !== null, 'today tab explains the wound');
-  w.state.hero.woundedOn = null;
+  ok(d.querySelector('.downbar') !== null, 'today tab explains the defeat (downed banner)');
+  w.state.hero.woundedOn = null; w.state.hero.downed = null;
   w.go('market');
   w.usePreset('shop', 0); // streak shield preset
   var shieldItem = w.state.shop.find(function (i) { return i.special === 'shield'; });
@@ -871,6 +871,34 @@ setTimeout(function () {
   ok(typeof w.boardSkeleton === 'function', 'board skeleton helper exists');
   var sk = w.boardSkeleton(3);
   ok((sk.match(/brow skel/g) || []).length === 3 && sk.indexOf('sk-av') >= 0, 'skeleton builds N shimmer rows');
+
+  console.log('\nDefeat & Last Stand UI (v20)');
+  w.go('habits');
+  var vmon = w.state.habits.find(function (h) { return h.type === 'bad'; });
+  w.state.hero.hp = 2; w.state.hero.coins = 100; w.state.hero.downed = null;
+  w.slip(vmon.id);
+  ok(w.state.hero.downed !== null, 'a killing slip downs the hero');
+  ok(d.querySelector('#overlay.defeat') !== null && d.querySelector('#overlay').textContent.indexOf('DEFEATED') >= 0, 'defeat overlay shows');
+  w.closeOverlay();
+  w.go('today');
+  ok(d.querySelector('.downbar') !== null && d.querySelector('.downbar').textContent.indexOf('Downed') >= 0, 'downed banner with a rest CTA on Today');
+  ok(d.querySelector('.hud .avatar.downed') !== null, 'HUD avatar shows the downed look');
+  // reaching full HP rises the hero (via afterAction hook)
+  w.state.hero.hp = w.RPG.maxHpOf(w.state);
+  w.afterAction();
+  ok(w.state.hero.downed === null && (w.state.counters.comebacks || 0) >= 1, 'healing to full rises the hero');
+  ok(d.querySelector('#overlay').textContent.indexOf('ROSE') >= 0, 'comeback overlay shows');
+  w.closeOverlay();
+  // defeat + comeback tiles show in Stats
+  w.go('stats');
+  ok(d.querySelector('#view').textContent.indexOf('defeats') >= 0 && d.querySelector('#view').textContent.indexOf('comebacks') >= 0, 'Stats surfaces defeats and comebacks');
+  // hardcore toggle (confirm is stubbed truthy in this harness)
+  w.state.settings.hardcore = false;
+  w.toggleHardcore();
+  ok(w.state.settings.hardcore === true, 'hardcore toggles on');
+  w.toggleHardcore();
+  ok(w.state.settings.hardcore === false, 'hardcore toggles back off');
+  w.closeModal();
 
   console.log('\nFeel & finish motion (v18)');
   w.go('quests');
