@@ -86,7 +86,7 @@ Feeding a monster enough to drop your HP to zero no longer just slaps your wrist
 - **No death spirals:** once Downed, further slips that day can't re-kill you.
 - **Hardcore mode** (opt-in, ⚙️ Settings) for players who want stakes: defeat costs *half* your coins and revives you at just 10 HP.
 
-Stats tracks your **defeats** and **comebacks**; the whole thing mirrors the Quest of Atonement philosophy — meaningful consequences, always with a lit path home.
+Stats tracks your **defeats** and **comebacks**; the whole thing mirrors the Quest of Atonement philosophy — meaningful consequences, always with a lit path home. The rules are explained *before* they ever bite: tap the **HP bar** or the **"What if I lose?"** link on the monsters panel for a plain-language breakdown, and the onboarding tutorial mentions it too.
 
 ## Comfort & safety
 
@@ -105,7 +105,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (681 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (684 tests).
 
 ## Development
 
