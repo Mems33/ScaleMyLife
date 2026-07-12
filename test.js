@@ -328,15 +328,19 @@ ok(Array.isArray(mh.history) && mh.history[0] === '2026-07-01' && mh.bestClean =
 ok(migH.shop.find(function (i) { return i.id === 's1'; }).dmg === 0, 'migration adds dmg to shop items');
 
 
-section('KO -> wounded state');
+section('KO -> downed state');
 var sw2 = RPG.newState('W2');
 sw2.hero.hp = 10;
 var bw = A.addHabit(sw2, { title: 'x', type: 'bad' });
 A.slipHabit(sw2, bw.id);
 ok(sw2.hero.woundedOn === RPG.todayKey(), 'KO marks hero wounded today');
+ok(sw2.hero.downed && sw2.hero.downed.on === RPG.todayKey(), 'KO knocks the hero down');
 var qw = A.addQuest(sw2, { title: 'q', diff: 'normal' });
 var rw = A.completeQuest(sw2, qw.id);
-ok(rw.wounded === true && rw.xp === Math.round(25 * 0.5), 'wounded halves quest XP (' + rw.xp + ')');
+ok(rw.wounded === true && rw.downed === true && rw.xp === Math.round(Math.round(25 * 0.5) * 0.5), 'downed + wounded quarters quest XP (' + rw.xp + ')');
+ok(rw.coins === 0, 'downed earns no coins');
+// clear the downed state so the wound-heal assertions below test the wound path
+sw2.hero.downed = null;
 var hotel = A.addShopItem(sw2, { title: 'nap', price: 5, tab: 'hotel', hp: 10 });
 sw2.hero.coins = 50;
 A.buy(sw2, hotel.id);
@@ -805,6 +809,45 @@ var mig6 = RPG.newState('MIG6'); mig6.hero.streak = 7;
 delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
 mig6 = RPG.migrate(mig6);
 ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
+
+section('Defeat & Last Stand (v20)');
+// coin cost on defeat (soft default: 25% of coins, capped)
+var dd = RPG.newState('Fallen'); dd.hero.hp = 5; dd.hero.coins = 200;
+var db = A.addHabit(dd, { title: 'vice', type: 'bad' });
+var dr = A.slipHabit(dd, db.id);
+ok(dr.ko === true && dr.downed === true, 'a killing slip reports ko + downed');
+ok(dd.hero.downed && dd.counters.deaths === 1, 'hero is downed and the death is counted');
+// the slip first costs 10 coins (200 -> 190), then defeat bills 25% of what's left (round(47.5)=48)
+ok(dr.cost === 48 && dd.hero.coins === 190 - 48, 'defeat bills 25% of coins remaining after the slip');
+ok(dd.hero.hp === 25, 'soft revive leaves 25 HP');
+// downed penalty: no coins, half XP
+var dq = A.addQuest(dd, { title: 'work', diff: 'hard' });
+var dqr = A.completeQuest(dd, dq.id);
+ok(dqr.coins === 0 && dqr.downed === true, 'no coins earned while downed');
+// cannot re-KO in the same defeat (no death spiral)
+dd.hero.hp = 3;
+var dr2 = A.slipHabit(dd, db.id);
+ok(dr2.ko !== true && dd.counters.deaths === 1, 'a second slip while downed does not re-KO or re-bill');
+// rise needs full HP; below full it declines
+ok(RPG.rise(dd).notYet === true, 'cannot rise before healing to full');
+dd.hero.hp = RPG.maxHpOf(dd);
+var cb = RPG.rise(dd);
+ok(cb.comeback === true && dd.hero.downed === null && dd.counters.comebacks === 1, 'rising clears downed and counts a comeback');
+ok(cb.xp === 60 && dd.hero.hp === RPG.maxHpOf(dd), 'comeback pays 60 XP at full HP');
+ok(RPG.checkAchievements(dd).concat(dd.achievements).some(function (a) { return a.id === 'phoenix'; }) || dd.achievements.some(function(a){return a.id==='phoenix';}), 'Phoenix achievement unlocks on comeback');
+// hardcore bites harder: 50% coins, 10 HP revive
+var hc = RPG.newState('Hard'); hc.settings.hardcore = true; hc.hero.hp = 4; hc.hero.coins = 300;
+var hb = A.addHabit(hc, { title: 'vice', type: 'bad' });
+var hr = A.slipHabit(hc, hb.id);
+ok(hr.cost === 145 && hc.hero.hp === 10, 'hardcore bills ~50% of coins and revives at 10 HP');
+// migration seeds the new fields
+var dmig = RPG.newState('M'); delete dmig.hero.downed; delete dmig.counters.deaths; delete dmig.settings.hardcore;
+dmig = RPG.migrate(dmig);
+ok(dmig.hero.downed === null && dmig.counters.deaths === 0 && dmig.counters.comebacks === 0 && dmig.settings.hardcore === false, 'migration backfills downed/deaths/comebacks/hardcore');
+// briefing calls out defeat as the top line
+var dbf = RPG.newState('Brief'); dbf.hero.downed = { on: RPG.todayKey() };
+var dbfB = RPG.briefing(dbf, new Date());
+ok(dbfB.mood === 'urgent' && dbfB.lines[0].icon === '💀', 'briefing surfaces defeat as the urgent top line');
 
 section('Mascot briefing (v17)');
 var mbMorning = new Date(); mbMorning.setHours(10, 0, 0, 0); // pin to morning: evening adds a journal nudge
