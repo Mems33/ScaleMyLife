@@ -855,6 +855,16 @@ setTimeout(function () {
   ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
   w.state.settings.music = 'none';
 
+  console.log('\nFeel & finish motion (v18)');
+  w.go('quests');
+  ok(d.querySelector('#view').classList.contains('view-nav'), 'switching tabs arms the entrance cascade');
+  // an in-tab update (completing something) must NOT re-arm the cascade -> calm, no flicker
+  d.querySelector('#view').classList.remove('view-nav');
+  w.render();
+  ok(!d.querySelector('#view').classList.contains('view-nav'), 'in-tab re-render stays calm (no cascade replay)');
+  w.go('today');
+  ok(d.querySelector('#view').classList.contains('view-nav'), 'navigating again re-arms the cascade');
+
   console.log('\nSage the guide (v17)');
   w.render(); // ensure mascot exists via mood sync
   ok(d.querySelector('#mascot') !== null, 'mascot mounted outside the re-rendered view');
