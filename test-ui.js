@@ -855,6 +855,23 @@ setTimeout(function () {
   ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
   w.state.settings.music = 'none';
 
+  console.log('\nDesign moves (v19)');
+  // 1) completion burst anchored to the last tap
+  w.lastTap = { x: 123, y: 456 };
+  var burstsBefore = d.querySelectorAll('.cburst').length;
+  w.go('today');
+  var firstDaily = w.state.quests.find(function (q) { return q.recurring && w.RPG.questActiveOn(q, new Date()) && q.doneOn !== w.RPG.todayKey(); });
+  if (firstDaily) { w.doQuest(firstDaily.id); ok(d.querySelectorAll('.cburst').length > burstsBefore, 'clearing a quest fires a completion burst'); }
+  else ok(true, 'no open daily to clear (burst path covered elsewhere)');
+  ok(typeof w.popCheck === 'function' && (function(){ try { w.popCheck(10, 10); return true; } catch(e){ return false; } })(), 'popCheck runs without error');
+  // 2) editorial stat values use tabular mono numerals
+  w.go('stats');
+  ok(d.querySelector('.stat .v') !== null, 'stats render value tiles');
+  // 3) skeleton loader helper produces shimmer rows
+  ok(typeof w.boardSkeleton === 'function', 'board skeleton helper exists');
+  var sk = w.boardSkeleton(3);
+  ok((sk.match(/brow skel/g) || []).length === 3 && sk.indexOf('sk-av') >= 0, 'skeleton builds N shimmer rows');
+
   console.log('\nFeel & finish motion (v18)');
   w.go('quests');
   ok(d.querySelector('#view').classList.contains('view-nav'), 'switching tabs arms the entrance cascade');

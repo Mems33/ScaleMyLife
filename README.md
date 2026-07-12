@@ -88,11 +88,11 @@ A little animated owl lives in the corner of the screen. Tap him and he speaks a
 
 Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shader gradient** (`gradient.js`) drifts slowly behind the app — a self-contained, dependency-free take on the "mesh gradient" look, tinted live by your chosen theme. It's a progressive enhancement: if WebGL is missing it hides itself and a CSS aurora fallback takes over, it renders a single static frame under `prefers-reduced-motion`, pauses when the tab is hidden, and runs at ~30fps with a capped pixel-ratio to stay light on phones. Surfaces use translucent "machined" panels with soft inset highlights and coloured hover glows; blur is reserved for fixed overlays (never large scrolling content) to keep mobile smooth.
 
-**Feel & finish.** A single motion layer gives every tap a springy, physical press and every card quiet, theme-tinted depth with a soft lift on pointer devices. Switching tabs plays a staggered entrance cascade, while in-tab updates (clearing a quest, checking a habit) stay perfectly calm — no re-animating the whole list on every action. All motion is `transform`/`opacity` only and fully disabled under `prefers-reduced-motion`.
+**Feel & finish.** A single motion layer gives every tap a springy, physical press and every card quiet, theme-tinted depth with a soft lift on pointer devices. Switching tabs plays a staggered entrance cascade, while in-tab updates (clearing a quest, checking a habit) stay perfectly calm — no re-animating the whole list on every action. Clearing a quest or habit fires a quick check-and-particle **burst anchored to where you tapped**; the leaderboard shows **shimmer skeleton rows** while it loads instead of a spinner or placeholder text; and the Stats tiles use confident **tabular monospace numerals** with quiet uppercase labels for an editorial read. All motion is `transform`/`opacity` only and fully disabled under `prefers-reduced-motion`.
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (652 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (657 tests).
 
 ## Development
 

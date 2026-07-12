@@ -21,6 +21,18 @@ function skillLabelById(id){
 function fmtHm(min){ var h=Math.floor(min/60), m=Math.round(min%60); return (h?h+'h ':'')+m+'m'; }
 var focusMode={work:50,brk:10,custom:false};
 var navAnim=false, navTimer=null;   // cascade the view only on tab changes, not in-tab updates
+var lastTap={x:0,y:0};               // where the user last tapped - anchors the completion burst
+try{ lastTap={x:window.innerWidth/2,y:window.innerHeight*0.42}; }catch(e){}
+document.addEventListener('pointerdown',function(e){ if(e.clientX||e.clientY){ lastTap={x:e.clientX,y:e.clientY}; } },true);
+function reduceMotion(){ try{ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){ return false; } }
+function popCheck(x,y){
+  if(reduceMotion()) return;
+  var b=document.createElement('div'); b.className='cburst'; b.style.left=(x||lastTap.x)+'px'; b.style.top=(y||lastTap.y)+'px';
+  var html='<span class="cb-ring"></span><span class="cb-core">✓</span>';
+  for(var i=0;i<8;i++){ var a=(i/8)*6.2832; html+='<i style="--tx:'+(Math.cos(a)*30).toFixed(1)+'px;--ty:'+(Math.sin(a)*30).toFixed(1)+'px"></i>'; }
+  b.innerHTML=html; document.body.appendChild(b);
+  setTimeout(function(){ b.remove(); }, 720);
+}
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
@@ -865,6 +877,12 @@ function boardRowsHtml(rows, me){
   }).join('')||'<div class="empty">The board is empty - be the first hero on it.</div>';
 }
 function renderBoardInto(el, rows, me){ if(el) el.innerHTML=boardRowsHtml(rows, me); }
+function boardSkeleton(n){
+  var rows=''; n=n||5;
+  for(var i=0;i<n;i++){ rows+='<div class="brow skel" aria-hidden="true"><span class="sk sk-pos"></span><span class="sk sk-av"></span>'+
+    '<div class="grow"><span class="sk sk-name"></span><span class="sk sk-meta"></span></div><span class="sk sk-xp"></span></div>'; }
+  return '<span class="sr-only">Loading…</span>'+rows;
+}
 function leaderboardPanel(){
   if(typeof SMLCloud==='undefined'||!SMLCloud.configured()) return '';
   var friends=boardView==='friends';
@@ -880,7 +898,7 @@ function leaderboardPanel(){
         el.innerHTML = r.rows.length>1 ? boardRowsHtml(r.rows, r.me) : '<div class="empty">Just you so far - add friends by code in ⚙️ Settings.</div>';
       });
     },0);
-    return head+'<div id="boardBody"><div class="empty">Gathering your friends…</div></div></div>';
+    return head+'<div id="boardBody">'+boardSkeleton(4)+'</div></div>';
   }
   if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync - only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
     '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
@@ -891,7 +909,7 @@ function leaderboardPanel(){
       renderBoardInto(el, r.rows, r.me);
     });
   },0);
-  return head+'<div id="boardBody"><div class="empty">Summoning the heroes…</div></div></div>';
+  return head+'<div id="boardBody">'+boardSkeleton(6)+'</div></div>';
 }
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
@@ -1026,7 +1044,7 @@ function doUndo(btn){
   toast('<span class="p">↩ Restored</span>');
 }
 
-function doQuest(id){ var r=A.completeQuest(state,id); persist(); render(); fx(r); afterAction(); }
+function doQuest(id){ var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction(); }
 function delQuest(id){
   var q=state.quests.find(function(x){return x.id===id;});
   withUndo('🗑 Quest deleted'+(q?': '+esc(q.title):''), function(){ A.deleteQuest(state,id); });
@@ -1065,7 +1083,7 @@ function delGoal(id){
   var g=state.goals.find(function(x){return x.id===id;});
   withUndo('🗑 Main quest deleted'+(g?': '+esc(g.title):'')+' (steps kept as side quests)', function(){ A.deleteGoal(state,id); });
 }
-function doHabit(id){ var r=A.doHabit(state,id); persist(); render(); fx(r); afterAction(); }
+function doHabit(id){ var r=A.doHabit(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction(); }
 function slip(id){
   undoSnap=JSON.stringify(state); // misclicks happen - honesty still wins
   var r=A.slipHabit(state,id); persist(); render(); fx(r); afterAction();
