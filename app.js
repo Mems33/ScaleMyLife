@@ -301,7 +301,7 @@ function renderHUD(){
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
-      '<div class="bar hp"><i style="width:'+(h.hp/maxHp*100)+'%"></i><b>HP '+h.hp+' / '+maxHp+'</b></div>'+
+      '<div class="bar hp" role="button" tabindex="0" style="cursor:pointer" title="What happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+(h.hp/maxHp*100)+'%"></i><b>HP '+h.hp+' / '+maxHp+'</b></div>'+
     '</div></div>'+
     '<div class="side"><div class="lvl">LV.'+h.level+'</div>'+
       '<div class="coin" id="coinCounter">💰 '+h.coins+'</div>'+
@@ -604,7 +604,7 @@ function renderHabits(){
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
     '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
     '<button class="btn go" onclick="addHabit(\'good\')">+ Add</button></div>'+presetChips('good')+'</div></div>'+
-    '<div class="panel"><h3>👾 Fight - bad habits</h3>'+
+    '<div class="panel"><h3>👾 Fight - bad habits <button class="btn small right" onclick="openDefeatInfo()" title="What happens if a monster knocks you out?">💀 What if I lose?</button></h3>'+
     (bad.map(function(h){
       var days=A.cleanDays(h);
       var best=Math.max(h.bestClean||0,days);
@@ -1239,6 +1239,21 @@ function openRanks(){
     '<div class="hint">At <b>Lv.'+RPG.ASCEND_LEVEL+' (rank S)</b> you can <b>Ascend</b> into a new season: your level and rank reset to the bottom for a fresh climb, but you keep everything else - coins, quests, habits, streak, titles and cosmetics. Each ascension grants a <b>permanent boon</b> (like +8% XP forever) that stacks every season. The ✦S badge on your card shows how many times you have ascended.</div>'+
     '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="closeModal()">Got it</button></div></div>';
 }
+function openDefeatInfo(){
+  var hard=state.settings.hardcore;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2 style="color:var(--hp)">💀 WHAT HAPPENS IF YOU LOSE</h2>'+
+    '<div class="hint">Your ❤️ HP is your energy. Bad habits are monsters: every slip you log honestly hits your HP (the more you feed a monster, the harder it bites). Rest and good sleep heal it back.</div>'+
+    '<div class="flabel" style="margin-top:12px">If your HP hits zero, you are <span style="color:var(--hp)">Defeated</span> - but never wiped:</div>'+
+    '<div class="ranklist" style="margin-top:6px">'+
+      '<div class="rankrow"><span class="rk" style="color:var(--good);border-color:var(--good)">✓</span><div class="grow"><b>Your progress is safe</b><br><span class="hint" style="display:block">You never lose levels, XP or your streak. Defeat is a setback, not a reset.</span></div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">💰</span><div class="grow"><b>You drop some coins</b><br><span class="hint" style="display:block">'+(hard?'Hardcore: half':'A quarter')+' of your purse is lost in the fall (capped).</span></div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">▼</span><div class="grow"><b>You are Downed</b><br><span class="hint" style="display:block">Until you recover: <b>half XP</b> and <b>no coins</b> earned. That is the pressure to get back up.</span></div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--orange);border-color:var(--orange)">🔥</span><div class="grow"><b>Rest, then Rise</b><br><span class="hint" style="display:block">Heal back to <b>full HP</b> (sleep well or rest at the 🛏️ Hotel) to rise - full heal, a comeback XP bonus, and the Phoenix title.</span></div></div>'+
+    '</div>'+
+    '<div class="hint" style="margin-top:10px">Once you are down, more slips that day can’t knock you out again - no death spirals. Want higher stakes? Turn on <b>Hardcore</b> in ⚙️ Settings.</div>'+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="closeModal()">Got it</button></div></div>';
+}
 function openAscend(){
   if(!RPG.ascendReady(state)){ toast('<span class="h">Reach Lv.'+RPG.ASCEND_LEVEL+' (rank S) to ascend</span>','dmg'); return; }
   var m=$('#modal'); m.className='modal show';
@@ -1747,7 +1762,7 @@ function resetAll(){
 var TUT=[
   {icon:'🎮',title:'YOUR LIFE IS THE GAME',body:'ScaleMyLife turns real life into a game (an "RPG" - a role-playing game where a character grows stronger over time). Here, that character is you. Doing real things - tasks, habits, focused study - earns points. The more you do, the more your character levels up.'},
   {icon:'⭐',title:'XP, LEVELS & COINS',body:'XP means "experience points" - you earn them for every task you finish, and enough XP bumps you up a level (and a rank, from E all the way to SS). You also earn coins, which you spend on real-world treats you choose yourself - guilt-free, because you earned them.'},
-  {icon:'❤️',title:'HABITS & HP',body:'HP means "health points" - your energy bar. Good habits build streaks. Bad habits you want to quit are treated like monsters: each time you slip and log it honestly, they knock down your HP. Rest and good sleep heal it back. Being honest is what makes it work.'},
+  {icon:'❤️',title:'HABITS & HP',body:'HP means "health points" - your energy bar. Good habits build streaks. Bad habits you want to quit are treated like monsters: each time you slip and log it honestly, they knock down your HP. Rest and good sleep heal it back. If your HP ever hits zero you are Defeated - you lose some coins and earn less until you rest and rise, but you never lose your levels or progress. Being honest is what makes it all work.'},
   {icon:'⏳',title:'FOCUS & THE MARKET',body:'The Focus tab runs a "Pomodoro" timer - a simple technique of working in focused blocks (say 25 minutes) with short breaks between. You get paid in XP and coins for every minute you focus. Spend those coins in the Market on rewards you set yourself.'},
   {icon:'🏠',title:'EVERY DAY',body:'The Today tab is your home base: daily tasks, habit check-ins and quick actions in one place. Log your mood and sleep and keep your daily streak alive - each day in a row multiplies all your XP, up to 1.5 times. That is the whole loop. Ready?'}
 ];

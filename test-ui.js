@@ -899,6 +899,14 @@ setTimeout(function () {
   w.toggleHardcore();
   ok(w.state.settings.hardcore === false, 'hardcore toggles back off');
   w.closeModal();
+  // players can learn the defeat rules BEFORE dying: tappable HP bar + monsters-panel link
+  w.openDefeatInfo();
+  ok(d.querySelector('#modal').textContent.indexOf('WHAT HAPPENS IF YOU LOSE') >= 0 && d.querySelector('#modal').textContent.indexOf('Downed') >= 0, 'defeat-info modal explains the stakes up front');
+  w.closeModal();
+  w.go('habits');
+  ok(d.querySelector('#view').textContent.indexOf('What if I lose') >= 0, 'monsters panel links to the defeat explainer');
+  w.go('today');
+  ok(d.querySelector('.bar.hp[role="button"]') !== null, 'HP bar is tappable to learn about defeat');
 
   console.log('\nFeel & finish motion (v18)');
   w.go('quests');
