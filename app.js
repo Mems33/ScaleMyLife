@@ -1437,6 +1437,7 @@ function openSettings(){
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
     '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
     '<input type="file" id="importFile" accept=".json" style="display:none" onchange="importSave(this)">'+
+    (hasPreCloudBackup()?'<div class="setrow"><button class="btn" onclick="restorePreCloud()" title="Bring back the save from just before the last cloud load">↩ Restore save from before last sync</button></div>':'')+
     '<div class="setrow"><button class="btn" style="border-color:var(--hp);color:var(--hp)" onclick="resetAll()">Reset everything</button>'+
     '<button class="btn" onclick="closeModal()">Close</button></div>'+
     '<div class="hint">Data lives in this browser (localStorage). Export a JSON backup from time to time.</div></div>';
@@ -1883,6 +1884,19 @@ function resetAll(){
   if(confirm('Delete ALL progress and start over?') && confirm('Really? This cannot be undone (unless you exported a backup).')){
     localStorage.removeItem(RPG.KEY); state=null; closeModal(); boot();
   }
+}
+/* safety net: before any cloud save is adopted we stash the previous one under
+   KEY.pre-cloud. This lets the user roll back if a sync loaded the wrong side. */
+function hasPreCloudBackup(){ try{ return !!localStorage.getItem(RPG.KEY+'.pre-cloud'); }catch(e){ return false; } }
+function restorePreCloud(){
+  var raw; try{ raw=localStorage.getItem(RPG.KEY+'.pre-cloud'); }catch(e){}
+  if(!raw){ toast('<span class="h">No previous save to restore</span>','dmg'); return; }
+  var prev; try{ prev=JSON.parse(raw); }catch(e){}
+  if(!prev||!prev.hero){ toast('<span class="h">Backup is unreadable</span>','dmg'); return; }
+  if(!confirm('Restore the save from just before your last sync ('+(prev.hero.name||'Hero')+', Lv.'+(prev.hero.level||1)+')? Your current one will be swapped out.')) return;
+  localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state)); // swap so a mistaken restore is itself undoable
+  state=RPG.migrate(prev); persist(); applyTheme(); render(); openSettings();
+  toast('↩ <span class="p">Previous save restored</span>');
 }
 
 /* ---------- tutorial ---------- */
