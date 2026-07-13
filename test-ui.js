@@ -735,6 +735,12 @@ setTimeout(async function () {
   w.cloudSyncNow();
   await new Promise(function (r) { setTimeout(r, 30); });
   ok(w.state.hero.level === 20 && syncCalls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'when this device is ahead, Sync now pushes it up');
+  // restore-from-backup safety net: adopting the cloud stashed a pre-cloud copy (Lv.4)
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Restore save') >= 0, 'Settings offers a restore-previous-save option when a backup exists');
+  var beforeRestoreLevel = w.state.hero.level;
+  w.restorePreCloud();
+  ok(w.state.hero.level !== beforeRestoreLevel && w.state.hero.name === 'Device', 'restore swaps back to the pre-sync save');
   w.SMLCloud.configure({ fetch: null });
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.localStorage.removeItem(w.RPG.KEY + '.pre-cloud');
