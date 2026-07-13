@@ -887,20 +887,23 @@
       var now = o.now || Date.now();
       state.activeFocus = { work: work, brk: brk, phase: 'work', phaseEnd: now + work * 60000,
         workedMs: 0, cycles: 0, skillId: o.skillId || null, goalId: o.goalId || null,
-        label: (o.label || '').trim(), startedAt: new Date(now).toISOString() };
+        label: (o.label || '').trim(), startedAt: new Date(now).toISOString(),
+        pausedAt: null, awaitingBreak: false };
       return state.activeFocus;
     },
 
-    /* advance phases; returns {event:'break'|'work', healed} when a phase flips, else null */
+    /* advance phases; returns {event:'breakReady'|'work', healed} when something
+       flips, else null. A finished work phase does NOT auto-start the break -
+       it waits (awaitingBreak) for the user to begin it. Paused = frozen. */
     tickFocus: function (state, now) {
       var f = state.activeFocus;
       now = now || Date.now();
-      if (!f || now < f.phaseEnd) return null;
+      if (!f || f.pausedAt || f.awaitingBreak || now < f.phaseEnd) return null;
       var last = null, healed = 0, guard = 0;
-      while (f && now >= f.phaseEnd && guard++ < 500) {
+      while (f && !f.pausedAt && !f.awaitingBreak && now >= f.phaseEnd && guard++ < 500) {
         if (f.phase === 'work') {
           f.workedMs += f.work * 60000;
-          if (f.brk > 0) { f.phase = 'break'; f.phaseEnd += f.brk * 60000; last = 'break'; }
+          if (f.brk > 0) { f.awaitingBreak = true; last = 'breakReady'; } // stop; wait for the user
           else { f.cycles++; f.phaseEnd += f.work * 60000; last = 'work'; }
         } else {
           f.phase = 'work'; f.cycles++; f.phaseEnd += f.work * 60000; last = 'work';
@@ -912,13 +915,39 @@
       return last ? { event: last, healed: healed } : null;
     },
 
-    /* worked ms right now, including the running part of a work phase */
+    /* begin the break the user was offered */
+    startBreak: function (state, now) {
+      var f = state.activeFocus;
+      if (!f || !f.awaitingBreak) return null;
+      now = now || Date.now();
+      f.awaitingBreak = false; f.phase = 'break'; f.phaseEnd = now + f.brk * 60000;
+      return { started: true };
+    },
+
+    /* pause / resume the running timer without collecting (worked time freezes) */
+    pauseFocus: function (state, now) {
+      var f = state.activeFocus;
+      if (!f || f.pausedAt || f.awaitingBreak) return null;
+      f.pausedAt = now || Date.now();
+      return { paused: true };
+    },
+    resumeFocus: function (state, now) {
+      var f = state.activeFocus;
+      if (!f || !f.pausedAt) return null;
+      now = now || Date.now();
+      f.phaseEnd += (now - f.pausedAt); // push the deadline out by the paused span
+      f.pausedAt = null;
+      return { resumed: true };
+    },
+
+    /* worked ms right now, including the running part of a work phase (frozen
+       while paused; a full work phase awaiting its break is already banked) */
     focusWorkedMs: function (state, now) {
       var f = state.activeFocus;
       if (!f) return 0;
-      now = now || Date.now();
+      now = f.pausedAt || now || Date.now();
       var ms = f.workedMs;
-      if (f.phase === 'work') ms += clamp(f.work * 60000 - (f.phaseEnd - now), 0, f.work * 60000);
+      if (f.phase === 'work' && !f.awaitingBreak) ms += clamp(f.work * 60000 - (f.phaseEnd - now), 0, f.work * 60000);
       return ms;
     },
 
