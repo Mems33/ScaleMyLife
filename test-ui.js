@@ -901,7 +901,7 @@ setTimeout(function () {
   w.closeModal();
   // players can learn the defeat rules BEFORE dying: tappable HP bar + monsters-panel link
   w.openDefeatInfo();
-  ok(d.querySelector('#modal').textContent.indexOf('WHAT HAPPENS IF YOU LOSE') >= 0 && d.querySelector('#modal').textContent.indexOf('Downed') >= 0, 'defeat-info modal explains the stakes up front');
+  ok(d.querySelector('#modal').textContent.indexOf('IF YOU LOSE') >= 0 && d.querySelector('#modal').textContent.indexOf('Comeback') >= 0 && d.querySelector('#modal').textContent.indexOf('Downed') >= 0, 'defeat-info modal explains the stakes (incl. comeback) up front');
   w.closeModal();
   w.go('habits');
   ok(d.querySelector('#view').textContent.indexOf('What if I lose') >= 0, 'monsters panel links to the defeat explainer');
