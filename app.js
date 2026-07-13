@@ -343,6 +343,11 @@ function renderTabs(){
 function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; navAnim=true; render(); }
 
 function diffChip(d){ return '<span class="chip '+d+'">'+RPG.DIFF[d].label+' · '+RPG.DIFF[d].xp+'xp/'+RPG.DIFF[d].coins+'💰</span>'; }
+/* illustrated empty state: a friendly scene instead of a bare line of text */
+function emptyState(icon,title,hint,cta){
+  return '<div class="ebox"><div class="eicon" aria-hidden="true">'+icon+'</div>'+
+    '<div class="etitle">'+title+'</div><div class="ehint">'+hint+'</div>'+(cta||'')+'</div>';
+}
 function skillOptions(sel){
   return '<option value="">- skill -</option>'+state.skills.map(function(s){
     return '<option value="'+s.id+'"'+(sel===s.id?' selected':'')+'>'+s.icon+' '+esc(s.name)+'</option>';}).join('');
@@ -439,7 +444,7 @@ function renderQuests(){
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
   var goalsOpen=state.goals.filter(function(g){return !g.doneOn;});
   var goalHtml=goalsOpen.map(goalCard).join('') ||
-    '<div class="empty">A main quest is a big goal - the code exam, an essay, an internship offer. Add one below and break it into steps.</div>';
+    emptyState('🏆','No main quest yet','A main quest is a big goal - the exam, the essay, the internship. Add one below and break it into steps.');
 
   $('#view').innerHTML=bossStrip()+
     '<div class="panel" style="border-color:var(--gold);margin-bottom:14px"><h3 style="color:var(--gold)">🏆 Main quests - the big goals</h3>'+goalHtml+
@@ -449,7 +454,7 @@ function renderQuests(){
     '<div class="grid two">'+
     '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
       '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
-      (dailies.map(questRow).join('')||'<div class="empty">No dailies yet. Add a repeating task below - it resets every morning and feeds the chest.</div>')+
+      (dailies.map(questRow).join('')||emptyState('🔁','No dailies yet','Add a repeating task below - it resets every morning and feeds the daily chest.'))+
       '<div class="form"><input id="dTitle" placeholder="New daily quest…">'+
       '<div class="row"><select id="dDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="dSkill">'+skillOptions()+'</select></div>'+
@@ -461,7 +466,7 @@ function renderQuests(){
     '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span>'+
       '<button class="btn small right" onclick="exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">📅 Export due dates</button></h3>'+
       '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
-      (sides.map(questRow).join('')||'<div class="empty">No side quests. Add a one-off task below. The ⬆ button upgrades one into a main quest.</div>')+
+      (sides.map(questRow).join('')||emptyState('📌','No side quests','Add a one-off task below. The ⬆ button upgrades one into a main quest.'))+
       '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
       '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="qSkill">'+skillOptions()+'</select>'+
@@ -518,7 +523,7 @@ function bossKillScreen(r){
 function agendaPanel(){
   var items=A.agenda(state);
   var names={overdue:'⚠ OVERDUE',today:'🔥 DUE TODAY',week:'📅 THIS WEEK',later:'🌙 LATER'};
-  if(!items.length) return '<h3>📅 Deadlines</h3><div class="empty">Give side quests a due date and they line up here by priority.</div>';
+  if(!items.length) return '<h3>📅 Deadlines</h3>'+emptyState('🗓️','Nothing scheduled','Give side quests a due date and they line up here by priority.');
   var out='<h3>📅 Deadlines <span class="cnt">'+items.length+'</span></h3>', last='';
   items.forEach(function(it){
     if(it.bucket!==last){ out+='<div class="logday">'+names[it.bucket]+'</div>'; last=it.bucket; }
@@ -560,7 +565,7 @@ function renderToday(){
       }).join('')+'</div>':'')+
     '<div class="grid two">'+
     '<div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
-      (dailies.map(questRow).join('')||'<div class="empty">No dailies yet - add recurring quests in the Quests tab.</div>')+'</div>'+
+      (dailies.map(questRow).join('')||emptyState('🔁','Nothing to clear today','Add repeating quests in the Quests tab and they line up here every morning.','<button class="btn small" onclick="go(\'quests\')">📜 To the Quests tab</button>'))+'</div>'+
     '<div class="panel"><h3>🌱 Habits to check <span class="cnt">'+(habits.length-todo.length)+'/'+habits.length+'</span></h3>'+
       (habits.map(function(hb){
         var done=hb.lastDoneOn===today;
@@ -569,7 +574,7 @@ function renderToday(){
           '<div class="meta">'+habitDots(hb)+wk+'</div></div>'+
           (done?'<span style="color:var(--good);font-weight:700">✓</span>'
             :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
-      }).join('')||'<div class="empty">No habits yet - plant some in the Habits tab.</div>')+
+      }).join('')||emptyState('🌱','No habits planted','Grow good habits (and name your monsters) in the Habits tab.','<button class="btn small" onclick="go(\'habits\')">🌱 To the Habits tab</button>'))+
     '<div class="quick">'+
       '<button class="'+(j?'done':'')+'" onclick="go(\'journal\')">'+(j?'📔 Journal ✓':'📔 Log mood · +15xp')+'</button>'+
       '<button class="'+(sl?'done':'')+'" onclick="go(\'journal\')">'+(sl?'🌙 Sleep ✓':'🌙 Log sleep · heals ❤️')+'</button>'+
@@ -606,7 +611,7 @@ function renderHabits(){
           :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
         '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
         '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Add a habit you want to grow.</div>')+
+    }).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
     '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
     '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
@@ -628,7 +633,7 @@ function renderHabits(){
         '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
         '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
         '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Name your monsters. Every slip you log hits your HP - the more you feed a monster, the harder it hits back.</div>')+
+    }).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
 }
@@ -817,6 +822,16 @@ function checkFocus(){
   }
 }
 
+/* pick a storefront icon from the reward's title (fallback per shop tab) */
+var SHOP_ICONS=[[/(gaming|game(?!.*gear)|play)/i,'🎮'],[/(episode|series|netflix|show)/i,'📺'],[/(movie|cinema|film)/i,'🎬'],
+  [/(café|cafe|coffee|latte)/i,'☕'],[/(sweet|dessert|cake|chocolate|ice ?cream|treat)/i,'🍰'],[/(nap|sleep|sleep-in)/i,'😴'],
+  [/(rest|evening off|weekend|day off)/i,'🛌'],[/(walk|outside|park)/i,'🚶'],[/(shower|bath|spa|massage)/i,'🛁'],
+  [/(instagram|scroll|social|tiktok|phone)/i,'📱'],[/(junk|takeaway|fast ?food|feast|pizza|burger|cheat meal)/i,'🍔'],
+  [/(dinner|restaurant|meal out|night out|party)/i,'🎉'],[/(book|read)/i,'📚'],[/(gear|buy|save up|new )/i,'🎁'],[/(shield)/i,'🛡️'],[/(music|concert|vinyl)/i,'🎵']];
+function shopIcon(title,tab){
+  for(var i=0;i<SHOP_ICONS.length;i++){ if(SHOP_ICONS[i][0].test(title)) return SHOP_ICONS[i][1]; }
+  return tab==='hotel'?'🛏️':tab==='black'?'🕶️':'🎁';
+}
 function renderMarket(){
   var tabs=[['market','🛒 Market'],['hotel','🛏️ Hotel'],['black','🕶️ Black Market']];
   var items=state.shop.filter(function(i){return i.tab===shopTab;});
@@ -828,31 +843,30 @@ function renderMarket(){
     '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
     '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+'</div>'+
     '<div class="hint" style="margin-bottom:10px">'+blurb+'</div>'+
-    (items.map(function(i){
-      if(i.special==='shield'){
-        var canS=state.hero.coins>=i.price, haveS=(state.hero.shields||0)>=1;
-        return '<div class="item"><div class="grow"><div class="title">'+esc(i.title)+'</div>'+
-          '<div class="meta"><span style="color:var(--gold);font-family:var(--mono);font-size:12px">auto-saves one missed day · hold one at a time</span></div>'+
-          (canS||haveS?'':'<div class="afford">'+(i.price-state.hero.coins)+' 💰 to go</div>')+'</div>'+
-          '<span class="price">💰 '+i.price+'</span>'+
-          '<button class="btn buy" '+((canS&&!haveS)?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':'Buy')+'</button>'+
-          '<button class="btn ghost" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button></div>';
-      }
-      var info=A.buyInfo(state,i);
-      var can=state.hero.coins>=info.price && !info.capped;
-      var gap=info.capped?'':(can?'':'<div class="afford">'+(info.price-state.hero.coins)+' 💰 to go</div>');
+    (items.length?'<div class="shopgrid">'+items.map(function(i){
+      var isShield=i.special==='shield';
+      var info=isShield?{price:i.price,capped:false,limit:0,count:0,surge:0}:A.buyInfo(state,i);
+      var haveS=isShield&&(state.hero.shields||0)>=1;
+      var can=state.hero.coins>=info.price && !info.capped && !haveS;
       var effects=[];
-      if(i.hp) effects.push('<span style="color:var(--good);font-family:var(--mono);font-size:12px">restores +'+i.hp+' ❤️</span>');
-      if(i.dmg) effects.push('<span style="color:var(--hp);font-family:var(--mono);font-size:12px">costs −'+i.dmg+' ❤️</span>');
-      if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap reached':info.count+'/'+info.limit+' today')+'</span>');
-      else if(info.count>0 && info.surge>0) effects.push('<span class="cap">bought '+info.count+'× today</span>');
+      if(isShield) effects.push('<span style="color:var(--gold)">auto-saves one missed day</span>');
+      if(i.hp) effects.push('<span style="color:var(--good)">+'+i.hp+' ❤️</span>');
+      if(i.dmg) effects.push('<span style="color:var(--hp)">−'+i.dmg+' ❤️</span>');
+      if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap hit':info.count+'/'+info.limit+' today')+'</span>');
+      else if(info.count>0 && info.surge>0) effects.push('<span class="cap">'+info.count+'× today</span>');
       var surgedPrice=info.price>i.price;
-      return '<div class="item"><div class="grow"><div class="title">'+esc(i.title)+'</div>'+
-        (effects.length?'<div class="meta">'+effects.join('')+'</div>':'')+gap+'</div>'+
-        '<span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
-        '<button class="btn buy" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(info.capped?'Capped':'Buy')+'</button>'+
-        '<button class="btn ghost" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button></div>';
-    }).join('')||'<div class="empty">Empty shelf. Stock rewards you actually want - that is what makes coins matter.</div>')+
+      // affordability meter: how close your purse is to this price
+      var aff=can||haveS?'':'<div class="affbar" title="'+(info.price-state.hero.coins)+' 💰 to go"><i style="width:'+Math.min(100,Math.round(state.hero.coins/info.price*100))+'%"></i></div>';
+      return '<div class="scard'+(can?'':' locked')+(shopTab==='black'?' shady':'')+'">'+
+        '<button class="del" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button>'+
+        '<div class="sicon" aria-hidden="true">'+shopIcon(i.title,i.tab)+'</div>'+
+        '<div class="stitle">'+esc(i.title)+'</div>'+
+        (effects.length?'<div class="sfx">'+effects.join(' · ')+'</div>':'')+
+        aff+
+        '<div class="srow"><span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
+        '<button class="btn buy small" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':info.capped?'Capped':'Buy')+'</button></div></div>';
+    }).join('')+'</div>'
+    :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
     '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
     '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
     (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
