@@ -113,7 +113,7 @@ setTimeout(function () {
   w.buy(buyable.id);
   ok(w.state.hero.coins === cB - buyable.price, 'purchase deducted coins');
   w.shopTab = 'hotel'; w.render();
-  ok(d.querySelector('#view').textContent.indexOf('restores') >= 0, 'hotel items show HP restore');
+  ok(/\+\d+ ❤️/.test(d.querySelector('#view').textContent), 'hotel items show HP restore');
   w.state.hero.hp = 40;
   var nap = w.state.shop.find(function (i) { return i.tab === 'hotel'; });
   w.buy(nap.id);
@@ -337,7 +337,7 @@ setTimeout(function () {
   w.buy(sinItem.id);
   ok(w.state.hero.hp === hpB2 - sinItem.dmg, 'black purchase damaged HP in UI flow');
   if (d.querySelector('#overlay.show')) w.closeOverlay();
-  ok(d.querySelector('#view').textContent.indexOf('costs −') >= 0, 'HP cost displayed on item');
+  ok(/−\d+ ❤️/.test(d.querySelector('#view').textContent), 'HP cost displayed on item');
   w.shopTab = 'market'; w.render();
 
   console.log('\nAgenda & promote');
@@ -884,6 +884,21 @@ setTimeout(function () {
   ok(typeof w.boardSkeleton === 'function', 'board skeleton helper exists');
   var sk = w.boardSkeleton(3);
   ok((sk.match(/brow skel/g) || []).length === 3 && sk.indexOf('sk-av') >= 0, 'skeleton builds N shimmer rows');
+
+  console.log('\nMarket storefront + empty states (v24)');
+  w.go('market');
+  ok(d.querySelector('.shopgrid') !== null, 'market renders as a card grid');
+  ok(d.querySelector('.scard .sicon') !== null, 'reward cards carry an auto-derived icon');
+  ok(w.shopIcon('Gaming: 1 hour','market') === '🎮' && w.shopIcon('Café treat','market') === '☕' && w.shopIcon('mystery thing','hotel') === '🛏️', 'shop icons match title keywords with tab fallback');
+  var keepCoins = w.state.hero.coins;
+  w.state.hero.coins = 1; w.render();
+  ok(d.querySelector('.scard.locked') !== null && d.querySelector('.affbar') !== null, 'unaffordable cards lock and show the affordability meter');
+  w.state.hero.coins = keepCoins; w.render();
+  var eh = w.emptyState('🏆','Nothing here','Do the thing.','<button class="btn">Go</button>');
+  ok(eh.indexOf('ebox') >= 0 && eh.indexOf('etitle') >= 0 && eh.indexOf('Go') >= 0, 'emptyState builds icon + title + hint + CTA');
+  var keepShop = w.state.shop; w.state.shop = []; w.render();
+  ok(d.querySelector('.ebox') !== null, 'empty shelf shows the illustrated state');
+  w.state.shop = keepShop; w.render();
 
   console.log('\nDefeat & Last Stand UI (v20)');
   w.go('habits');

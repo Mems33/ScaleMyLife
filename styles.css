@@ -863,3 +863,35 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
   #smlmusic iframe{width:180px;height:101px}
 }
 @media (prefers-reduced-motion: reduce){ .bellwrap{animation:none} }
+
+/* ==========================================================================
+   v24: Market storefront cards + illustrated empty states
+   ========================================================================== */
+.shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:4px}
+.scard{position:relative;display:flex;flex-direction:column;gap:6px;padding:14px 12px 12px;border:1px solid var(--line);
+  border-radius:12px;background:var(--panel2);text-align:center;box-shadow:inset 0 1px 0 var(--hair)}
+.scard .sicon{font-size:34px;line-height:1;margin-top:2px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.35))}
+.scard .stitle{font-weight:700;font-size:13.5px;line-height:1.3;min-height:2.6em;display:flex;align-items:center;justify-content:center}
+.scard .sfx{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.scard .srow{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.scard .price{font-family:var(--mono);font-weight:700;color:var(--gold);font-size:13px;white-space:nowrap}
+.scard .price.surged{color:var(--orange)} .scard .price.surged small{color:var(--muted);text-decoration:line-through;font-weight:400}
+.scard .del{position:absolute;top:4px;right:6px;background:none;border:none;color:var(--muted);font-size:11px;opacity:0;padding:4px;border-radius:5px}
+.scard:hover .del,.scard .del:focus-visible{opacity:1}
+.scard.locked .sicon{filter:grayscale(.55) opacity(.7) drop-shadow(0 4px 8px rgba(0,0,0,.35))}
+.scard.shady{background:linear-gradient(180deg,color-mix(in srgb,var(--hp) 7%,var(--panel2)),var(--panel2))}
+.affbar{height:5px;border-radius:3px;background:var(--bg);overflow:hidden;border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.affbar i{display:block;height:100%;background:linear-gradient(90deg,color-mix(in srgb,var(--gold) 60%,#000),var(--gold));border-radius:3px}
+@media (hover:hover){
+  .scard{transition:transform .2s var(--ease),border-color .18s var(--ease),box-shadow .22s var(--ease)}
+  .scard:not(.locked):hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--gold) 40%,var(--line));box-shadow:var(--elev1)}
+}
+@media (pointer:coarse){ .scard .del{opacity:.6} }
+
+.ebox{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:22px 14px;
+  border:1px dashed color-mix(in srgb,var(--line) 85%,var(--muted));border-radius:12px;margin:4px 0 10px}
+.ebox .eicon{font-size:38px;line-height:1;opacity:.85;filter:grayscale(.15);animation:mbob 3.4s ease-in-out infinite}
+.ebox .etitle{font-weight:800;font-size:14.5px;margin-top:4px}
+.ebox .ehint{font-size:13px;color:var(--muted);max-width:340px;line-height:1.5}
+.ebox .btn{margin-top:8px}
+@media (prefers-reduced-motion: reduce){ .ebox .eicon{animation:none} }

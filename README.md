@@ -33,7 +33,7 @@ Work earns coins, coins buy pleasures. A solid day (dailies + habits + 2 focus b
 - **Daily quests** — recurring, reset at midnight. Clear them all → **daily chest**. You can also **schedule** a daily to specific weekdays (e.g. gym Mon/Wed/Fri); off-day dailies sit dormant and don't block the chest.
 - **Side quests** — one-offs. Give them due dates to line up in **Deadlines**, export them as an **.ics calendar** file, or promote one (⬆) into a main quest.
 - **Focus (pomodoro)** — 25/5, 50/10, 90/15, free run or a custom split, looping until you stop. You're paid for every worked minute (1.2xp + 0.6💰/min). When a work phase ends a **warm alarm rings and the break waits** — you start it when you're ready (or skip straight back to work). **Pause/Resume** freezes the timer without collecting, and the **browser tab title shows the live countdown** ("🎯 24:13 · Focus", "🔔 Break time!"). Breaks show a campfire and heal +3 ❤️. Optional study music plays in a **docked mini-player that keeps going as you move between tabs** (Lofi/synthwave/any YouTube URL; pop-out fallback). Attach a session to a **main quest** and the worked time is banked on that goal's card.
-- **Market with anti-binge pricing** — buy rewards you actually want. To stop a coin hoard from funding unlimited indulgence, repeat purchases of the same reward *the same day* cost progressively more (a soft cap you can toggle off), and Black-Market rule-breaking is hard-capped at 2×/day. Rest/Hotel items never surge. Every reward's per-day cap is editable.
+- **Market with anti-binge pricing** — a proper storefront: rewards render as cards with an icon matched to what they are (🎮 📺 ☕ 🛁…), locked items grey out with an **affordability meter** showing how close your purse is, and surged prices show the original struck through. Buy rewards you actually want. To stop a coin hoard from funding unlimited indulgence, repeat purchases of the same reward *the same day* cost progressively more (a soft cap you can toggle off), and Black-Market rule-breaking is hard-capped at 2×/day. Rest/Hotel items never surge. Every reward's per-day cap is editable.
 - **Habits** — good habits pay xp/coins, refresh daily, and show a 7-day chain; set a weekly frequency (gym 3×/week) for week progress + a streak of weeks met.
 - **Deadlines, Defeat, Streak Shield, Weekly boss** — hit 0 ❤️ and you're Defeated (see **Defeat & the Last Stand** below); a Streak Shield auto-saves one missed day; name THE task of the week and slay it within 7 days for 500xp / 250💰.
 
@@ -105,7 +105,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (699 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (705 tests).
 
 ## Development
 
