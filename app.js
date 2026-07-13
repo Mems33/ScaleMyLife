@@ -537,8 +537,8 @@ function renderToday(){
   $('#view').innerHTML=
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
-    (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - defeated by the monsters. Half XP and <b>no coins</b> until you rest to full HP ('+state.hero.hp+'/'+RPG.maxHpOf(state)+') and rise.'+
-      '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()">🛏️ Rest</button></span></div>'
+    (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
+      '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
       :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
     (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> - your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
@@ -1242,16 +1242,15 @@ function openRanks(){
 function openDefeatInfo(){
   var hard=state.settings.hardcore;
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box"><h2 style="color:var(--hp)">💀 WHAT HAPPENS IF YOU LOSE</h2>'+
-    '<div class="hint">Your ❤️ HP is your energy. Bad habits are monsters: every slip you log honestly hits your HP (the more you feed a monster, the harder it bites). Rest and good sleep heal it back.</div>'+
-    '<div class="flabel" style="margin-top:12px">If your HP hits zero, you are <span style="color:var(--hp)">Defeated</span> - but never wiped:</div>'+
-    '<div class="ranklist" style="margin-top:6px">'+
-      '<div class="rankrow"><span class="rk" style="color:var(--good);border-color:var(--good)">✓</span><div class="grow"><b>Your progress is safe</b><br><span class="hint" style="display:block">You never lose levels, XP or your streak. Defeat is a setback, not a reset.</span></div></div>'+
-      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">💰</span><div class="grow"><b>You drop some coins</b><br><span class="hint" style="display:block">'+(hard?'Hardcore: half':'A quarter')+' of your purse is lost in the fall (capped).</span></div></div>'+
-      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">▼</span><div class="grow"><b>You are Downed</b><br><span class="hint" style="display:block">Until you recover: <b>half XP</b> and <b>no coins</b> earned. That is the pressure to get back up.</span></div></div>'+
-      '<div class="rankrow"><span class="rk" style="color:var(--orange);border-color:var(--orange)">🔥</span><div class="grow"><b>Rest, then Rise</b><br><span class="hint" style="display:block">Heal back to <b>full HP</b> (sleep well or rest at the 🛏️ Hotel) to rise - full heal, a comeback XP bonus, and the Phoenix title.</span></div></div>'+
+  m.innerHTML='<div class="box"><h2 style="color:var(--hp)">💀 IF YOU LOSE</h2>'+
+    '<div class="hint">Slips from bad habits chip your ❤️ HP. If it hits zero you’re <b style="color:var(--hp)">Defeated</b> - but never wiped:</div>'+
+    '<div class="ranklist" style="margin-top:8px">'+
+      '<div class="rankrow"><span class="rk" style="color:var(--good);border-color:var(--good)">✓</span><div class="grow"><b>Progress stays.</b> No lost levels, XP or streak.</div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">💰</span><div class="grow">You drop <b>'+(hard?'half':'a quarter')+' of your coins.</b></div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">▼</span><div class="grow"><b>Downed:</b> half XP and no coins earned.</div></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--orange);border-color:var(--orange)">🔥</span><div class="grow"><b>Comeback:</b> heal back to full HP (sleep or the 🛏️ Hotel) and you instantly <b>Rise</b> - fully healed, a bonus, and earning normally again.</div></div>'+
     '</div>'+
-    '<div class="hint" style="margin-top:10px">Once you are down, more slips that day can’t knock you out again - no death spirals. Want higher stakes? Turn on <b>Hardcore</b> in ⚙️ Settings.</div>'+
+    '<div class="hint" style="margin-top:8px">Once down, more slips can’t re-KO you that day. Want it harder? <b>Hardcore</b> in ⚙️ Settings.</div>'+
     '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="closeModal()">Got it</button></div></div>';
 }
 function openAscend(){
