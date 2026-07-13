@@ -156,15 +156,21 @@ ok(run && run.work === 25 && run.brk === 5 && run.phase === 'work', 'pomodoro st
 ok(A.startFocus(sf, { work: 25, brk: 5 }) === null, 'cannot start a second session');
 ok(A.tickFocus(sf, t0 + 10 * 60000) === null, 'no phase flip mid-work');
 var e1 = A.tickFocus(sf, t0 + 25 * 60000 + 5);
-ok(e1 && e1.event === 'break', 'work phase flips to break');
-ok(sf.activeFocus.workedMs === 25 * 60000, '25 min banked as worked');
+ok(e1 && e1.event === 'breakReady', 'work phase finishes and offers the break (does not auto-start it)');
+ok(sf.activeFocus.awaitingBreak === true && sf.activeFocus.workedMs === 25 * 60000, '25 min banked, break pending');
+ok(A.tickFocus(sf, t0 + 40 * 60000) === null, 'timer frozen while the break is pending');
+ok(Math.floor(A.focusWorkedMs(sf, t0 + 40 * 60000) / 60000) === 25, 'worked time holds at 25 while awaiting break');
 sf.hero.hp = 50;
-var e2 = A.tickFocus(sf, t0 + 30 * 60000 + 10);
+var tb = t0 + 26 * 60000;                    // user starts the break a minute later
+A.startBreak(sf, tb);
+ok(sf.activeFocus.phase === 'break' && !sf.activeFocus.awaitingBreak, 'starting the break enters the break phase');
+var e2 = A.tickFocus(sf, tb + 5 * 60000 + 10);
 ok(e2 && e2.event === 'work' && e2.healed === 3, 'break end heals +3 HP and resumes work');
 ok(sf.activeFocus.cycles === 1, 'cycle counted');
-var worked = A.focusWorkedMs(sf, t0 + 30 * 60000 + 12 * 60000);
+var wStart = tb + 5 * 60000 + 10;            // work phase 2 began here
+var worked = A.focusWorkedMs(sf, wStart + 12 * 60000);
 ok(Math.floor(worked / 60000) === 37, 'worked time includes partial current work phase (37 min)');
-var r = A.stopFocus(sf, t0 + 30 * 60000 + 12 * 60000);
+var r = A.stopFocus(sf, wStart + 12 * 60000);
 ok(r && r.minutes === 37 && r.xp === Math.round(37 * 1.2 * RPG.streakMult(sf.hero.streak)) || r.minutes === 37, 'stop pays for 37 worked minutes');
 ok(r.coins === Math.round(37 * 0.6), 'coins = worked min x 0.6');
 ok(sf.counters.focusMin === 37, 'focus minutes counted');
@@ -196,10 +202,23 @@ ok(rCap.minutes === 240, 'payout capped at 240 min (' + rCap.minutes + ')');
 var t4 = Date.now();
 A.startFocus(sf, { work: 25, brk: 5, now: t4 });
 A.tickFocus(sf, t4 + 25 * 60000 + 5);
+A.startBreak(sf, t4 + 25 * 60000 + 10);
 ok(sf.activeFocus.phase === 'break', 'in break');
 var sk = A.skipBreak(sf, t4 + 26 * 60000);
 ok(sk && sk.event === 'work' && sf.activeFocus.phase === 'work', 'skip break resumes work');
 A.stopFocus(sf, t4 + 40 * 60000);
+
+// pause / resume freezes the timer and worked time without collecting
+var tp = Date.now();
+A.startFocus(sf, { work: 50, brk: 0, now: tp });
+A.pauseFocus(sf, tp + 10 * 60000);        // 10 min in, pause
+ok(sf.activeFocus.pausedAt, 'pause records the moment');
+ok(A.tickFocus(sf, tp + 3 * 3600000) === null, 'a paused timer never advances');
+ok(Math.floor(A.focusWorkedMs(sf, tp + 3 * 3600000) / 60000) === 10, 'worked time frozen at 10 min while paused');
+A.resumeFocus(sf, tp + 3 * 3600000);      // resume 3h later
+ok(!sf.activeFocus.pausedAt, 'resume clears the pause');
+ok(Math.floor(A.focusWorkedMs(sf, tp + 3 * 3600000 + 5 * 60000) / 60000) === 15, 'after resuming, worked time counts again from where it froze');
+A.stopFocus(sf, tp + 3 * 3600000 + 5 * 60000);
 
 section('Rank helpers & ICS export');
 ok(RPG.nextRank(1).code === 'D' && RPG.nextRank(1).min === 5, 'next rank from level 1 is D at 5');

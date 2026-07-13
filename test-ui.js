@@ -178,15 +178,27 @@ setTimeout(function () {
   ok(!!w.state.activeFocus && w.state.activeFocus.work === 25 && w.state.activeFocus.brk === 5, 'pomodoro started from UI');
   ok(d.querySelector('#countdown') !== null, 'countdown visible');
   ok(d.querySelector('.phase.work') !== null, 'work phase banner shown');
-  // fast-forward into break
+  // fast-forward: work phase ends and OFFERS the break (manual start)
   w.state.activeFocus.phaseEnd = Date.now() - 10;
   w.checkFocus();
-  ok(w.state.activeFocus.phase === 'break', 'ticker flipped to break');
+  ok(w.state.activeFocus.awaitingBreak === true, 'work phase offers the break instead of auto-starting');
+  ok(d.querySelector('#view').textContent.indexOf('TIME FOR A BREAK') >= 0, 'break-ready screen shown');
+  w.startBreakBtn();
+  ok(w.state.activeFocus.phase === 'break', 'starting the break enters the break phase');
   ok(d.querySelector('.campfire') !== null, 'campfire break animation renders');
   ok(d.querySelector('.phase.brk') !== null, 'break banner shown');
+  // pause / resume without collecting
+  w.pauseFocusUI();
+  ok(w.state.activeFocus.pausedAt && d.querySelector('#view').textContent.indexOf('PAUSED') >= 0, 'pause freezes the session');
+  ok(w.document.title.indexOf('Paused') >= 0, 'tab title shows paused');
+  w.resumeFocusUI();
+  ok(!w.state.activeFocus.pausedAt, 'resume clears the pause');
   // skip break back to work
   w.skipBreak();
   ok(w.state.activeFocus.phase === 'work', 'skip break returns to work');
+  // dynamic tab title during focus
+  w.updateDocTitle();
+  ok(w.document.title.indexOf('Focus') >= 0 || w.document.title.indexOf('Break') >= 0, 'tab title reflects the focus timer');
   // add more worked time and stop & collect
   w.state.activeFocus.workedMs = 40 * 60000;
   w.stopFocus();
@@ -849,10 +861,11 @@ setTimeout(function () {
   ok(d.querySelector('#fWork') !== null && d.querySelector('#fBrk') !== null, 'Custom reveals the work/break inputs');
   ok(d.querySelector('#view').textContent.indexOf('at least 5 minutes') >= 0, 'focus notes the 5-minute minimum');
   w.focusMode = { work: 50, brk: 10, custom: false };
-  // study music always offers a pop-out fallback
+  // study music: in-view note always offers a pop-out; the real player is docked & persistent
   w.state.settings.music = 'lofi';
-  var mus = w.ytEmbed();
-  ok(mus.indexOf('openMusicWin') >= 0, 'music embed always offers the pop-out player');
+  var mus = w.focusMusicNote();
+  ok(mus.indexOf('openMusicWin') >= 0, 'music note always offers the pop-out player');
+  ok(typeof w.syncMusicPlayer === 'function' && typeof w.hideMusicPlayer === 'function', 'persistent docked player helpers exist');
   w.state.settings.music = 'none';
 
   console.log('\nDesign moves (v19)');

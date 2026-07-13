@@ -131,7 +131,14 @@ var SND={
   chest:function(){ [660,880,1174,1568].forEach(function(f,i){ beep(f,i*.09,.14,'triangle',.08); }); buzz([15,25,15,25,40]); },
   ach:function(){ [784,988,1175].forEach(function(f,i){ beep(f,i*.1,.18,'square',.06); }); buzz([10,30,25]); },
   brk:function(){ [880,660,523].forEach(function(f,i){ beep(f,i*.15,.3,'triangle',.07); }); buzz(25); },
-  resume:function(){ [523,784,1047].forEach(function(f,i){ beep(f,i*.1,.18,'triangle',.08); }); buzz(25); }
+  resume:function(){ [523,784,1047].forEach(function(f,i){ beep(f,i*.1,.18,'triangle',.08); }); buzz(25); },
+  /* a warm, coherent little ringtone for "break time" - two rising bell arpeggios */
+  alarm:function(){
+    var seq=[523,659,784,1047,784,1047];
+    seq.forEach(function(f,i){ beep(f,i*.16,.28,'triangle',.09); });
+    seq.forEach(function(f,i){ beep(f,1.15+i*.16,.28,'triangle',.09); });
+    buzz([120,80,120,80,200]);
+  }
 };
 
 /* ---------- visual fx ---------- */
@@ -639,16 +646,34 @@ function musicId(){
   }
   return (MUSIC[m]||{}).id||null;
 }
-function ytEmbed(){
+/* A small in-view note; the actual player is docked and persistent (below) so it
+   keeps playing across tab switches instead of reloading and erroring. */
+function focusMusicNote(){
   var id=musicId();
   if(!id) return '';
-  var popout='<button class="btn small" style="margin-top:8px" onclick="openMusicWin()">🎵 Pop-out player (always works)</button>';
   if(location.protocol==='file:'){
-    return '<div class="hint" style="margin-top:14px">YouTube blocks embedded players on local files - use the pop-out player, which keeps playing while you focus:</div>'+popout;
+    return '<div class="hint" style="margin-top:12px">Music can’t embed on local files - use the pop-out, which keeps playing while you focus:</div>'+
+      '<button class="btn small" style="margin-top:6px" onclick="openMusicWin()">🎵 Pop-out player</button>';
   }
-  return '<div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe></div>'+
-    '<div class="hint">Player not loading, or you want it to keep playing between work and break phases? Use the pop-out - it survives the timer and tab switches.</div>'+popout;
+  return '<div class="hint" style="margin-top:12px">🎧 '+esc((MUSIC[state.settings.music]||{}).name||'Music')+' is playing in the docked player (keeps going across tabs). <button class="btn small" onclick="openMusicWin()">Pop out</button></div>';
 }
+/* Persistent docked music player: created once, only rebuilt when the track
+   changes, and living OUTSIDE #view so navigating tabs never reloads it. */
+function syncMusicPlayer(){
+  var id=state&&state.activeFocus?musicId():null;
+  var want=!!(id && location.protocol!=='file:');
+  var host=document.getElementById('smlmusic');
+  if(!want){ if(host) host.remove(); return; }
+  if(!host){ host=document.createElement('div'); host.id='smlmusic'; document.body.appendChild(host); }
+  if(host.getAttribute('data-id')!==id){
+    host.setAttribute('data-id',id);
+    host.innerHTML='<div class="mp-bar"><span class="mp-t">🎧 '+esc((MUSIC[state.settings.music]||{}).name||'Music')+'</span>'+
+      '<button aria-label="Pop out" title="Pop out to its own window" onclick="openMusicWin()">⧉</button>'+
+      '<button aria-label="Hide music" title="Hide" onclick="hideMusicPlayer()">✕</button></div>'+
+      '<iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe>';
+  }
+}
+function hideMusicPlayer(){ var h=document.getElementById('smlmusic'); if(h) h.remove(); }
 function openMusicWin(){
   var id=musicId(); if(!id) return;
   window.open('https://www.youtube.com/watch?v='+id,'smlMusic','width=520,height=340,menubar=no,toolbar=no,location=no');
@@ -670,28 +695,46 @@ function sessionStats(f){
 function renderFocus(){
   var f=state.activeFocus;
   if(f){
+    var paused=!!f.pausedAt;
+    var refNow=f.pausedAt||Date.now();
     var phaseTotal=(f.phase==='work'?f.work:f.brk)*60000;
-    var left=f.phaseEnd-Date.now(), pct=RPG.clamp(1-left/phaseTotal,0,1);
-    if(f.phase==='work'){
-      $('#view').innerHTML='<div class="panel focusbox">'+
-        '<div class="phase work">🎯 WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):'')+'</div>'+
+    var left=f.phaseEnd-refNow, pct=RPG.clamp(1-left/phaseTotal,0,1);
+    if(f.awaitingBreak){
+      // work phase finished - wait for the user to start the break (the alarm already rang)
+      $('#view').innerHTML='<div class="panel focusbox break">'+
+        '<div class="phase brk" style="color:var(--orange)">🔔 TIME FOR A BREAK</div>'+
+        '<div class="focusring brk" style="width:150px;height:150px"><div class="bellwrap">🔔</div></div>'+
+        '<div class="doing">Nice work. Take '+f.brk+' minutes - the break timer starts when you’re ready.</div>'+
+        sessionStats(f)+
+        '<div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'+
+        '<button class="btn wide go" style="max-width:260px" onclick="startBreakBtn()">▶ Start '+f.brk+'-min break</button></div>'+
+        '<div style="margin-top:8px;display:flex;gap:8px;justify-content:center">'+
+        '<button class="btn" onclick="skipToWork()">Skip break, keep working</button>'+
+        '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
+    } else if(f.phase==='work'){
+      $('#view').innerHTML='<div class="panel focusbox'+(paused?' paused':'')+'">'+
+        '<div class="phase work">'+(paused?'⏸ PAUSED':'🎯 WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):''))+'</div>'+
         '<div class="focusring">'+ringSvg(pct,'work')+'<div class="time" id="countdown">'+fmtTime(left)+'</div></div>'+
         (f.label?'<div class="doing">Fighting: <b>'+esc(f.label)+'</b></div>':'')+
         sessionStats(f)+
-        '<div class="hint" style="margin-top:8px">Runs '+f.work+' min work'+(f.brk>0?' / '+f.brk+' min break':'')+' on repeat until you stop. You are paid for every worked minute.</div>'+
-        ytEmbed()+
-        '<button class="btn buy" style="margin-top:14px" onclick="stopFocus()">⏹ Stop & collect</button></div>';
+        '<div class="hint" style="margin-top:8px">'+(paused?'Timer paused - your worked time is safe. Resume when you’re back.':'Runs '+f.work+' min work'+(f.brk>0?' / '+f.brk+' min break':'')+'. You are paid for every worked minute.')+'</div>'+
+        focusMusicNote()+
+        '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'+
+        (paused?'<button class="btn wide go" style="max-width:220px" onclick="resumeFocusUI()">▶ Resume</button>'
+               :'<button class="btn" onclick="pauseFocusUI()">⏸ Pause</button>')+
+        '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     } else {
-      $('#view').innerHTML='<div class="panel focusbox break">'+
-        '<div class="phase brk">🏕 BREAK - REST AT THE CAMPFIRE</div>'+
+      $('#view').innerHTML='<div class="panel focusbox break'+(paused?' paused':'')+'">'+
+        '<div class="phase brk">'+(paused?'⏸ PAUSED':'🏕 BREAK - REST AT THE CAMPFIRE')+'</div>'+
         '<div class="campfire"><span class="tent">⛺</span><span class="fire">🔥</span><span class="moon">🌙</span>'+
         '<span class="z">💤</span><span class="z z2">💤</span><span class="sp">✨</span><span class="sp sp2">✨</span><span class="sp sp3">✨</span></div>'+
         '<div class="focusring brk" style="width:130px;height:130px">'+ringSvg(pct,'brk',130)+'<div class="time" id="countdown" style="font-size:20px">'+fmtTime(left)+'</div></div>'+
         '<div class="doing">Stretch. Water. Look out the window. <b style="color:var(--good)">+3 ❤️</b> when the break ends.</div>'+
-        sessionStats(f)+ytEmbed()+
-        '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center">'+
+        sessionStats(f)+focusMusicNote()+
+        '<div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">'+
+        (paused?'<button class="btn go" onclick="resumeFocusUI()">▶ Resume</button>':'<button class="btn" onclick="pauseFocusUI()">⏸ Pause</button>')+
         '<button class="btn" onclick="skipBreak()">⏭ Skip break</button>'+
-        '<button class="btn buy" onclick="stopFocus()">⏹ Stop & collect</button></div></div>';
+        '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     }
   } else {
     var modes=[[25,5,'25 / 5'],[50,10,'50 / 10'],[90,15,'90 / 15'],[50,0,'FREE RUN']];
@@ -727,7 +770,7 @@ function startFocus(){
   persist(); render();
 }
 function stopFocus(){
-  var r=A.stopFocus(state); persist(); render();
+  var r=A.stopFocus(state); persist(); render(); updateDocTitle();
   if(!r) return;
   if(r.tooShort){ toast('<span class="h">Stopped at '+r.minutes+' min - under 5, nothing earned</span>','dmg'); return; }
   SND.chest(); confetti(); fx(r);
@@ -735,18 +778,32 @@ function stopFocus(){
   if(r.goalTitle) toast('🏆 <span class="c">'+fmtHm(r.minutes)+' banked on “'+esc(r.goalTitle)+'”</span>');
   afterAction();
 }
+function startBreakBtn(){ A.startBreak(state); persist(); render(); SND.resume(); }
+function skipToWork(){ if(state.activeFocus){ state.activeFocus.awaitingBreak=false; state.activeFocus.cycles++; state.activeFocus.phaseEnd=Date.now()+state.activeFocus.work*60000; persist(); render(); SND.resume(); toast('🎯 <span class="p">Straight back to work</span>'); } }
+function pauseFocusUI(){ A.pauseFocus(state); persist(); render(); updateDocTitle(); }
+function resumeFocusUI(){ A.resumeFocus(state); persist(); render(); updateDocTitle(); SND.resume(); }
 function skipBreak(){ var ev=A.skipBreak(state); persist(); render(); if(ev&&ev.healed) toast('<span class="hg">+'+ev.healed+' HP - rested</span>'); SND.resume(); }
+function updateDocTitle(){
+  var base='ScaleMyLife', f=state&&state.activeFocus;
+  if(!f){ if(document.title!==base) document.title=base; return; }
+  var t;
+  if(f.awaitingBreak) t='🔔 Break time!';
+  else if(f.pausedAt) t='⏸ Paused · Focus';
+  else { var left=Math.max(0,f.phaseEnd-Date.now()); t=(f.phase==='work'?'🎯 ':'🏕 ')+fmtTime(left)+(f.phase==='work'?' · Focus':' · Break'); }
+  if(document.title!==t) document.title=t;
+}
 function checkFocus(){
   var f=state.activeFocus;
-  if(!f) return;
+  if(!f){ updateDocTitle(); return; }
   var ev=A.tickFocus(state);
   if(ev){
-    persist(); render();
-    if(ev.event==='break'){ SND.brk(); toast('🏕 <span style="color:var(--orange)">Break time - rest at the campfire</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🏕 Break time - stretch, water, look far away.'); }
+    persist(); render(); updateDocTitle();
+    if(ev.event==='breakReady'){ SND.alarm(); toast('🔔 <span style="color:var(--orange)">Time for a break - start it when you’re ready</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🔔 Break time - tap to start your break.'); }
     else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('🎯 <span class="p">Back to work - cycle '+state.activeFocus.cycles+'</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🎯 Break over - back to the quest.'); }
     return;
   }
-  if(tab==='focus'){
+  updateDocTitle();
+  if(tab==='focus' && !f.pausedAt && !f.awaitingBreak){
     var left=f.phaseEnd-Date.now();
     var cd=$('#countdown'); if(cd) cd.textContent=fmtTime(left);
     var ring=$('#ringFg');
@@ -1039,6 +1096,7 @@ function render(){
   renderHUD(); renderSkills(); renderTabs();
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
   if(typeof mascotMoodSync==='function') mascotMoodSync();
+  if(typeof syncMusicPlayer==='function') syncMusicPlayer();
   // Satisfying cascade only when the tab actually changes; in-tab updates stay calm (no flicker).
   var vw=$('#view');
   if(vw && navAnim){ vw.classList.add('view-nav'); clearTimeout(navTimer); navTimer=setTimeout(function(){ vw.classList.remove('view-nav'); }, 520); }
