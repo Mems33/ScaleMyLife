@@ -146,6 +146,27 @@
     return r;
   }
   function streakMult(streak) { return 1 + Math.min(0.5, Math.max(0, streak - 1) * 0.05); }
+
+  /* A monotonic "how far along is this save" key, compared lexicographically.
+     Everything in it only ever grows (ascension seasons, level, xp, and
+     lifetime counters), so it survives clock skew and tells us which of two
+     saves is genuinely more advanced - the safe one to keep when syncing. */
+  function progressKey(s) {
+    if (!s || !s.hero) return [-1];
+    var c = s.counters || {};
+    var lifetime = (c.quests || 0) + (c.focusMin || 0) + (c.chests || 0) + (c.bosses || 0) +
+      (c.purchases || 0) + (c.ascensions || 0) + (c.mends || 0) + (c.deaths || 0) + (c.comebacks || 0);
+    return [ (s.hero.ascension || 0), (s.hero.level || 1), (s.hero.xp || 0), lifetime ];
+  }
+  /* >0 if a is more advanced, <0 if b is, 0 if tied */
+  function compareProgress(a, b) {
+    var ka = progressKey(a), kb = progressKey(b);
+    for (var i = 0; i < Math.max(ka.length, kb.length); i++) {
+      var d = (ka[i] || 0) - (kb[i] || 0);
+      if (d) return d > 0 ? 1 : -1;
+    }
+    return 0;
+  }
   function nextRank(level) {
     for (var i = 0; i < RANKS.length; i++) if (RANKS[i].min > level) return RANKS[i];
     return null;
@@ -1351,6 +1372,7 @@
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
     uid: uid, todayKey: todayKey, clamp: clamp,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
+    progressKey: progressKey, compareProgress: compareProgress,
     skillTier: skillTier, boonById: boonById, frameById: frameById, pathById: pathById,
     boonCount: boonCount, maxHpOf: maxHpOf, menaceOf: menaceOf, ascendReady: ascendReady, buffXpMult: buffXpMult,
     buyInfo: buyInfo, buyPrice: buyPrice, buyCount: buyCount,

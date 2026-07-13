@@ -35,7 +35,7 @@ var dom = new JSDOM(html, {
   }
 });
 
-setTimeout(function () {
+setTimeout(async function () {
   var w = dom.window, d = w.document;
 
   console.log('\nBoot & onboarding');
@@ -199,9 +199,18 @@ setTimeout(function () {
   // dynamic tab title during focus
   w.updateDocTitle();
   ok(w.document.title.indexOf('Focus') >= 0 || w.document.title.indexOf('Break') >= 0, 'tab title reflects the focus timer');
+  // focus-active pill shows on other tabs, hides on the focus tab
+  w.go('today');
+  ok(d.querySelector('#focuspill') !== null, 'a focus-active pill shows on other tabs while a session runs');
+  w.go('focus');
+  ok(d.querySelector('#focuspill') === null, 'the pill hides on the Focus tab itself');
+  w.go('market');
+  ok(d.querySelector('#focuspill') !== null && typeof w.unlockAudio === 'function', 'pill persists across tabs; audio-unlock helper present');
+  w.go('focus');
   // add more worked time and stop & collect
   w.state.activeFocus.workedMs = 40 * 60000;
   w.stopFocus();
+  ok(d.querySelector('#focuspill') === null, 'the pill disappears once the session ends');
   ok(w.state.activeFocus === null, 'stop clears session');
   ok(w.state.counters.focusMin >= 40, 'worked minutes credited on stop (' + w.state.counters.focusMin + ')');
   if (d.querySelector('#overlay.show')) w.closeOverlay();
@@ -701,6 +710,35 @@ setTimeout(function () {
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.render();
   ok(d.querySelector('.cloudchip') === null, 'chip hides when signed out');
+
+  console.log('\nTwo-way sync safety (v25)');
+  // reproduce the reported bug: this device is behind, the cloud is more advanced
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'x', refresh_token: 'y', user: { id: 'sync-1', email: 's@b.c' } }));
+  var savedState = w.state;
+  w.state = w.RPG.migrate(w.RPG.newState('Device')); w.state.hero.level = 4; w.persist();   // clean device save, Lv.4
+  var cloudSave = w.RPG.migrate(w.RPG.newState('CloudHero')); cloudSave.hero.level = 9; cloudSave.updatedAt = new Date().toISOString();
+  var syncCalls = [];
+  w.SMLCloud.configure({ fetch: function (url, opts) {
+    syncCalls.push((opts && opts.method || 'GET') + ' ' + url);
+    var body = '{}';
+    if (url.indexOf('saves?select=data') >= 0) body = JSON.stringify([{ data: cloudSave, updated_at: cloudSave.updatedAt }]);
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(body); } });
+  } });
+  w.cloudSyncNow();
+  await new Promise(function (r) { setTimeout(r, 30); });
+  ok(w.state.hero.level === 9 && w.state.hero.name === 'CloudHero', '"Sync now" adopts the more-advanced cloud save instead of overwriting it');
+  ok(syncCalls.some(function (c) { return c.indexOf('GET') === 0 && c.indexOf('saves?select=data') >= 0; }), 'Sync now pulls before deciding (no blind push)');
+  ok(w.localStorage.getItem(w.RPG.KEY + '.pre-cloud') !== null, 'a safety copy of the pre-sync save is kept');
+  // now local is ahead -> Sync now should push, not clobber local
+  w.state.hero.level = 20; w.persist();
+  syncCalls = [];
+  w.cloudSyncNow();
+  await new Promise(function (r) { setTimeout(r, 30); });
+  ok(w.state.hero.level === 20 && syncCalls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'when this device is ahead, Sync now pushes it up');
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.localStorage.removeItem(w.RPG.KEY + '.pre-cloud');
+  w.state = savedState; w.render();   // restore the main test state
 
   console.log('\nQuest of Atonement + journal archive (v9)');
   // simulate a broken streak offered for redemption today
