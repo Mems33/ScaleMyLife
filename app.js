@@ -23,7 +23,7 @@ var focusMode={work:50,brk:10,custom:false};
 var navAnim=false, navTimer=null;   // cascade the view only on tab changes, not in-tab updates
 var lastTap={x:0,y:0};               // where the user last tapped - anchors the completion burst
 try{ lastTap={x:window.innerWidth/2,y:window.innerHeight*0.42}; }catch(e){}
-document.addEventListener('pointerdown',function(e){ if(e.clientX||e.clientY){ lastTap={x:e.clientX,y:e.clientY}; } },true);
+document.addEventListener('pointerdown',function(e){ if(e.clientX||e.clientY){ lastTap={x:e.clientX,y:e.clientY}; } if(typeof unlockAudio==='function') unlockAudio(); },true);
 function reduceMotion(){ try{ return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){ return false; } }
 function popCheck(x,y){
   if(reduceMotion()) return;
@@ -85,25 +85,44 @@ function boardProfile(){
   return { name:state.hero.name, avatar:state.hero.avatar, level:state.hero.level, rank:r.code,
     weekXp:w.tot.xp, bestStreak:state.hero.bestStreak||0, ascension:state.hero.ascension||0 };
 }
+function pushCloudNow(){
+  if(!cloudOn()) return;
+  SMLCloud.push(state);                                                     // full save (private)
+  if(state.settings.board || state.settings.friends)                        // tiny profile snapshot
+    SMLCloud.pushBoard(boardProfile(), !!state.settings.board);             // on_board only if opted in
+}
 function scheduleCloudPush(){
   if(!cloudOn()) return;
   clearTimeout(cloudPushTimer);
-  cloudPushTimer=setTimeout(function(){
-    SMLCloud.push(state);                                                   // full save (private)
-    if(state.settings.board || state.settings.friends)                      // tiny profile snapshot
-      SMLCloud.pushBoard(boardProfile(), !!state.settings.board);           // on_board only if opted in
-  }, 4000); // debounced; fails soft offline
+  cloudPushTimer=setTimeout(pushCloudNow, 4000); // debounced; fails soft offline
 }
-/* on boot with a live session: adopt the cloud save if it is newer than this device */
+/* flush any pending push immediately (on tab hide / close) so a quick exit
+   after levelling up doesn't strand the newest save on this device only */
+function flushCloudPush(){
+  if(!cloudOn()) return;
+  if(cloudPushTimer){ clearTimeout(cloudPushTimer); cloudPushTimer=null; }
+  try{ pushCloudNow(); }catch(e){}
+}
+/* which save is more advanced: +1 cloud, -1 local, 0 tie (then break by time) */
+function cloudAheadOf(cloudData){
+  var p=RPG.compareProgress(cloudData, state);
+  if(p!==0) return p;
+  return (cloudData.updatedAt||'') > (state.updatedAt||'') ? 1 : ((cloudData.updatedAt||'') < (state.updatedAt||'') ? -1 : 0);
+}
+function adoptCloud(data){
+  localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state)); // safety copy
+  state=RPG.migrate(data);
+  RPG.save(state, localStorage);   // persist locally WITHOUT re-pushing (it's already the cloud's)
+  applyTheme(); render();
+}
+/* on boot with a live session: adopt the cloud save if it is more advanced */
 function cloudBootPull(){
   if(!cloudOn() || !state) return;
   SMLCloud.pull().then(function(r){
     if(!r.ok || !r.exists || !r.data || !r.data.hero) return;
-    if((r.data.updatedAt||'') > (state.updatedAt||'')){
-      localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state)); // safety copy
-      state=RPG.migrate(r.data);
-      persist(); applyTheme(); render();
-      toast('☁️ <span class="p">Newer cloud save loaded</span>');
+    if(cloudAheadOf(r.data) > 0){
+      adoptCloud(r.data);
+      toast('☁️ <span class="p">Loaded your more recent cloud save</span>');
     }
   });
 }
@@ -115,12 +134,16 @@ function beep(freq,when,dur,type,vol){
   if(!state || !state.settings.sound) return;
   try{
     AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended' && AC.resume) AC.resume();  // browsers suspend it when idle/backgrounded - wake it so alarms actually ring
     var t=AC.currentTime+when, o=AC.createOscillator(), g=AC.createGain();
     o.type=type||'square'; o.frequency.value=freq;
     g.gain.setValueAtTime(vol||0.06,t); g.gain.exponentialRampToValueAtTime(0.001,t+dur);
     o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+dur);
   }catch(e){}
 }
+/* keep the audio context unlocked: browsers only allow it to run after a user
+   gesture, and re-suspend it when idle. Resume on any tap so the break alarm rings. */
+function unlockAudio(){ try{ if(!AC && (window.AudioContext||window.webkitAudioContext)) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC&&AC.state==='suspended'&&AC.resume) AC.resume(); }catch(e){} }
 function buzz(p){ try{ if(state&&state.settings.sound&&navigator.vibrate) navigator.vibrate(p); }catch(e){} }
 var SND={
   earn:function(){ beep(660,0,.09); beep(880,.09,.12); buzz(12); },
@@ -797,9 +820,28 @@ function updateDocTitle(){
   else { var left=Math.max(0,f.phaseEnd-Date.now()); t=(f.phase==='work'?'🎯 ':'🏕 ')+fmtTime(left)+(f.phase==='work'?' · Focus':' · Break'); }
   if(document.title!==t) document.title=t;
 }
+/* a small persistent badge, on every tab, so you never lose track of a running
+   focus session (tapping it jumps back to Focus). Hidden while on the Focus tab. */
+function syncFocusPill(){
+  var host=document.getElementById('focuspill');
+  var f=state&&state.activeFocus;
+  if(!f || tab==='focus'){ if(host) host.remove(); return; }
+  if(!host){
+    host=document.createElement('button'); host.id='focuspill';
+    host.setAttribute('aria-label','Focus session running - go to Focus');
+    host.onclick=function(){ go('focus'); };
+    document.body.appendChild(host);
+  }
+  var txt, cls;
+  if(f.awaitingBreak){ txt='🔔 Break time!'; cls='fp-brk'; }
+  else if(f.pausedAt){ txt='⏸ Focus paused'; cls='fp-pause'; }
+  else { var left=Math.max(0,f.phaseEnd-Date.now()); txt=(f.phase==='work'?'🎯 ':'🏕 ')+fmtTime(left); cls=f.phase==='work'?'fp-work':'fp-brk'; }
+  host.className=cls;
+  host.innerHTML='<span class="fp-dot"></span>'+txt;
+}
 function checkFocus(){
   var f=state.activeFocus;
-  if(!f){ updateDocTitle(); return; }
+  if(!f){ updateDocTitle(); syncFocusPill(); return; }
   var ev=A.tickFocus(state);
   if(ev){
     persist(); render(); updateDocTitle();
@@ -807,7 +849,7 @@ function checkFocus(){
     else { SND.resume(); if(ev.healed>0){ fx({hp:ev.healed}); } toast('🎯 <span class="p">Back to work - cycle '+state.activeFocus.cycles+'</span>'); if(document.hidden&&state.settings.reminders) notifyNow('ScaleMyLife','🎯 Break over - back to the quest.'); }
     return;
   }
-  updateDocTitle();
+  updateDocTitle(); syncFocusPill();
   if(tab==='focus' && !f.pausedAt && !f.awaitingBreak){
     var left=f.phaseEnd-Date.now();
     var cd=$('#countdown'); if(cd) cd.textContent=fmtTime(left);
@@ -1111,6 +1153,7 @@ function render(){
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
   if(typeof mascotMoodSync==='function') mascotMoodSync();
   if(typeof syncMusicPlayer==='function') syncMusicPlayer();
+  if(typeof syncFocusPill==='function') syncFocusPill();
   // Satisfying cascade only when the tab actually changes; in-tab updates stay calm (no flicker).
   var vw=$('#view');
   if(vw && navAnim){ vw.classList.add('view-nav'); clearTimeout(navTimer); navTimer=setTimeout(function(){ vw.classList.remove('view-nav'); }, 520); }
@@ -1579,17 +1622,21 @@ function cloudSignIn(){
     afterCloudSignIn();
   });
 }
-/* after an explicit sign-in: if a cloud save exists, let the user pick a side */
+/* after an explicit sign-in: if a cloud save exists, let the user pick a side.
+   The recommended (progress-preserving) choice is spelled out so nobody
+   accidentally overwrites a more-advanced save. */
 function afterCloudSignIn(){
   SMLCloud.pull().then(function(r){
     if(r.ok && r.exists && r.data && r.data.hero){
       var lv=r.data.hero.level||1, when=(r.data.updatedAt||'').slice(0,10);
-      if(confirm('A cloud save exists ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', saved '+when:'')+').\n\nOK - load the cloud save on this device\nCancel - keep this device’s progress and overwrite the cloud')){
-        localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state));
-        state=RPG.migrate(r.data);
-      }
+      var cloudAhead=cloudAheadOf(r.data)>0;
+      var msg=cloudAhead
+        ? 'Your cloud account has a MORE ADVANCED save ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', '+when:'')+') than this device.\n\nOK = load it here (recommended)\nCancel = keep THIS device and overwrite the cloud'
+        : 'Your cloud account has a save ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', '+when:'')+'), but THIS device looks further along.\n\nOK = load the cloud save anyway\nCancel = keep this device (recommended) - it will update the cloud';
+      if(confirm(msg)){ adoptCloud(r.data); openSettings(); toast('☁️ <span class="p">Cloud save loaded</span>'); SND.ach(); return; }
+      // keeping this device: push it up so the cloud matches
     }
-    persist(); applyTheme(); render(); openSettings();
+    persist(); pushCloudNow(); applyTheme(); render(); openSettings();
     toast('☁️ <span class="p">Cloud sync is on</span>'); SND.ach();
   });
 }
@@ -1606,9 +1653,18 @@ function toggleBoard(){
     });
   }
 }
+/* Two-way sync: pull first, adopt the cloud save if it's more advanced,
+   otherwise push this device up. (Previously this only pushed - which could
+   overwrite a newer save made on another device.) */
 function cloudSyncNow(){
   cloudMsg('Syncing…');
-  SMLCloud.push(state).then(function(r){ openSettings(); cloudMsg(r.ok?'Synced ✓':(r.error||'Sync failed'), !r.ok); });
+  SMLCloud.pull().then(function(r){
+    if(r.ok && r.exists && r.data && r.data.hero && cloudAheadOf(r.data)>0){
+      adoptCloud(r.data); openSettings();
+      cloudMsg('Loaded your more advanced cloud save ✓'); SND.ach(); return;
+    }
+    SMLCloud.push(state).then(function(p){ openSettings(); cloudMsg(p.ok?'This device is now saved to the cloud ✓':(p.error||'Sync failed'), !p.ok); });
+  });
 }
 function toggleFriends(){
   if(!cloudOn()){ toast('<span class="h">Sign in first to use friends</span>','dmg'); return; }
@@ -1952,10 +2008,12 @@ setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.toda
 setInterval(function(){ if(state) checkReminders(); }, 30000);
 var lastVisPull=0;
 document.addEventListener('visibilitychange', function(){
-  if(document.hidden || !state) return;
+  if(!state) return;
+  if(document.hidden){ flushCloudPush(); return; }   // leaving -> save the latest right away
   var now=Date.now();
   if(now-lastVisPull>5*60000){ lastVisPull=now; cloudBootPull(); }
 });
+window.addEventListener('pagehide', function(){ if(state) flushCloudPush(); });
 
 boot();
 if('serviceWorker' in navigator && location.protocol==='https:'){

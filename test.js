@@ -829,6 +829,17 @@ delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
 mig6 = RPG.migrate(mig6);
 ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
 
+section('Sync progress key (v25)');
+var pkA = RPG.newState('A'); pkA.hero.level = 5; pkA.hero.xp = 40;
+var pkB = RPG.newState('B'); pkB.hero.level = 4; pkB.hero.xp = 900;
+ok(RPG.compareProgress(pkA, pkB) > 0, 'a higher level is more advanced regardless of xp');
+var pkC = RPG.newState('C'); pkC.hero.level = 5; pkC.hero.xp = 40; pkC.counters.quests = 3;
+ok(RPG.compareProgress(pkC, pkA) > 0, 'same level+xp: more lifetime activity wins');
+var pkD = RPG.newState('D'); pkD.hero.level = 1; pkD.hero.ascension = 1;
+var pkE = RPG.newState('E'); pkE.hero.level = 50;
+ok(RPG.compareProgress(pkD, pkE) > 0, 'an ascended (season 1, Lv.1) save beats an un-ascended Lv.50');
+ok(RPG.compareProgress(pkA, RPG.newState('A2')) > 0 && RPG.compareProgress(pkA, pkA) === 0, 'tie is zero, ahead is positive');
+
 section('Defeat & Last Stand (v20)');
 // coin cost on defeat (soft default: 25% of coins, capped)
 var dd = RPG.newState('Fallen'); dd.hero.hp = 5; dd.hero.coins = 200;

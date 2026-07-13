@@ -14,7 +14,7 @@ Saves live in the browser (localStorage) and — once you sign in — in your cl
 
 ## Cloud sync (Supabase)
 
-One `saves` row per user, protected by Postgres Row Level Security, talked to by a hand-rolled zero-dependency REST client (`cloud.js` — no SDK, no build step). Email/password accounts; the app pushes your save a few seconds after every change and pulls the newer side on boot. Signing in on a second device asks which save wins. Sessions and the API key live outside the save file, so exports never leak credentials.
+One `saves` row per user, protected by Postgres Row Level Security, talked to by a hand-rolled zero-dependency REST client (`cloud.js` — no SDK, no build step). Email/password accounts; the app pushes your save a few seconds after every change and pulls the newer side on boot. Signing in on a second device asks which save wins - and "which save wins" is decided by which one is genuinely **more advanced** (a monotonic progress key: seasons, then level, then XP, then lifetime activity), not merely which was touched last, so a stale device can never silently overwrite your real progress. "Sync now" is a true two-way sync (it pulls and adopts a more-advanced cloud save before pushing), and a pending save is flushed the moment you background or close the tab. Sessions and the API key live outside the save file, so exports never leak credentials.
 
 Setting it up for your own deployment:
 1. In the Supabase dashboard run `supabase/schema.sql` (SQL Editor → paste → Run).
@@ -105,7 +105,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (705 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (717 tests).
 
 ## Development
 
