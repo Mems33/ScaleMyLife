@@ -829,6 +829,11 @@ delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
 mig6 = RPG.migrate(mig6);
 ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
 
+section('Life-area names (v26)');
+var laNames = RPG.newState('LA').skills.map(function (s) { return s.name; });
+ok(laNames.indexOf('Work') >= 0 && laNames.indexOf('Money') >= 0 && laNames.indexOf('Craft') < 0 && laNames.indexOf('Wealth') < 0, 'default life areas use Work + Money (not Craft/Wealth)');
+ok(RPG.pathById('creative').skills.indexOf('Money') >= 0 && RPG.pathById('creative').skills.indexOf('Craft') >= 0, 'creative path keeps Craft but renames Wealth -> Money');
+
 section('Rest days & date handling (v26)');
 // todayKey is a stable local calendar key and orders correctly across days
 var dToday = new Date(); var dYest = new Date(); dYest.setDate(dYest.getDate() - 1);

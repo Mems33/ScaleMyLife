@@ -942,6 +942,20 @@ setTimeout(async function () {
   var sk = w.boardSkeleton(3);
   ok((sk.match(/brow skel/g) || []).length === 3 && sk.indexOf('sk-av') >= 0, 'skeleton builds N shimmer rows');
 
+  console.log('\nUX batch (v26): first-quest moment + delete heads-up');
+  // fresh hero clears their first quest -> celebratory explainer, shown once
+  var freshUX = w.state; w.state = w.RPG.seedPreset(w.RPG.newState('Newbie'), 'general'); w.state.counters.quests = 0; delete w.state.firstQuestCelebrated; w.render();
+  var firstQ = w.state.quests[0];
+  w.doQuest(firstQ.id);
+  await new Promise(function (r) { setTimeout(r, 700); });
+  ok(w.state.firstQuestCelebrated === true, 'first cleared quest marks the celebration as seen');
+  ok(d.querySelector('#overlay').textContent.indexOf('FIRST QUEST') >= 0, 'first-quest explainer overlay appears');
+  w.closeOverlay();
+  var q2 = w.state.quests.find(function (q) { return !q.doneOn; });
+  if (q2) { w.doQuest(q2.id); await new Promise(function (r) { setTimeout(r, 50); }); ok(!d.querySelector('#overlay').classList.contains('show'), 'the explainer does not fire again on later quests'); }
+  else ok(true, 'no second quest to test replay (covered by the flag)');
+  w.state = freshUX; w.render();
+
   console.log('\nMarket storefront + empty states (v24)');
   w.go('market');
   ok(d.querySelector('.shopgrid') !== null, 'market renders as a card grid');
