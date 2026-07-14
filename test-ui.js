@@ -735,6 +735,19 @@ setTimeout(async function () {
   w.cloudSyncNow();
   await new Promise(function (r) { setTimeout(r, 30); });
   ok(w.state.hero.level === 20 && syncCalls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'when this device is ahead, Sync now pushes it up');
+  // a failed push surfaces a retry chip in the HUD
+  w.cloudSyncErr = true; w.renderHUD();
+  ok(d.querySelector('.cloudchip.err') !== null && d.querySelector('.cloudchip.err').textContent.indexOf('retry') >= 0, 'a failed sync shows a retry chip');
+  w.cloudSyncErr = false; w.renderHUD();
+  ok(d.querySelector('.cloudchip.err') === null, 'the retry chip clears once sync recovers');
+  // rest-day picker protects the streak
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Rest days') >= 0 && d.querySelector('.modal .daysrow') !== null, 'Settings has a rest-day picker');
+  w.toggleRestDay(0);
+  ok(w.state.settings.restDays.indexOf(0) >= 0, 'toggling a rest day stores it');
+  w.toggleRestDay(0);
+  ok(w.state.settings.restDays.indexOf(0) < 0, 'toggling again clears it');
+  w.closeModal();
   // restore-from-backup safety net: adopting the cloud stashed a pre-cloud copy (Lv.4)
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('Restore save') >= 0, 'Settings offers a restore-previous-save option when a backup exists');

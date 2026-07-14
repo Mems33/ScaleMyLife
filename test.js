@@ -829,6 +829,31 @@ delete mig6.hero.bestStreak; delete mig6.redemption; delete mig6.counters.mends;
 mig6 = RPG.migrate(mig6);
 ok(mig6.hero.bestStreak === 7 && mig6.redemption === null && mig6.counters.mends === 0, 'migration backfills bestStreak from the live streak + redemption slot + mends counter');
 
+section('Rest days & date handling (v26)');
+// todayKey is a stable local calendar key and orders correctly across days
+var dToday = new Date(); var dYest = new Date(); dYest.setDate(dYest.getDate() - 1);
+ok(RPG.todayKey(dToday) === RPG.todayKey(new Date()) && RPG.todayKey(dYest) < RPG.todayKey(dToday), 'todayKey is stable within a day and increases across days');
+// a scheduled rest day protects the streak when that day is the one you missed
+var rd = RPG.newState('Rester');
+rd.hero.streak = 6;
+var yest = new Date(); yest.setDate(yest.getDate() - 1);
+rd.hero.lastActiveDay = RPG.todayKey(new Date(Date.now() - 2 * 86400000)); // last active = day before yesterday
+rd.settings.restDays = [yest.getDay()];                                    // yesterday is a rest day
+rd.lastSeenDay = '2000-01-01';
+RPG.dailyReset(rd);
+ok(rd.hero.streak === 6, 'a scheduled rest day protects the streak (no break)');
+// without the rest day, the same gap breaks it
+var rd2 = RPG.newState('NoRest');
+rd2.hero.streak = 6;
+rd2.hero.lastActiveDay = RPG.todayKey(new Date(Date.now() - 2 * 86400000));
+rd2.settings.restDays = [];
+rd2.lastSeenDay = '2000-01-01';
+RPG.dailyReset(rd2);
+ok(rd2.hero.streak === 0 && rd2.redemption, 'the same gap with no rest day breaks the streak (and offers atonement)');
+// migration seeds restDays
+var rdm = RPG.newState('M'); delete rdm.settings.restDays;
+ok(Array.isArray(RPG.migrate(rdm).settings.restDays), 'migration seeds an empty restDays list');
+
 section('Sync progress key (v25)');
 var pkA = RPG.newState('A'); pkA.hero.level = 5; pkA.hero.xp = 40;
 var pkB = RPG.newState('B'); pkB.hero.level = 4; pkB.hero.xp = 900;

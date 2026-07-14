@@ -85,9 +85,13 @@ function boardProfile(){
   return { name:state.hero.name, avatar:state.hero.avatar, level:state.hero.level, rank:r.code,
     weekXp:w.tot.xp, bestStreak:state.hero.bestStreak||0, ascension:state.hero.ascension||0 };
 }
+var cloudSyncErr=false;   // true when the last push failed - surfaced as a retry chip
 function pushCloudNow(){
   if(!cloudOn()) return;
-  SMLCloud.push(state);                                                     // full save (private)
+  SMLCloud.push(state).then(function(r){                                    // full save (private)
+    var was=cloudSyncErr; cloudSyncErr=!(r&&r.ok);
+    if(cloudSyncErr!==was && state) renderHUD();
+  });
   if(state.settings.board || state.settings.friends)                        // tiny profile snapshot
     SMLCloud.pushBoard(boardProfile(), !!state.settings.board);             // on_board only if opted in
 }
@@ -112,6 +116,9 @@ function cloudAheadOf(cloudData){
 function adoptCloud(data){
   localStorage.setItem(RPG.KEY+'.pre-cloud', JSON.stringify(state)); // safety copy
   state=RPG.migrate(data);
+  // don't resume a focus timer that was running on another device and is long over
+  if(state.activeFocus && !state.activeFocus.pausedAt && (Date.now()-state.activeFocus.phaseEnd) > 6*3600000) state.activeFocus=null;
+  cloudSyncErr=false;
   RPG.save(state, localStorage);   // persist locally WITHOUT re-pushing (it's already the cloud's)
   applyTheme(); render();
 }
@@ -322,7 +329,11 @@ function renderHUD(){
   var fr=h.frame?RPG.frameById(h.frame):null;
   var avStyle=fr?('border-color:'+fr.color+';box-shadow:0 0 12px '+fr.glow+', inset 0 0 8px '+fr.glow):('border-color:'+col);
   var asc=(h.ascension||0)>0?'<span class="season" title="Season '+h.ascension+' - you have ascended '+h.ascension+' time'+(h.ascension===1?'':'s')+'">✦ S'+h.ascension+'</span>':'';
-  var cloudChip=cloudOn()?'<span class="cloudchip on" title="Cloud sync on - tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>':'';
+  var cloudChip=cloudOn()
+    ?(cloudSyncErr
+      ?'<span class="cloudchip err" title="Last cloud save failed - tap to retry" onclick="event.stopPropagation();cloudSyncNow()">⚠ retry</span>'
+      :'<span class="cloudchip on" title="Cloud sync on - tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>')
+    :'';
   var buffM=RPG.buffXpMult(state);
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
@@ -1433,6 +1444,10 @@ function openSettings(){
     '<button class="btn" onclick="toggleMascotSetting()">'+(state.settings.mascot!==false?'🦉 Sage ON':'🦉 Sage OFF')+'</button></div>'+
     '<div class="setrow"><button class="btn'+(state.settings.hardcore?' hcon':'')+'" onclick="toggleHardcore()" title="Defeat costs half your coins and revives you at just 10 HP">'+(state.settings.hardcore?'💀 Hardcore ON':'🛡️ Hardcore OFF')+'</button>'+
     '<span class="hint" style="flex:1;align-self:center">Defeat bites harder: bigger coin loss, lower revival HP.</span></div>'+
+    '<div class="flabel">🌙 Rest days <span class="hint" style="display:inline">- your streak won’t break on these</span></div>'+
+    '<div class="daysrow">'+MON_ORDER.map(function(i){
+      return '<button type="button" class="dow'+((state.settings.restDays||[]).indexOf(i)>=0?' on':'')+'" onclick="toggleRestDay('+i+')">'+DOW[i][0]+'</button>';
+    }).join('')+'</div>'+
     cloudSection()+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
     '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
@@ -1448,6 +1463,13 @@ function toggleHardcore(){
   if(!state.settings.hardcore && !confirm('Turn on Hardcore? Being defeated will cost half your coins and revive you at just 10 HP. You can turn it off any time.')) return;
   state.settings.hardcore=!state.settings.hardcore; persist(); openSettings();
   toast(state.settings.hardcore?'💀 <span class="h">Hardcore ON - defeat bites hard now</span>':'🛡️ <span class="p">Hardcore off</span>');
+}
+function toggleRestDay(i){
+  var rd=state.settings.restDays=state.settings.restDays||[];
+  var at=rd.indexOf(i); if(at>=0) rd.splice(at,1); else rd.push(i);
+  persist();
+  var btns=document.querySelectorAll('.modal .daysrow .dow');   // update in place (don't rebuild the modal)
+  for(var k=0;k<btns.length;k++){ var day=MON_ORDER[k]; btns[k].className='dow'+(rd.indexOf(day)>=0?' on':''); }
 }
 function toggleReminders(){
   if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
@@ -1664,7 +1686,7 @@ function cloudSyncNow(){
       adoptCloud(r.data); openSettings();
       cloudMsg('Loaded your more advanced cloud save ✓'); SND.ach(); return;
     }
-    SMLCloud.push(state).then(function(p){ openSettings(); cloudMsg(p.ok?'This device is now saved to the cloud ✓':(p.error||'Sync failed'), !p.ok); });
+    SMLCloud.push(state).then(function(p){ cloudSyncErr=!(p&&p.ok); openSettings(); if(state) renderHUD(); cloudMsg(p.ok?'This device is now saved to the cloud ✓':(p.error||'Sync failed'), !p.ok); });
   });
 }
 function toggleFriends(){

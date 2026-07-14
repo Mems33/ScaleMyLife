@@ -259,7 +259,7 @@
       redemption: null,           // {streak,on} - offer to mend a freshly broken streak
       boss: null,                 // {title,setOn,due,doneOn}
       chestClaimedOn: null,
-      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true },
+      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true, restDays: [] },
       lastSeenDay: todayKey()
     };
   }
@@ -482,6 +482,23 @@
     return fresh;
   }
 
+  /* Streak protection: were ALL the fully-missed days (between your last active
+     day and yesterday, inclusive) scheduled rest days? Then the streak survives. */
+  function missedDaysAllRest(state) {
+    var rest = (state.settings && state.settings.restDays) || [];
+    if (!rest.length) return false;
+    var last = state.hero.lastActiveDay;
+    var d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 1); // start at yesterday
+    var guard = 0;
+    while (guard++ < 90) {
+      var key = todayKey(d);
+      if (key <= last) break;                     // reached (or passed) the last active day
+      if (rest.indexOf(d.getDay()) < 0) return false; // a non-rest day was missed -> streak breaks
+      d.setDate(d.getDate() - 1);
+    }
+    return true;
+  }
+
   /* ---------- daily maintenance ---------- */
   function dailyReset(state) {
     var today = todayKey();
@@ -503,7 +520,10 @@
     });
     if (state.redemption && state.redemption.on !== today) state.redemption = null; // yesterday's offer expired
     if (state.hero.lastActiveDay && state.hero.lastActiveDay !== today && state.hero.lastActiveDay !== todayKey(y)) {
-      if ((state.hero.shields || 0) > 0 && state.hero.streak > 0) {
+      if (missedDaysAllRest(state)) {
+        state.hero.lastActiveDay = todayKey(y); // scheduled rest days bridge the gap - streak protected
+        addLog(state, '🌙', 'Rest day - your ' + state.hero.streak + '-day streak is protected.');
+      } else if ((state.hero.shields || 0) > 0 && state.hero.streak > 0) {
         state.hero.shields--;
         state.hero.lastActiveDay = todayKey(y); // shield bridges the gap: next action continues the streak
         addLog(state, '🛡', 'Streak Shield consumed - your ' + state.hero.streak + '-day streak survives!');
@@ -1261,6 +1281,7 @@
     if (typeof s.settings.friends !== 'boolean') s.settings.friends = false;
     if (typeof s.settings.mascot !== 'boolean') s.settings.mascot = true;
     if (typeof s.settings.hardcore !== 'boolean') s.settings.hardcore = false;
+    if (!Array.isArray(s.settings.restDays)) s.settings.restDays = [];
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
