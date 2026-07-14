@@ -1196,7 +1196,23 @@ function doUndo(btn){
   toast('<span class="p">↩ Restored</span>');
 }
 
-function doQuest(id){ var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction(); }
+function doQuest(id){
+  var wasFirst=(state.counters.quests||0)===0;
+  var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction();
+  if(wasFirst && r && state.counters.quests===1 && !state.firstQuestCelebrated){
+    state.firstQuestCelebrated=true; persist();
+    setTimeout(function(){ if(!$('#overlay').classList.contains('show')) firstQuestScreen(); }, 650);
+  }
+}
+function firstQuestScreen(){
+  SND.ach(); if(!reduceMotion()) confetti();
+  var o=$('#overlay'); o.className='show';
+  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--xp);font-size:56px">🎉</div>'+
+    '<div class="big" style="color:var(--xp)">FIRST QUEST DONE!</div>'+
+    '<div class="sub">That just earned you <b style="color:var(--xp)">XP</b> (fills your bar and levels you up) and <b style="color:var(--gold)">coins</b> (spend them on real rewards in the 🏪 Market).</div>'+
+    '<div class="sub" style="color:var(--muted)">Clear all of a day’s dailies to pop the 🎁 chest, and keep a daily streak to multiply everything. That’s the whole game.</div>'+
+    '<button class="btn go" onclick="closeOverlay()">Let’s go ▶</button></div>';
+}
 function delQuest(id){
   var q=state.quests.find(function(x){return x.id===id;});
   withUndo('🗑 Quest deleted'+(q?': '+esc(q.title):''), function(){ A.deleteQuest(state,id); });
@@ -1295,7 +1311,14 @@ function saveSkill(){
   var ic=$('#skIcon').value.trim()||'✨';
   A.addSkill(state,n,ic); persist(); closeModal(); render();
 }
-function delSkill(id){ if(confirm('Delete this life area? Its quests/habits stay but lose the tag.')){ A.deleteSkill(state,id); persist(); render(); } }
+function delSkill(id){
+  var sk=state.skills.find(function(k){return k.id===id;});
+  var n=state.quests.filter(function(q){return q.skillId===id;}).length + state.habits.filter(function(h){return h.skillId===id;}).length;
+  var msg=n>0
+    ? 'Delete '+(sk?sk.icon+' '+sk.name:'this life area')+'? '+n+' quest'+(n===1?'':'s')+'/habit'+(n===1?'':'s') +' will keep working but lose this tag (and its mastery bonus). This can’t be undone.'
+    : 'Delete '+(sk?sk.icon+' '+sk.name:'this life area')+'?';
+  if(confirm(msg)){ A.deleteSkill(state,id); persist(); render(); toast('🗑 <span class="c">Life area removed</span>'); }
+}
 function exportICS(){
   var ics=RPG.buildICS(state);
   if(!ics){ toast('<span class="h">No quests with due dates to export</span>','dmg'); return; }

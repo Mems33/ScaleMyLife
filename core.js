@@ -237,9 +237,9 @@
     return [
       { id: uid(), name: 'Mind',   icon: '🧠', xp: 0, level: 1 },
       { id: uid(), name: 'Body',   icon: '💪', xp: 0, level: 1 },
-      { id: uid(), name: 'Craft',  icon: '🔨', xp: 0, level: 1 },
+      { id: uid(), name: 'Work',   icon: '💼', xp: 0, level: 1 },
       { id: uid(), name: 'Social', icon: '🤝', xp: 0, level: 1 },
-      { id: uid(), name: 'Wealth', icon: '💎', xp: 0, level: 1 }
+      { id: uid(), name: 'Money',  icon: '💎', xp: 0, level: 1 }
     ];
   }
 
@@ -293,25 +293,25 @@
   var PATHS = [
     { id: 'general', icon: '🧭', name: 'Balanced', blurb: 'A bit of everything - the classic starter board.' },
     { id: 'student', icon: '📚', name: 'Student', blurb: 'Exams, essays, revision and focus sessions.',
-      skills: ['Study', 'Body', 'Craft', 'Social', 'Wealth'],
+      skills: ['Study', 'Body', 'Craft', 'Social', 'Money'],
       quests: [['Plan tomorrow in 10 minutes', 'easy', 0, true], ['Deep work session (50 min)', 'normal', 2, true], ['Review today\'s lecture notes', 'normal', 0, true]],
       goodHabits: [['Read 20 pages', 0, 7], ['Flashcards / revision', 0, 7], ['Workout / walk 30 min', 1, 3]],
       badHabits: ['Doomscrolling', 'Late-night YouTube'],
       market: [['Gaming: 1 hour', 60], ['1 episode of a series', 40], ['Night out with friends', 150]] },
     { id: 'athlete', icon: '💪', name: 'Athlete', blurb: 'Training, nutrition, sleep and recovery.',
-      skills: ['Mind', 'Body', 'Nutrition', 'Social', 'Wealth'],
+      skills: ['Mind', 'Body', 'Nutrition', 'Social', 'Money'],
       quests: [['Complete today\'s training', 'hard', 1, true], ['Hit protein & water target', 'easy', 2, true], ['Mobility / stretch 10 min', 'easy', 1, true]],
       goodHabits: [['Workout', 1, 5], ['8h sleep', 1, 7], ['Meal prep', 2, 2]],
       badHabits: ['Skipping warm-up', 'Junk food'],
       market: [['Cheat meal', 90], ['Rest day movie', 60], ['New training gear (save up)', 400]] },
     { id: 'founder', icon: '🚀', name: 'Founder', blurb: 'Shipping, outreach, deep work and momentum.',
-      skills: ['Mind', 'Body', 'Build', 'Network', 'Wealth'],
+      skills: ['Mind', 'Body', 'Build', 'Network', 'Money'],
       quests: [['Ship one improvement', 'hard', 2, true], ['Reach out to 3 people', 'normal', 3, true], ['Review metrics for 10 min', 'easy', 4, true]],
       goodHabits: [['Deep work block', 2, 5], ['Workout / walk 30 min', 1, 4], ['Read / learn 20 min', 0, 7]],
       badHabits: ['Doomscrolling', 'Context-switching'],
       market: [['Gaming: 1 hour', 60], ['Nice dinner out', 120], ['Weekend fully off', 300]] },
     { id: 'creative', icon: '🎨', name: 'Creative', blurb: 'Making, publishing and building a body of work.',
-      skills: ['Mind', 'Body', 'Craft', 'Audience', 'Wealth'],
+      skills: ['Mind', 'Body', 'Craft', 'Audience', 'Money'],
       quests: [['Create for 1 focused hour', 'hard', 2, true], ['Publish / share one thing', 'normal', 3, true], ['Collect one reference / idea', 'easy', 0, true]],
       goodHabits: [['Make something daily', 2, 7], ['Workout / walk 30 min', 1, 3], ['Read / study craft', 0, 5]],
       badHabits: ['Perfectionism spiral', 'Endless scrolling for "research"'],
