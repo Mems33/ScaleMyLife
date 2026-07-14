@@ -1043,6 +1043,11 @@ setTimeout(async function () {
 
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
+  // Escape closes an open modal (focus-trap keydown handler)
+  w.openSettings();
+  ok(d.querySelector('#modal').classList.contains('show'), 'settings modal open');
+  d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  ok(!d.querySelector('#modal').classList.contains('show'), 'pressing Escape closes the modal');
   ok(d.querySelector('#toasts').getAttribute('aria-live') === 'polite', 'toasts are an aria-live region');
   ok(d.querySelector('.gear').getAttribute('aria-label') === 'Settings', 'settings gear has an accessible name');
   w.go('quests');

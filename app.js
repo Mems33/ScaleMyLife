@@ -1532,7 +1532,15 @@ function cloudNudgeDue(){
 
 /* ---------- reminders (Notification API - fires while the app is open) ---------- */
 function notifyNow(title, body){
-  try{ if(typeof Notification!=='undefined' && Notification.permission==='granted') new Notification(title,{body:body,icon:'icon-192.png',tag:'sml'}); }catch(e){}
+  try{
+    if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
+    var opts={body:body,icon:'icon-192.png',badge:'icon-192.png',tag:'sml'};
+    // Prefer the service worker's notification (required on Android/Chrome and more
+    // reliable on mobile); fall back to a page Notification where that's allowed.
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(function(reg){ if(reg&&reg.showNotification) reg.showNotification(title,opts); else new Notification(title,opts); }).catch(function(){ try{ new Notification(title,opts); }catch(e){} });
+    } else { new Notification(title,opts); }
+  }catch(e){}
 }
 function checkReminders(){
   if(!state || !state.settings.reminders) return;
@@ -1796,6 +1804,33 @@ function showProfile(id){
 }
 function unfriendFrom(id){ SMLCloud.removeFriend(id).then(function(){ closeModal(); toast('🤝 <span class="c">Friend removed</span>'); render(); }); }
 function closeModal(){ $('#modal').className='modal'; }
+/* modal accessibility: Escape closes, Tab stays trapped inside, and focus moves
+   into the dialog when it opens */
+function modalFocusables(m){
+  var f=m.querySelectorAll('button,[href],input:not([type=file]),select,textarea,[tabindex]:not([tabindex="-1"])');
+  return Array.prototype.filter.call(f, function(el){ return !el.disabled && (el.offsetParent!==null || !('offsetParent' in el)); });
+}
+document.addEventListener('keydown', function(e){
+  var m=document.getElementById('modal');
+  if(!m || !m.classList.contains('show')) return;
+  if(e.key==='Escape'){ e.preventDefault(); closeModal(); return; }
+  if(e.key!=='Tab') return;
+  var f=modalFocusables(m); if(!f.length) return;
+  var first=f[0], last=f[f.length-1];
+  if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+});
+(function(){
+  var m=document.getElementById('modal');
+  if(!m || typeof MutationObserver==='undefined') return;
+  new MutationObserver(function(){
+    if(!m.classList.contains('show')) return;
+    setTimeout(function(){
+      if(m.contains(document.activeElement)) return;   // an opener already focused an input
+      var f=modalFocusables(m); if(f.length) try{ f[0].focus(); }catch(e){}
+    }, 30);
+  }).observe(m, { attributes:true, attributeFilter:['class'] });
+})();
 
 /* ---------- edit modals ---------- */
 function toggleEditDow(n){
