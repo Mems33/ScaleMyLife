@@ -859,6 +859,14 @@ ok(rd2.hero.streak === 0 && rd2.redemption, 'the same gap with no rest day break
 var rdm = RPG.newState('M'); delete rdm.settings.restDays;
 ok(Array.isArray(RPG.migrate(rdm).settings.restDays), 'migration seeds an empty restDays list');
 
+// migration seeds a sane reminderHour (default 18) and repairs out-of-range values
+var rhm = RPG.newState('M'); delete rhm.settings.reminderHour;
+ok(RPG.migrate(rhm).settings.reminderHour === 18, 'migration defaults reminderHour to 18 (6pm)');
+var rhBad = RPG.newState('M'); rhBad.settings.reminderHour = 99;
+ok(RPG.migrate(rhBad).settings.reminderHour === 18, 'migration repairs an out-of-range reminderHour');
+var rhGood = RPG.newState('M'); rhGood.settings.reminderHour = 21;
+ok(RPG.migrate(rhGood).settings.reminderHour === 21, 'migration keeps a valid custom reminderHour');
+
 section('Sync progress key (v25)');
 var pkA = RPG.newState('A'); pkA.hero.level = 5; pkA.hero.xp = 40;
 var pkB = RPG.newState('B'); pkB.hero.level = 4; pkB.hero.xp = 900;

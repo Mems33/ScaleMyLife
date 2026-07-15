@@ -748,6 +748,17 @@ setTimeout(async function () {
   w.toggleRestDay(0);
   ok(w.state.settings.restDays.indexOf(0) < 0, 'toggling again clears it');
   w.closeModal();
+  // reminder-time picker: only shown when reminders are on, and drives the nudge hour
+  w.state.settings.reminders = false; w.openSettings();
+  ok(d.querySelector('#remHour') === null, 'reminder-time picker is hidden while reminders are off');
+  w.closeModal();
+  w.state.settings.reminders = true; w.openSettings();
+  ok(d.querySelector('#remHour') !== null, 'reminder-time picker appears when reminders are on');
+  w.setReminderHour('21');
+  ok(w.state.settings.reminderHour === 21, 'choosing a nudge time stores the hour');
+  w.setReminderHour('99');
+  ok(w.state.settings.reminderHour === 21, 'an out-of-range nudge time is ignored');
+  w.state.settings.reminders = false; w.closeModal();
   // restore-from-backup safety net: adopting the cloud stashed a pre-cloud copy (Lv.4)
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('Restore save') >= 0, 'Settings offers a restore-previous-save option when a backup exists');

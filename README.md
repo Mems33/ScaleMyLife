@@ -94,7 +94,7 @@ Stats tracks your **defeats** and **comebacks**; the whole thing mirrors the Que
 - **Journal archive** — every entry you've ever written, grouped by month with live search.
 - **Undo everywhere** — deleting a quest/habit/reward or logging a slip shows a 6-second ↩ Undo toast instead of a scary confirm dialog.
 - **Haptics** — subtle vibration feedback on mobile for earns, hits, level-ups and chests (tied to the sound toggle).
-- **Reminders** — optional notifications (⚙️ → Reminders): an evening nudge if dailies/journal are unfinished, a boss-escapes-tomorrow warning, and break/work alerts from the focus timer when the tab is hidden. Uses the browser Notification API, so they fire while the app is open; true background push arrives with a later backend phase.
+- **Reminders** — optional notifications (⚙️ → Reminders): a nudge if dailies/journal are unfinished, a boss-escapes-tomorrow warning, and break/work alerts from the focus timer when the tab is hidden. Pick the nudge time yourself (4pm–10pm) so night owls and early birds each get reminded when it actually helps. Uses the browser Notification API, so they fire while the app is open; true background push arrives with a later backend phase.
 - **Daylight theme** — a warm light theme alongside the five dark ones, plus visible keyboard-focus rings.
 
 ## Look & feel
@@ -105,7 +105,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (735 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (742 tests).
 
 ## Development
 
