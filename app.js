@@ -1465,6 +1465,10 @@ function openSettings(){
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
     '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+
     '<button class="btn" onclick="toggleMascotSetting()">'+(state.settings.mascot!==false?'🦉 Sage ON':'🦉 Sage OFF')+'</button></div>'+
+    (state.settings.reminders?'<div class="setrow"><label class="hint" style="align-self:center" for="remHour">🕕 Daily nudge at</label>'+
+      '<select id="remHour" onchange="setReminderHour(this.value)">'+[16,17,18,19,20,21,22].map(function(h){
+        return '<option value="'+h+'"'+((state.settings.reminderHour==null?18:state.settings.reminderHour)===h?' selected':'')+'>'+(h%12||12)+':00 '+(h<12?'AM':'PM')+'</option>';
+      }).join('')+'</select><span class="hint" style="flex:1;align-self:center">when today’s unfinished dailies get a friendly reminder.</span></div>':'')+
     '<div class="setrow"><button class="btn'+(state.settings.hardcore?' hcon':'')+'" onclick="toggleHardcore()" title="Defeat costs half your coins and revives you at just 10 HP">'+(state.settings.hardcore?'💀 Hardcore ON':'🛡️ Hardcore OFF')+'</button>'+
     '<span class="hint" style="flex:1;align-self:center">Defeat bites harder: bigger coin loss, lower revival HP.</span></div>'+
     '<div class="flabel">🌙 Rest days <span class="hint" style="display:inline">- your streak won’t break on these</span></div>'+
@@ -1493,6 +1497,13 @@ function toggleRestDay(i){
   persist();
   var btns=document.querySelectorAll('.modal .daysrow .dow');   // update in place (don't rebuild the modal)
   for(var k=0;k<btns.length;k++){ var day=MON_ORDER[k]; btns[k].className='dow'+(rd.indexOf(day)>=0?' on':''); }
+}
+function setReminderHour(v){
+  var h=parseInt(v,10); if(isNaN(h)||h<0||h>23) return;
+  state.settings.reminderHour=h;
+  state.remindedOn=null; // let the new time fire today if it has already passed
+  persist();
+  toast('🕕 <span class="p">Evening nudge set to '+(h%12||12)+':00 '+(h<12?'AM':'PM')+'</span>');
 }
 function toggleReminders(){
   if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
@@ -1546,7 +1557,8 @@ function checkReminders(){
   if(!state || !state.settings.reminders) return;
   if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
   var today=RPG.todayKey();
-  if(new Date().getHours()>=18 && state.remindedOn!==today){
+  var hr=(state.settings.reminderHour==null?18:state.settings.reminderHour);
+  if(new Date().getHours()>=hr && state.remindedOn!==today){
     state.remindedOn=today;
     var c=A.chestStatus(state), j=state.journal[today];
     if(c.total>0 && c.done<c.total) notifyNow('ScaleMyLife','🎁 '+(c.total-c.done)+' dail'+((c.total-c.done)===1?'y':'ies')+' left before the chest closes for today.');

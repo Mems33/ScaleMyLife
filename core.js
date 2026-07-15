@@ -1282,6 +1282,7 @@
     if (typeof s.settings.mascot !== 'boolean') s.settings.mascot = true;
     if (typeof s.settings.hardcore !== 'boolean') s.settings.hardcore = false;
     if (!Array.isArray(s.settings.restDays)) s.settings.restDays = [];
+    if (typeof s.settings.reminderHour !== 'number' || s.settings.reminderHour < 0 || s.settings.reminderHour > 23) s.settings.reminderHour = 18;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
