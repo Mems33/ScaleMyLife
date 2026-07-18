@@ -107,7 +107,7 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` + `supabase/perf.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (800 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` + `supabase/perf.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `privacy.html` + `terms.html` + `robots.txt` + `sitemap.xml` (launch pages & SEO) · `test.js` + `test-cloud.js` + `test-ui.js` (813 tests).
 
 ## Security
 
@@ -118,6 +118,8 @@ The app is a static PWA with no server of its own; Supabase Postgres **Row Level
 - **Database scale** — `supabase/perf.sql` clears every Supabase performance-advisor finding: covering indexes for the friends foreign key and the global-board query, `(select auth.uid())` in all RLS policies so auth is evaluated once per query instead of once per row, and a single merged DELETE policy on friends. Tables hold one row per user (plus one per friendship edge), so growth is linear and PK-indexed.
 - **Monitoring** — a global error hook stores the last 20 runtime errors in a local ring buffer; ⚙️ Settings grows a **🩺 Diagnostics** button whenever something was captured (view / copy / clear), so bug reports come with real evidence. Server-side, the Supabase dashboard provides API/DB logs and usage alerts.
 - **Recovery** — the save exists in three places (browser localStorage, cloud row, manual JSON export), sync conflicts resolve by game progress with a pre-sync backup you can restore from Settings, and deploys are plain static files on git — rollback is `git revert`.
+- **Updates reach phones** — installed PWAs rarely hard-reload, so the app re-checks for a new service worker every time it returns to the foreground and refreshes itself once when a new version takes over. Desktop and mobile now update on the same day you deploy.
+- **Launch pages** — meta description, Open Graph / Twitter link previews, `robots.txt`, `sitemap.xml`, and honest [privacy](privacy.html) / [terms](terms.html) pages (no ads, no analytics, export & delete rights) linked from ⚙️ Settings.
 
 ## Development
 

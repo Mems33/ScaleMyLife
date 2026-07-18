@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mems33.github.io/ScaleMyLife/sitemap.xml
