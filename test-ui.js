@@ -777,7 +777,7 @@ setTimeout(async function () {
   ok(w.state.settings.reminderHour === 21, 'an out-of-range nudge time is ignored');
   w.state.settings.reminders = false; w.closeModal();
   // designed vector avatars
-  ok(typeof w.SVG_AVATARS === 'object' && Object.keys(w.SVG_AVATARS).length >= 8, 'a set of designed vector heroes ships with the app');
+  ok(typeof w.SVG_AVATARS === 'object' && Object.keys(w.SVG_AVATARS).length >= 16, 'sixteen designed vector heroes ship with the app');
   ok(Object.keys(w.SVG_AVATARS).every(function (k) { return k.length <= 8; }), 'avatar tokens fit the 8-char profile column (sync-safe)');
   ok(/^<svg/.test(w.avHtml('@knight').replace('<span class="svgav">', '')), 'known token renders inline vector art');
   ok(w.avHtml('<img x>') === '&lt;img x&gt;', 'unknown avatar strings stay escaped (no HTML injection)');
@@ -786,8 +786,37 @@ setTimeout(async function () {
   w.state.hero.avatar = '@mage'; w.renderHUD();
   ok(d.querySelector('#hud .avatar .svgav svg') !== null, 'HUD draws the vector portrait');
   w.openCharacter();
-  ok(d.querySelectorAll('.avpick.svgrow button').length >= 8, 'character modal offers the designed heroes');
+  ok(d.querySelectorAll('.avpick.svgrow button').length >= 16, 'character modal offers the designed heroes');
   w.closeModal(); w.state.hero.avatar = prevAv; w.renderHUD();
+  // design-your-own hero builder (layered, token-encoded)
+  ok(w.isCustomAv('#03214') && !w.isCustomAv('#034') && !w.isCustomAv('🧙'), 'custom tokens are exactly # plus five base36 digits');
+  ok(/svgav/.test(w.avHtml('#03214')) && /<svg/.test(w.avHtml('#03214')), 'a custom token renders layered vector art');
+  ok(w.avPlain('#03214') === '🧑', 'custom tokens fall back to a neutral emoji on canvas');
+  ok(w.avHtml('#03214').length < 4000 && '#03214'.length <= 8, 'the token itself stays sync-safe (fits the 8-char column)');
+  w.openAvatarBuilder('character');
+  ok(d.querySelector('#modal').textContent.indexOf('DESIGN YOUR HERO') >= 0, 'builder opens with a live preview');
+  ok(d.querySelector('.bldprev .svgav svg') !== null, 'preview shows the assembled hero');
+  w.bSet(1, 2); w.bSet(3, 4);
+  ok(w.builderToken() === '#02040', 'layer picks encode into the token');
+  w.bDone();
+  ok(w.pickedAv === '#02040', 'Use this hero hands the token to the avatar picker');
+  ok(d.querySelector('#modal').textContent.indexOf('CHARACTER') >= 0, 'builder returns to the character modal');
+  w.saveCharacter();
+  ok(w.state.hero.avatar === '#02040', 'saving the character keeps the custom design');
+  w.renderHUD();
+  ok(d.querySelector('#hud .avatar .svgav svg') !== null, 'HUD wears the custom hero');
+  w.state.hero.avatar = prevAv; w.pickedAv = null; w.renderHUD();
+  // diagnostics: runtime errors are captured and visible
+  w.logClientError('test explosion at foo.js:1');
+  ok(w.clientErrors().length >= 1 && w.clientErrors()[0].m.indexOf('test explosion') >= 0, 'errors land in the local ring buffer');
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Diagnostics') >= 0, 'settings surfaces a Diagnostics button when errors exist');
+  w.closeModal(); w.openDiagnostics();
+  ok(d.querySelector('.errlog') !== null && d.querySelector('#modal').textContent.indexOf('test explosion') >= 0, 'diagnostics lists the captured error');
+  w.localStorage.removeItem(w.ERRLOG_KEY); w.closeModal();
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('Diagnostics') < 0, 'button disappears once the log is cleared');
+  w.closeModal();
   // friends invites UI surface
   w.state.settings.friends = true; w.openSettings();
   ok(d.querySelector('#frInvites') !== null, 'friends box has an invites area');

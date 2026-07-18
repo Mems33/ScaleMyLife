@@ -938,3 +938,15 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 .avpick.svgrow .svgav{width:34px;height:34px}
 .bav .svgav{width:24px;height:24px;vertical-align:-4px}
 .pcard .pav .svgav{width:52px;height:52px}
+
+/* v29: hero builder + diagnostics */
+.bldprev{text-align:center;margin:6px 0 2px}
+.bldprev .svgav{width:104px;height:104px;filter:drop-shadow(0 6px 16px rgba(0,0,0,.35))}
+.bldrow{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}
+.bld{min-width:32px;height:30px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);font:600 12px Karla,sans-serif;padding:0 9px;cursor:pointer}
+.bld.sw{width:30px;padding:0}
+.bld.on{border-color:var(--gold);box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 30%,transparent)}
+.avpick .bldopen{font-size:20px;border-style:dashed}
+.errlog{max-height:220px;overflow-y:auto;margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+.errrow{font:500 11.5px/1.5 var(--mono,monospace);color:var(--muted);border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:4px 0;word-break:break-word}
+.errrow .et{color:var(--gold);margin-right:6px}
