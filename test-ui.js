@@ -822,9 +822,10 @@ setTimeout(async function () {
   ok(d.querySelector('#frInvites') !== null, 'friends box has an invites area');
   ok(d.querySelector('#modal').textContent.indexOf('Forgot password') < 0, 'no password prompt while signed in');
   w.state.settings.friends = false; w.closeModal();
-  // state-aware storage copy
+  // state-aware storage copy + legal links
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('in this browser AND in your cloud account') >= 0, 'signed-in settings explain the save is in the cloud too');
+  ok(d.querySelector('#modal a[href="privacy.html"]') !== null && d.querySelector('#modal a[href="terms.html"]') !== null, 'settings links to the privacy policy and terms');
   w.closeModal();
   // restore-from-backup safety net: adopting the cloud stashed a pre-cloud copy (Lv.4)
   w.openSettings();

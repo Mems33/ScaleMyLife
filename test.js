@@ -979,7 +979,7 @@ section('Release hygiene: service-worker cache freshness');
   var cp = require('child_process');
   try {
     var swCommit = cp.execSync('git log -1 --format=%H -- sw.js', { cwd: __dirname }).toString().trim();
-    var assets = ['index.html', 'styles.css', 'core.js', 'app.js', 'gradient.js', 'manifest.json'];
+    var assets = ['index.html', 'styles.css', 'core.js', 'app.js', 'gradient.js', 'cloud.js', 'manifest.json', 'privacy.html', 'terms.html'];
     var changed = cp.execSync('git diff --name-only ' + swCommit + '..HEAD -- ' + assets.join(' '), { cwd: __dirname }).toString().trim();
     ok(changed === '', 'sw.js cache bumped alongside asset changes' + (changed ? ' — STALE for: ' + changed.replace(/\n/g, ', ') + ' (bump CACHE in sw.js)' : ''));
   } catch (e) {
@@ -987,6 +987,26 @@ section('Release hygiene: service-worker cache freshness');
   }
   var swSrc = require('fs').readFileSync(__dirname + '/sw.js', 'utf8');
   ok(/var CACHE = 'sml-v\d+';/.test(swSrc), 'sw.js declares a versioned cache name');
+
+  section('Launch readiness (SEO, legal, update flow)');
+  var fs = require('fs');
+  var html = fs.readFileSync(__dirname + '/index.html', 'utf8');
+  ok(/<meta name="description"/.test(html), 'index.html carries a meta description');
+  ok(/property="og:title"/.test(html) && /property="og:image"/.test(html) && /property="og:url"/.test(html), 'Open Graph title/image/url set for link previews');
+  ok(/name="twitter:card"/.test(html), 'Twitter card set');
+  ok(/rel="canonical"/.test(html), 'canonical URL declared');
+  ok(/Content-Security-Policy/.test(html), 'CSP still in place');
+  var robots = fs.readFileSync(__dirname + '/robots.txt', 'utf8');
+  ok(/Allow: \//.test(robots) && /Sitemap: .*sitemap\.xml/.test(robots), 'robots.txt allows crawling and names the sitemap');
+  var sitemap = fs.readFileSync(__dirname + '/sitemap.xml', 'utf8');
+  ok(/privacy\.html/.test(sitemap) && /terms\.html/.test(sitemap), 'sitemap lists the app and legal pages');
+  var privacy = fs.readFileSync(__dirname + '/privacy.html', 'utf8');
+  ok(/no ads, no analytics/i.test(privacy) || /No advertising/i.test(privacy), 'privacy policy states the no-ads/no-analytics position');
+  ok(/Export/.test(privacy) && /Delete/i.test(privacy), 'privacy policy covers export and deletion rights');
+  ok(fs.readFileSync(__dirname + '/terms.html', 'utf8').indexOf('Terms of Service') >= 0, 'terms of service page exists');
+  ok(/privacy\.html/.test(swSrc) && /terms\.html/.test(swSrc), 'legal pages are precached for offline');
+  var appSrc = fs.readFileSync(__dirname + '/app.js', 'utf8');
+  ok(/controllerchange/.test(appSrc) && /reg\.update\(\)/.test(appSrc), 'app checks for new versions on foreground and refreshes when one takes over');
 })();
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

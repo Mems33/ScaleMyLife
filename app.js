@@ -1605,7 +1605,8 @@ function openSettings(){
     '<button class="btn" onclick="closeModal()">Close</button></div>'+
     '<div class="hint">'+(cloudOn()
       ?'Your save lives in this browser AND in your cloud account (synced automatically). The JSON export is an extra offline backup.'
-      :'Your save lives only in this browser right now. Sign in above to keep a cloud copy, or export a JSON backup from time to time.')+'</div></div>';
+      :'Your save lives only in this browser right now. Sign in above to keep a cloud copy, or export a JSON backup from time to time.')+
+    ' &nbsp;·&nbsp; <a href="privacy.html" target="_blank" rel="noopener">Privacy</a> · <a href="terms.html" target="_blank" rel="noopener">Terms</a></div></div>';
   if(state.settings.friends && cloudOn()) setTimeout(loadFriendList,0);
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
@@ -2366,5 +2367,20 @@ function copyErrLog(){
 
 boot();
 if('serviceWorker' in navigator && location.protocol==='https:'){
-  navigator.serviceWorker.register('sw.js').catch(function(){});
+  /* mobile PWAs rarely do a hard reload, so old versions used to stick around:
+     re-check for updates whenever the app returns to the foreground, and when a
+     new service worker takes over, refresh once so the fresh code actually runs */
+  var hadSW=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(function(reg){
+    document.addEventListener('visibilitychange', function(){
+      if(!document.hidden){ try{ reg.update(); }catch(e){} }
+    });
+  }).catch(function(){});
+  var swReloaded=false;
+  navigator.serviceWorker.addEventListener('controllerchange', function(){
+    if(!hadSW || swReloaded) return;   // first-ever install: nothing old to replace
+    swReloaded=true;
+    toast('✨ <span class="p">Updating to the latest version…</span>');
+    setTimeout(function(){ location.reload(); }, 700);
+  });
 }
