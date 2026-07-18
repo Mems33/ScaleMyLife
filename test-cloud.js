@@ -145,6 +145,39 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   fx.route('/rest/v1/leaderboard?select', 200, []);
   ok((await Cloud.fetchBoard(25)).ok === true && /on_board=eq.true/.test(log[log.length - 1].url), 'global board only lists opted-in profiles');
 
+  section('Friend invites (one-sided add shows up for the other person)');
+  fx.route('friends?select=user_id&friend_id=eq.uid-1', 200, [{ user_id: 'friend-9' }, { user_id: 'friend-7' }]);
+  fx.route('friends?select=friend_id&user_id=eq.uid-1', 200, [{ friend_id: 'friend-9' }]);
+  fx.route('/rest/v1/leaderboard?select', 200, [{ user_id: 'friend-7', name: 'Newbie', avatar: '🦊', level: 3, rank_code: 'E', week_xp: 90, best_streak: 2, ascension: 0 }]);
+  var inv = await Cloud.listInvites();
+  ok(inv.ok && inv.rows.length === 1 && inv.rows[0].user_id === 'friend-7', 'invites = followers I have not followed back');
+  fx.route('friends?select=user_id&friend_id=eq.uid-1', 200, []);
+  ok((await Cloud.listInvites()).rows.length === 0, 'no followers means no invites');
+  fx.route('friends?user_id=eq.friend-7&friend_id=eq.uid-1', 204, {});
+  var dec = await Cloud.declineInvite('friend-7');
+  ok(dec.ok === true && log[log.length - 1].method === 'DELETE', 'decline deletes THEIR follow of me');
+  ok(/user_id=eq\.friend-7&friend_id=eq\.uid-1/.test(log[log.length - 1].url), 'decline targets the follower row, not my own');
+  fx.route('friends?select=friend_id&user_id=eq.uid-1', 200, [{ friend_id: 'friend-9' }]);
+  await Cloud.listFriendIds();
+  ok(/user_id=eq\.uid-1/.test(log[log.length - 1].url), 'listFriendIds filters to my own follows (RLS now also shows followers)');
+
+  section('Password reset');
+  fx.route('/auth/v1/recover', 200, {});
+  var rp = await Cloud.resetPassword('a@b.c', 'https://app.example/');
+  ok(rp.ok === true, 'reset email request succeeds');
+  ok(/redirect_to=https%3A%2F%2Fapp.example%2F/.test(log[log.length - 1].url) && log[log.length - 1].body.email === 'a@b.c', 'redirect goes as a query param, email in the body');
+  fx.route('/auth/v1/recover', 429, { msg: 'rate limited' });
+  ok((await Cloud.resetPassword('a@b.c')).ok === false, 'recover failure is surfaced, not thrown');
+  ok(Cloud.recoverFromHash('#/nothing').recovery === false, 'no token in hash -> no recovery');
+  var rh = Cloud.recoverFromHash('#access_token=at9&refresh_token=rt9&type=recovery');
+  ok(rh.recovery === true && rh.signedIn === true, 'recovery hash adopts the emailed session');
+  fx.route('/auth/v1/user', 200, { id: 'uid-1', email: 'a@b.c' });
+  var who = await Cloud.whoAmI();
+  ok(who.ok && Cloud.session().user.id === 'uid-1', 'whoAmI fills in the user behind the recovery token');
+  fx.route('/auth/v1/user', 200, { id: 'uid-1', email: 'a@b.c' });
+  var up = await Cloud.updatePassword('newpass99');
+  ok(up.ok === true && log[log.length - 1].method === 'PUT' && log[log.length - 1].body.password === 'newpass99', 'new password is PUT to /auth/v1/user');
+
   section('Network failure resilience');
   Cloud.configure({ fetch: function () { return Promise.reject(new Error('offline')); } });
   st.setItem('sml.cloud.session.v1', JSON.stringify(SESS));

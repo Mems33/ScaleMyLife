@@ -916,3 +916,25 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 #focuspill:hover{transform:translateX(-50%) translateY(-1px)}
 @media(max-width:640px){ #focuspill{font-size:12px;padding:6px 12px} }
 @media (prefers-reduced-motion: reduce){ #focuspill .fp-dot{animation:none} }
+
+/* v26: friend invites */
+.frrow.inv{background:color-mix(in srgb,var(--gold) 7%,transparent);border:1px solid color-mix(in srgb,var(--gold) 35%,transparent);border-radius:10px;padding:7px 8px;margin:4px 0}
+.frrow.inv .btn{flex-shrink:0}
+
+/* v27: onboarding theme picker */
+.obthemes{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}
+.obtheme{display:flex;align-items:center;gap:7px;padding:6px 12px 6px 6px;border:1.5px solid var(--line);border-radius:999px;background:var(--panel2);color:var(--ink);font:600 12.5px Karla,sans-serif;cursor:pointer;transition:border-color .15s var(--ease),transform .15s var(--ease)}
+.obtheme:hover{transform:translateY(-1px)}
+.obtheme.on{border-color:var(--gold);box-shadow:0 0 0 2px color-mix(in srgb,var(--gold) 25%,transparent)}
+.obtheme .sw{display:inline-flex;align-items:center;gap:2px;width:34px;height:22px;border-radius:7px;padding:3px;border:1px solid color-mix(in srgb,var(--line) 80%,transparent)}
+.obtheme .sw i{display:block;width:10px;height:14px;border-radius:3px}
+
+/* v28: designed vector avatars */
+.svgav{display:inline-flex;width:1.18em;height:1.18em;vertical-align:-0.2em}
+.svgav svg{width:100%;height:100%;display:block}
+.hud .avatar .svgav{width:78%;height:78%;vertical-align:middle}
+.hud .avatar{display:flex;align-items:center;justify-content:center}
+.avpick.svgrow button{padding:5px;line-height:0}
+.avpick.svgrow .svgav{width:34px;height:34px}
+.bav .svgav{width:24px;height:24px;vertical-align:-4px}
+.pcard .pav .svgav{width:52px;height:52px}

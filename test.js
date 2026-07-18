@@ -606,6 +606,25 @@ ok(stu.shop.some(function (i) { return i.special === 'shield'; }), 'path boards 
 ok(stu.habits.some(function (h) { return h.type === 'bad' && h.menace === 1; }), 'path monsters start at menace 1');
 var gen = RPG.seedPreset(RPG.newState('GEN'), 'general');
 ok(gen.quests.length === 2 && gen.habits.length === 3 && gen.shop.length === 6, 'general path == classic seed');
+ok(stu.skills.some(function (k) { return k.name === 'Study' && k.icon === '📚'; }), 'path life areas get matching icons');
+
+section('Multi-path onboarding (student AND founder AND more)');
+var multi = RPG.seedPreset(RPG.newState('M'), ['student', 'founder']);
+var mNames = multi.skills.map(function (k) { return k.name; });
+ok(multi.skills.length === 6, 'two paths widen the board to 6 life areas');
+ok(mNames.indexOf('Body') >= 0 && mNames.indexOf('Money') >= 0, 'areas shared by both identities are kept');
+ok(mNames.indexOf('Study') >= 0 && mNames.indexOf('Mind') >= 0, 'each identity contributes its signature areas');
+var mTitles = multi.quests.map(function (q) { return q.title.toLowerCase(); });
+ok(mTitles.length === mTitles.filter(function (t, i) { return mTitles.indexOf(t) === i; }).length, 'merged quests carry no duplicates');
+ok(multi.quests.length <= 7 && multi.habits.filter(function (h) { return h.type === 'good'; }).length <= 7, 'starter board stays capped, not a dump of everything');
+ok(multi.quests.every(function (q) { return q.skillId === null || multi.skills.some(function (k) { return k.id === q.skillId; }); }), 'every merged quest points at a real merged life area');
+var multi3 = RPG.seedPreset(RPG.newState('M3'), ['student', 'athlete', 'creative']);
+ok(multi3.skills.length === 7, 'three paths cap at 7 life areas');
+ok(multi3.habits.filter(function (h) { return h.type === 'bad'; }).length <= 4, 'monsters capped at 4 even across three paths');
+var single = RPG.seedPreset(RPG.newState('S1'), ['athlete']);
+ok(single.skills.length === 5 && single.skills[2].name === 'Nutrition', 'a single path in array form behaves like the classic pick');
+var degen = RPG.seedPreset(RPG.newState('D1'), ['general', 'nonsense']);
+ok(degen.quests.length === 2 && degen.habits.length === 3, 'unknown/balanced-only picks fall back to the classic seed');
 
 section('Migration to schema 5');
 var v4 = RPG.newState('V4');
