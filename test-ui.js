@@ -532,10 +532,27 @@ setTimeout(async function () {
   w.state.hero.level = 3; w.render();
   ok(!d.querySelector('#wrap').classList.contains('legend'), 'dropping below S exits Legend mode');
 
-  console.log('\nOnboarding paths (v3)');
+  console.log('\nOnboarding paths (v3) - now multi-select');
   w.onboarding();
   ok(d.querySelector('.pathpick') !== null, 'path picker rendered in onboarding');
   ok(d.querySelector('#modal').textContent.indexOf('Student') >= 0, 'named paths listed');
+  ok(d.querySelector('#modal').textContent.indexOf('Pick ALL that fit') >= 0, 'copy invites picking several identities');
+  w.togglePath('student'); w.togglePath('founder');
+  ok(w.pickedPaths.indexOf('student') >= 0 && w.pickedPaths.indexOf('founder') >= 0, 'two identities selected at once');
+  ok(w.pickedPaths.indexOf('general') < 0, 'picking real paths drops Balanced');
+  ok(d.querySelectorAll('.pathpick button.on').length === 2, 'both chips highlight');
+  w.togglePath('student'); w.togglePath('founder');
+  ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'deselecting everything falls back to Balanced');
+  w.togglePath('athlete'); w.togglePath('general');
+  ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'choosing Balanced clears other picks');
+  // theme picker with live preview
+  ok(d.querySelector('.obthemes') !== null, 'onboarding offers a theme picker');
+  var stashState = w.state; w.state = null;   // real onboarding has no save yet
+  w.previewTheme('ocean');
+  ok(w.pickedTheme === 'ocean', 'clicking a theme stores the pick');
+  ok(d.documentElement.style.getPropertyValue('--gold').trim() === '#59c2ff', 'preview repaints the page live (ocean accent applied)');
+  w.state = stashState; w.pickedTheme = null; w.applyTheme();
+  ok(d.documentElement.style.getPropertyValue('--gold').trim() !== '#59c2ff', 'an existing hero’s saved theme always beats the preview');
   w.closeModal();
 
   console.log('\nMastery tiers past Master (v4)');
@@ -759,6 +776,27 @@ setTimeout(async function () {
   w.setReminderHour('99');
   ok(w.state.settings.reminderHour === 21, 'an out-of-range nudge time is ignored');
   w.state.settings.reminders = false; w.closeModal();
+  // designed vector avatars
+  ok(typeof w.SVG_AVATARS === 'object' && Object.keys(w.SVG_AVATARS).length >= 8, 'a set of designed vector heroes ships with the app');
+  ok(Object.keys(w.SVG_AVATARS).every(function (k) { return k.length <= 8; }), 'avatar tokens fit the 8-char profile column (sync-safe)');
+  ok(/^<svg/.test(w.avHtml('@knight').replace('<span class="svgav">', '')), 'known token renders inline vector art');
+  ok(w.avHtml('<img x>') === '&lt;img x&gt;', 'unknown avatar strings stay escaped (no HTML injection)');
+  ok(w.avPlain('@knight') === '🛡️' && w.avPlain('🐼') === '🐼', 'canvas/notification fallback maps tokens to emoji');
+  var prevAv = w.state.hero.avatar;
+  w.state.hero.avatar = '@mage'; w.renderHUD();
+  ok(d.querySelector('#hud .avatar .svgav svg') !== null, 'HUD draws the vector portrait');
+  w.openCharacter();
+  ok(d.querySelectorAll('.avpick.svgrow button').length >= 8, 'character modal offers the designed heroes');
+  w.closeModal(); w.state.hero.avatar = prevAv; w.renderHUD();
+  // friends invites UI surface
+  w.state.settings.friends = true; w.openSettings();
+  ok(d.querySelector('#frInvites') !== null, 'friends box has an invites area');
+  ok(d.querySelector('#modal').textContent.indexOf('Forgot password') < 0, 'no password prompt while signed in');
+  w.state.settings.friends = false; w.closeModal();
+  // state-aware storage copy
+  w.openSettings();
+  ok(d.querySelector('#modal').textContent.indexOf('in this browser AND in your cloud account') >= 0, 'signed-in settings explain the save is in the cloud too');
+  w.closeModal();
   // restore-from-backup safety net: adopting the cloud stashed a pre-cloud copy (Lv.4)
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('Restore save') >= 0, 'Settings offers a restore-previous-save option when a backup exists');

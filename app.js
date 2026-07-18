@@ -36,7 +36,15 @@ function popCheck(x,y){
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
-var pickedPath='general';        // onboarding path
+var pickedPaths=['general'];     // onboarding paths (you can be several things at once)
+function togglePath(id){
+  if(id==='general'){ pickedPaths=['general']; onboarding(); return; }   // Balanced stands alone
+  var at=pickedPaths.indexOf(id);
+  if(at>=0) pickedPaths.splice(at,1); else pickedPaths.push(id);
+  pickedPaths=pickedPaths.filter(function(p){return p!=='general';});
+  if(!pickedPaths.length) pickedPaths=['general'];
+  onboarding();
+}
 
 var RANK_COLORS={E:'#9a94b8',D:'#5aa2ff',C:'#3ddc84',B:'#b07bff',A:'#ff9d47',S:'#f5c542',SS:'#ff5fa2'};
 var THEMES={
@@ -55,8 +63,9 @@ var MUSIC={
   custom:{name:'🔗 Custom YouTube URL',id:null}
 };
 
+var pickedTheme=null;            // onboarding live preview (no state yet)
 function applyTheme(){
-  var t=THEMES[(state&&state.settings.theme)||'dungeon']||THEMES.dungeon;
+  var t=THEMES[(state&&state.settings.theme)||pickedTheme||'dungeon']||THEMES.dungeon;
   var r=document.documentElement.style;
   r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel);
   r.setProperty('--panel2',t.panel2); r.setProperty('--line',t.line); r.setProperty('--gold',t.accent);
@@ -337,7 +346,7 @@ function renderHUD(){
   var buffM=RPG.buffXpMult(state);
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
-    '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+h.avatar+'</div>'+
+    '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+avHtml(h.avatar)+'</div>'+
     '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
@@ -1017,7 +1026,7 @@ function boardRowsHtml(rows, me){
     var mine=me&&r.user_id===me;
     var tap=r.user_id?' role="button" tabindex="0" aria-label="View '+esc(r.name||'hero')+'’s profile" onclick="showProfile(\''+r.user_id+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();showProfile(\''+r.user_id+'\')}"':'';
     return '<div class="brow'+(mine?' me':'')+(r.user_id?' tap':'')+'"'+tap+'><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
-      '<span class="bav">'+esc(r.avatar||'🧙')+'</span>'+
+      '<span class="bav">'+avHtml(r.avatar)+'</span>'+
       '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
       '<div class="bmeta">'+esc(r.rank_code||'E')+' · Lv.'+(r.level||1)+((r.ascension||0)>0?' · ✦S'+r.ascension:'')+' · 🔥best '+(r.best_streak||0)+'</div></div>'+
       '<span class="bxp">'+(r.week_xp||0)+' <small>xp/wk</small></span></div>';
@@ -1044,8 +1053,12 @@ function leaderboardPanel(){
         if(!r.ok){ el.innerHTML='<div class="empty">Friends board unavailable right now.</div>'; return; }
         el.innerHTML = r.rows.length>1 ? boardRowsHtml(r.rows, r.me) : '<div class="empty">Just you so far - add friends by code in ⚙️ Settings.</div>';
       });
+      SMLCloud.listInvites().then(function(inv){
+        var el=document.getElementById('boardInv');
+        if(el && inv.ok && inv.rows.length) el.innerHTML='<button class="btn wide" onclick="openSettings()">📨 '+inv.rows.length+' friend invite'+(inv.rows.length===1?'':'s')+' waiting - open Settings</button>';
+      });
     },0);
-    return head+'<div id="boardBody">'+boardSkeleton(4)+'</div></div>';
+    return head+'<div id="boardInv"></div><div id="boardBody">'+boardSkeleton(4)+'</div></div>';
   }
   if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync - only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
     '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
@@ -1331,6 +1344,21 @@ function exportICS(){
 /* ---------- character customization ---------- */
 var AVATARS=['🧙','🦸','🥷','🤺','🧝','🧑‍🚀','🦊','🐺','🐉','🦁','🛡️','🏹','🧛','🤖','👑','🐯','🦅','🔥','🌟','🎮','🧗','🏋️','📚','🚀',
   '🧚','🧜','🧞','🦄','🐲','🦉','🐢','🦋','🌸','🍀','⚡','💫','🎨','🎸','⚽','🏀','🧑‍🍳','🧑‍⚕️','🧑‍💻','🧑‍🎓','🧑‍🔬','🕵️','🦹','🐼'];
+/* hand-drawn vector portraits: stored as short tokens (fit the 8-char avatar
+   column, so they sync and show on friends' devices too) */
+var SVG_AVATARS={
+  '@knight':{name:'Knight',emoji:'🛡️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#34455e"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8ea3bd"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#5c748f"/><circle cx="24" cy="20" r="10.5" fill="#c7d2de"/><path d="M13.5 20a10.5 10.5 0 0 1 21 0l-1.5 3h-18z" fill="#93a7ba"/><rect x="15" y="19" width="18" height="4.6" rx="2.3" fill="#22304a"/><path d="M24 5.5l2.8 5.5h-5.6z" fill="#e2574c"/><circle cx="24" cy="10.4" r="1.6" fill="#f0b429"/></svg>'},
+  '@mage':{name:'Mage',emoji:'🧙',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4b3a78"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7c64b8"/><circle cx="24" cy="24" r="8" fill="#f2c9a2"/><path d="M16 30q8 8 16 0v6q-8 5-16 0z" fill="#e8e4f2"/><path d="M24 4l7 15h-14z" fill="#8f76cc"/><path d="M12 19h24l-2.5 3h-19z" fill="#6b52a8"/><circle cx="30" cy="9" r="1.7" fill="#f5c542"/><circle cx="21" cy="24" r="1.2" fill="#3a2d55"/><circle cx="27" cy="24" r="1.2" fill="#3a2d55"/></svg>'},
+  '@rogue':{name:'Rogue',emoji:'🥷',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#232936"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3d4657"/><path d="M24 7c8 0 12 6.5 12 14l-2 6h-20l-2-6c0-7.5 4-14 12-14z" fill="#4b5568"/><path d="M16 20a8 8 0 0 1 16 0l-1 5h-14z" fill="#141821"/><path d="M17.5 21.5h4.5l-.7 2.6h-3.1z" fill="#66e0b8"/><path d="M26 21.5h4.5l-.7 2.6h-3.1z" fill="#66e0b8"/><path d="M13 27h22l-2 3h-18z" fill="#333c4d"/></svg>'},
+  '@ranger':{name:'Ranger',emoji:'🏹',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#274232"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4e7a54"/><path d="M9 46a15 11 0 0 1 30 0h-5a10 8 0 0 0-20 0z" fill="#3b5f42"/><circle cx="24" cy="23" r="8" fill="#e9bd93"/><path d="M24 6c7.5 0 11.5 5.5 11.5 12l-3.5 4 .5-6h-17l.5 6-3.5-4c0-6.5 4-12 11.5-12z" fill="#5c8a4e"/><path d="M31 8l6-3-2 7z" fill="#d8c46a"/><circle cx="21" cy="23" r="1.2" fill="#2c3a26"/><circle cx="27" cy="23" r="1.2" fill="#2c3a26"/></svg>'},
+  '@paladin':{name:'Paladin',emoji:'✨',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#6d5a24"/><path d="M12 8a12 5 0 0 0 24 0" fill="none" stroke="#ffe08a" stroke-width="2.4"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#e5c860"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#c2a63e"/><circle cx="24" cy="22" r="10" fill="#f5e3ae"/><path d="M14 22a10 10 0 0 1 20 0l-1.5 3h-17z" fill="#dcbe62"/><rect x="16" y="21" width="16" height="4.4" rx="2.2" fill="#57430f"/><path d="M23 10h2v6h-2zM20.5 12.5h7v2h-7z" fill="#8a6d1d"/></svg>'},
+  '@witch':{name:'Witch',emoji:'🪄',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#3d2b52"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#6a4a8c"/><circle cx="24" cy="25" r="8" fill="#efc39b"/><path d="M15 30q9 6 18 0v6q-9 5-18 0z" fill="#4e3a68"/><path d="M24 4l6 13h-12z" fill="#7b5aa6"/><path d="M10 17h28l-3 3.4h-22z" fill="#5d4383"/><circle cx="35" cy="8" r="1.6" fill="#8be0c8"/><circle cx="21" cy="25" r="1.2" fill="#432e21"/><circle cx="27" cy="25" r="1.2" fill="#432e21"/><path d="M21.5 29.5q2.5 2 5 0" fill="none" stroke="#432e21" stroke-width="1.2" stroke-linecap="round"/></svg>'},
+  '@monk':{name:'Monk',emoji:'🧘',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#7a4a22"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#d98c3f"/><path d="M9 46a15 11 0 0 1 30 0l-8-1-3-6h-8l-3 6z" fill="#b56f28"/><circle cx="24" cy="20" r="9.5" fill="#eab88b"/><path d="M14.5 20a9.5 9.5 0 0 1 19 0" fill="none" stroke="#d8a271" stroke-width="1.4"/><circle cx="21" cy="21" r="1.2" fill="#4a3018"/><circle cx="27" cy="21" r="1.2" fill="#4a3018"/><path d="M21 26q3 2.2 6 0" fill="none" stroke="#4a3018" stroke-width="1.3" stroke-linecap="round"/><circle cx="24" cy="13.6" r="1" fill="#c98f5f"/></svg>'},
+  '@bard':{name:'Bard',emoji:'🎸',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f4a4a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3f8a80"/><circle cx="24" cy="23" r="8.5" fill="#edbf98"/><path d="M14 17q10-9 21-1l-3.5 5q-7-6-14.5-1z" fill="#c8486b"/><circle cx="33.5" cy="13.5" r="3" fill="#c8486b"/><path d="M35 10l5-4-1.5 6z" fill="#f0d264"/><circle cx="21" cy="23" r="1.2" fill="#3c2a1c"/><circle cx="27" cy="23" r="1.2" fill="#3c2a1c"/><path d="M20.5 27.5q3.5 2.8 7 0" fill="none" stroke="#3c2a1c" stroke-width="1.3" stroke-linecap="round"/></svg>'}
+};
+/* avatar -> safe HTML (vector portrait for tokens, escaped text for emojis) */
+function avHtml(av){ var d=SVG_AVATARS[av]; return d?'<span class="svgav">'+d.svg+'</span>':esc(av||'🧙'); }
+function avPlain(av){ var d=SVG_AVATARS[av]; return d?d.emoji:(av||'🧙'); }  // canvas + notifications
 var pickedAv=null;
 function openCharacter(){
   pickedAv=pickedAv||state.hero.avatar;
@@ -1339,7 +1367,9 @@ function openCharacter(){
     '<div class="flabel">Name</div><input id="chName" maxlength="24" value="'+esc(state.hero.name)+'">'+
     '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(state.hero.title||'')+'">'+
     titleChips()+
-    '<div class="flabel">Avatar</div><div class="avpick">'+AVATARS.map(function(a){
+    '<div class="flabel">Avatar - designed heroes</div><div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
+      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';openCharacter()">'+avHtml(k)+'</button>';}).join('')+'</div>'+
+    '<div class="flabel">…or an emoji</div><div class="avpick">'+AVATARS.map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';openCharacter()">'+a+'</button>';}).join('')+'</div>'+
     '<div class="setrow"><input id="chCustomAv" maxlength="4" placeholder="…or type any emoji" style="max-width:180px"><span class="hint">overrides the grid pick</span></div>'+
     '<div class="flabel">Theme</div><div class="themes">'+Object.keys(THEMES).map(function(k){
@@ -1482,7 +1512,9 @@ function openSettings(){
     (hasPreCloudBackup()?'<div class="setrow"><button class="btn" onclick="restorePreCloud()" title="Bring back the save from just before the last cloud load">↩ Restore save from before last sync</button></div>':'')+
     '<div class="setrow"><button class="btn" style="border-color:var(--hp);color:var(--hp)" onclick="resetAll()">Reset everything</button>'+
     '<button class="btn" onclick="closeModal()">Close</button></div>'+
-    '<div class="hint">Data lives in this browser (localStorage). Export a JSON backup from time to time.</div></div>';
+    '<div class="hint">'+(cloudOn()
+      ?'Your save lives in this browser AND in your cloud account (synced automatically). The JSON export is an extra offline backup.'
+      :'Your save lives only in this browser right now. Sign in above to keep a cloud copy, or export a JSON backup from time to time.')+'</div></div>';
   if(state.settings.friends && cloudOn()) setTimeout(loadFriendList,0);
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
@@ -1507,11 +1539,28 @@ function setReminderHour(v){
 }
 function toggleReminders(){
   if(state.settings.reminders){ state.settings.reminders=false; persist(); openSettings(); return; }
-  if(typeof Notification==='undefined'){ toast('<span class="h">Notifications not supported in this browser</span>','dmg'); return; }
-  Notification.requestPermission().then(function(p){
-    if(p==='granted'){ state.settings.reminders=true; persist(); openSettings(); toast('🔔 <span class="p">Reminders on - evening nudge + focus alerts</span>'); }
-    else toast('<span class="h">Permission denied - enable notifications in your browser settings</span>','dmg');
-  });
+  if(typeof Notification==='undefined'){
+    // iPhone/iPad Safari only exposes notifications to apps installed on the Home Screen
+    var ios=/iPhone|iPad|iPod/.test(navigator.userAgent);
+    if(ios && !navigator.standalone) toast('📲 <span class="h">On iPhone: first add ScaleMyLife to your Home Screen (Share button → Add to Home Screen), open it from there, then turn on reminders.</span>','dmg');
+    else toast('<span class="h">This browser does not support notifications</span>','dmg');
+    return;
+  }
+  if(Notification.permission==='denied'){ toast('<span class="h">Notifications are blocked for this site - allow them in your browser settings, then try again</span>','dmg'); return; }
+  var done=false;
+  var after=function(p){
+    if(done) return; done=true;
+    if(p==='granted'){
+      state.settings.reminders=true; persist(); openSettings();
+      toast('🔔 <span class="p">Reminders on - evening nudge + focus alerts</span>');
+      setTimeout(function(){ notifyNow('ScaleMyLife','🔔 Reminders are working! You’ll get your daily nudge at '+((state.settings.reminderHour||18)%12||12)+'pm.'); },400);
+    }
+    else toast('<span class="h">Permission not granted - reminders stay off</span>','dmg');
+  };
+  try{
+    var ret=Notification.requestPermission(after);        // old Safari: callback form
+    if(ret && ret.then) ret.then(after);                  // modern browsers: promise form
+  }catch(e){ toast('<span class="h">Could not request permission ('+esc(String(e.message||e))+')</span>','dmg'); }
 }
 
 /* quest of atonement: a freshly broken streak can be mended before midnight */
@@ -1599,7 +1648,7 @@ function shareRecap(){
   var d0=new Date(w.days[0]+'T00:00:00'), d1=new Date(w.days[6]+'T00:00:00');
   ctx.fillText(d0.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' - '+d1.toLocaleDateString(undefined,{month:'short',day:'numeric'}),540,168);
   // avatar + name
-  ctx.font='150px serif'; ctx.fillText(h.avatar,540,340);
+  ctx.font='150px serif'; ctx.fillText(avPlain(h.avatar),540,340);
   ctx.fillStyle=C.ink; ctx.font='700 56px Karla, sans-serif'; ctx.fillText(h.name,540,430);
   ctx.fillStyle=C.gold; ctx.font='700 34px "IBM Plex Mono", monospace';
   ctx.fillText(r.code+' · '+r.name.toUpperCase()+'   LV.'+h.level+((h.ascension||0)>0?'   ✦ S'+h.ascension:''),540,478);
@@ -1649,7 +1698,8 @@ function cloudSection(){
       '<input id="cEmail" type="email" placeholder="email" style="margin-top:6px">'+
       '<input id="cPw" type="password" placeholder="password (8+ characters)" style="margin-top:6px">'+
       '<div class="setrow" style="margin-top:8px"><button class="btn go" onclick="cloudSignIn()">Sign in</button>'+
-      '<button class="btn" onclick="cloudSignUp()">Create account</button></div>'+
+      '<button class="btn" onclick="cloudSignUp()">Create account</button>'+
+      '<button class="btn ghost" onclick="cloudForgot()">Forgot password?</button></div>'+
       '<div class="hint" id="cMsg"></div>';
   }
   var ls=SMLCloud.lastSync();
@@ -1668,6 +1718,35 @@ function cloudSaveKey(){
   var k=($('#cKey').value||'').trim(); if(!k) return;
   SMLCloud.setKey(k); openSettings();
   toast('☁️ <span class="p">Cloud sync enabled - now create your account</span>');
+}
+function cloudForgot(){
+  var e=($('#cEmail').value||'').trim();
+  if(!e){ cloudMsg('Type your email above first, then press Forgot password', true); return; }
+  cloudMsg('Sending reset link…');
+  SMLCloud.resetPassword(e, location.origin+location.pathname).then(function(r){
+    cloudMsg(r.ok?'Reset link sent - check your inbox, open the link on THIS device, and you’ll be asked for a new password.':(r.error||'Could not send the reset email'), !r.ok);
+  });
+}
+/* arriving from a reset-password email: the URL hash holds a recovery session */
+function handleRecoveryHash(){
+  if(typeof SMLCloud==='undefined' || !SMLCloud.configured()) return false;
+  var r=SMLCloud.recoverFromHash(location.hash);
+  if(!r.signedIn) return false;
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
+  SMLCloud.whoAmI().then(function(){
+    var p1=prompt('Welcome back! Choose a new password (8+ characters):')||'';
+    if(p1.length<8){ toast('<span class="h">Password not changed - it needs 8+ characters. Use Forgot password to try again.</span>','dmg'); return; }
+    SMLCloud.updatePassword(p1).then(function(u){
+      if(!u.ok){ toast('<span class="h">'+esc(u.error||'Could not update the password')+'</span>','dmg'); return; }
+      toast('🔑 <span class="p">Password updated - you’re signed in</span>'); SND.ach();
+      if(state){ afterCloudSignIn(); return; }
+      SMLCloud.pull().then(function(r){   // fresh device: just take the cloud save
+        if(r.ok && r.exists && r.data && r.data.hero){ state=RPG.migrate(r.data); RPG.save(state,localStorage); applyTheme(); render(); toast('☁️ <span class="p">Cloud save loaded</span>'); }
+        else tut(0);
+      });
+    });
+  });
+  return true;
 }
 function cloudSignUp(){
   var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
@@ -1744,7 +1823,7 @@ function friendsBox(){
     '<div class="codebox"><b id="myCode">'+esc(code)+'</b><button class="btn small" onclick="copyCode()">Copy</button></div>'+
     '<div class="flabel">Add a friend by code</div>'+
     '<div class="setrow"><input id="frCode" maxlength="8" placeholder="e.g. A1B2C3D4" style="text-transform:uppercase"><button class="btn go" onclick="addFriendByCode()">Add</button></div>'+
-    '<div class="hint" id="frMsg"></div><div id="frList"></div></div>';
+    '<div class="hint" id="frMsg"></div><div id="frInvites"></div><div id="frList"></div></div>';
 }
 function copyCode(){
   var c=SMLCloud.friendCode();
@@ -1762,19 +1841,40 @@ function addFriendByCode(){
     if(!r.found){ frMsg('No hero with that code',true); return; }
     SMLCloud.addFriend(r.profile.user_id).then(function(a){
       if(!a.ok){ frMsg(a.error,true); return; }
-      frMsg('Added '+(r.profile.name||'a hero')+' ✓'); SND.ach();
+      frMsg('Added '+(r.profile.name||'a hero')+' ✓ - they’ll see your invite and can add you back with one tap'); SND.ach();
       if($('#frCode')) $('#frCode').value='';
       loadFriendList();
     });
   });
 }
+function loadInvites(){
+  var host=$('#frInvites'); if(!host) return;
+  SMLCloud.listInvites().then(function(r){
+    if(!r.ok || !host || !r.rows.length){ if(host) host.innerHTML=''; return; }
+    host.innerHTML='<div class="flabel">📨 Invites - these heroes added you ('+r.rows.length+')</div>'+r.rows.map(function(x){
+      return '<div class="frrow inv"><span class="bav">'+avHtml(x.avatar)+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span>'+
+        '<button class="btn small go" onclick="acceptInvite(\''+x.user_id+'\')">✓ Add back</button>'+
+        '<button class="btn ghost small" aria-label="Decline invite" onclick="declineInvite(\''+x.user_id+'\')">✕</button></div>';
+    }).join('');
+  });
+}
+function acceptInvite(id){
+  SMLCloud.addFriend(id).then(function(a){
+    if(!a.ok){ frMsg(a.error,true); return; }
+    frMsg('Friend added ✓'); SND.ach(); loadInvites(); loadFriendList();
+  });
+}
+function declineInvite(id){
+  SMLCloud.declineInvite(id).then(function(){ loadInvites(); });
+}
 function loadFriendList(){
   var host=$('#frList'); if(!host) return;
+  loadInvites();
   SMLCloud.fetchFriendsBoard(boardProfile()).then(function(r){
     if(!r.ok || !host) return;
     var others=r.rows.filter(function(x){return x.user_id!==r.me;});
     host.innerHTML=others.length?('<div class="flabel">Following ('+others.length+')</div>'+others.map(function(x){
-      return '<div class="frrow"><span class="bav">'+esc(x.avatar||'🧙')+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" aria-label="Remove friend" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
+      return '<div class="frrow"><span class="bav">'+avHtml(x.avatar)+'</span><span class="grow">'+esc(x.name||'Hero')+' <span class="bmeta">'+esc(x.rank_code||'E')+' · Lv.'+(x.level||1)+'</span></span><button class="btn ghost small" aria-label="Remove friend" onclick="unfriend(\''+x.user_id+'\')">✕</button></div>';
     }).join('')):'<div class="hint">No friends yet - add someone by code above.</div>';
   });
 }
@@ -1794,14 +1894,14 @@ function showProfile(id){
   var canRemove=!mine && boardView==='friends';
   var me=boardProfile();
   var stars=(r.ascension||0)>0?' <span class="asc">✦S'+r.ascension+'</span>':'';
-  var head='<div class="pcard"><div class="pav">'+esc(r.avatar||'🧙')+'</div>'+
+  var head='<div class="pcard"><div class="pav">'+avHtml(r.avatar)+'</div>'+
     '<div class="pname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
     '<div class="pmeta"><span class="chip">'+esc(r.rank_code||'E')+'</span> Lv.'+(r.level||1)+stars+'</div></div>';
   var body;
   if(mine){
     body='<div class="hint" style="text-align:center">This is your card exactly as friends see it - only these stats are ever shared, never your save.</div>';
   } else {
-    body='<div class="h2h"><div class="hrow head"><span class="hlabel"></span><span class="hval">'+esc(r.avatar||'🧙')+'</span><span class="hvs"></span><span class="hval">you</span></div>'+
+    body='<div class="h2h"><div class="hrow head"><span class="hlabel"></span><span class="hval">'+avHtml(r.avatar)+'</span><span class="hvs"></span><span class="hval">you</span></div>'+
       h2hRow('Level', r.level||1, me.level)+
       h2hRow('Weekly XP', r.week_xp||0, me.weekXp)+
       h2hRow('Best streak', r.best_streak||0, me.bestStreak)+
@@ -2024,16 +2124,29 @@ function onboarding(){
     '<input id="obName" placeholder="Hero name (required)" maxlength="24" value="'+esc(keep)+'" oninput="obNameCheck()">'+
     '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
     '<div class="flabel">Pick an avatar</div>'+
+    '<div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
+      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';onboarding()">'+avHtml(k)+'</button>';}).join('')+'</div>'+
     '<div class="avpick scroll">'+AVATARS.map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';onboarding()">'+a+'</button>';}).join('')+'</div>'+
-    '<div class="flabel">Choose your path - it tailors your starting quests, habits, life areas and rewards</div>'+
+    '<div class="flabel">Who are you? Pick ALL that fit - a student can also be an athlete and a founder. Your starting quests, habits, life areas and rewards blend everything you pick.</div>'+
     '<div class="pathpick">'+RPG.PATHS.map(function(p){
-      return '<button class="'+(pickedPath===p.id?'on':'')+'" onclick="pickedPath=\''+p.id+'\';onboarding()"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
+      return '<button class="'+(pickedPaths.indexOf(p.id)>=0?'on':'')+'" aria-pressed="'+(pickedPaths.indexOf(p.id)>=0)+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
+    }).join('')+'</div>'+
+    '<div class="flabel">Pick a look - the page behind previews it live (change it any time later)</div>'+
+    '<div class="obthemes">'+Object.keys(THEMES).map(function(k){ var t=THEMES[k];
+      return '<button type="button" class="obtheme'+((pickedTheme||'dungeon')===k?' on':'')+'" onclick="previewTheme(\''+k+'\')" aria-pressed="'+((pickedTheme||'dungeon')===k)+'">'+
+        '<span class="sw" style="background:'+t.bg+'"><i style="background:'+t.panel+'"></i><i style="background:'+t.accent+'"></i></span>'+esc(t.name)+'</button>';
     }).join('')+'</div>'+
     '<button class="btn wide go" id="obStart" onclick="createHero()">▶ START ADVENTURE</button>'+
-    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your path - edit everything. Full customization lives behind your avatar.</div></div>';
+    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your picks - edit everything. Full customization lives behind your avatar.</div></div>';
   var inp=$('#obName'); if(inp && !inp.value) inp.focus();
   obNameCheck();
+}
+function previewTheme(k){
+  if(!THEMES[k]) return;
+  pickedTheme=k; applyTheme();
+  var btns=document.querySelectorAll('.modal .obthemes .obtheme'), keys=Object.keys(THEMES);
+  for(var i=0;i<btns.length;i++){ var on=keys[i]===k; btns[i].className='obtheme'+(on?' on':''); btns[i].setAttribute('aria-pressed',on); }
 }
 function obNameCheck(){
   var inp=$('#obName'), btn=$('#obStart'); if(!inp||!btn) return true;
@@ -2045,8 +2158,9 @@ function createHero(){
   var raw=($('#obName')&&$('#obName').value||'').trim();
   if(!raw){ var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); var i=$('#obName'); if(i) i.focus(); return; }
   var n=raw;
-  state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPath||'general');
-  pickedAv=null;
+  state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPaths&&pickedPaths.length?pickedPaths:'general');
+  if(pickedTheme&&THEMES[pickedTheme]) state.settings.theme=pickedTheme;
+  pickedAv=null; pickedTheme=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
   setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
@@ -2107,7 +2221,7 @@ function toggleMascotSetting(){
   if(state.settings.mascot!==false) mascotMoodSync();
   openSettings();
 }
-function boot(){ applyTheme(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); tut(0); } }
+function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) tut(0); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);

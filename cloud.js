@@ -99,6 +99,61 @@
         });
     },
 
+    /* email a password-reset link; the link returns to the app with a recovery
+       token in the URL hash, which recoverFromHash() below picks up on boot */
+    resetPassword: function (email, redirectTo) {
+      var url = cfg.url + '/auth/v1/recover' + (redirectTo ? '?redirect_to=' + encodeURIComponent(redirectTo) : '');
+      return req(url, { method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ email: email }) })
+        .then(function (r) {
+          if (!r.ok) return { ok: false, error: errMsg(r.j, 'could not send the reset email') };
+          return { ok: true };
+        });
+    },
+
+    /* if the URL hash carries a recovery session (arrived via reset email),
+       adopt it and report so the UI can ask for a new password. Returns
+       {recovery:true} once; the hash is consumed either way. */
+    recoverFromHash: function (hash) {
+      var h = String(hash || '');
+      if (h.indexOf('access_token=') < 0) return { recovery: false };
+      var p = {};
+      h.replace(/^#/, '').split('&').forEach(function (kv) {
+        var i = kv.indexOf('='); if (i > 0) p[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1));
+      });
+      if (!p.access_token) return { recovery: false };
+      setSession({ access_token: p.access_token, refresh_token: p.refresh_token || null, user: { id: null, email: null } });
+      // fill in the user info from the token's session
+      return { recovery: p.type === 'recovery', signedIn: true };
+    },
+
+    /* set a new password for the signed-in user (used after recoverFromHash) */
+    updatePassword: function (password) {
+      var sess = getSession();
+      if (!sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return req(cfg.url + '/auth/v1/user', { method: 'PUT',
+        headers: authHeaders({ 'Authorization': 'Bearer ' + sess.access_token }),
+        body: JSON.stringify({ password: password }) })
+        .then(function (r) {
+          if (!r.ok) return { ok: false, error: errMsg(r.j, 'could not update the password') };
+          if (r.j && r.j.id) { sess.user = { id: r.j.id, email: r.j.email }; setSession(sess); }
+          return { ok: true };
+        });
+    },
+
+    /* fetch /auth/v1/user to fill in id+email after a hash-recovery session */
+    whoAmI: function () {
+      var sess = getSession();
+      if (!sess) return Promise.resolve({ ok: false });
+      return req(cfg.url + '/auth/v1/user', { method: 'GET',
+        headers: authHeaders({ 'Authorization': 'Bearer ' + sess.access_token }) })
+        .then(function (r) {
+          if (!r.ok || !r.j.id) return { ok: false };
+          sess.user = { id: r.j.id, email: r.j.email }; setSession(sess);
+          return { ok: true, user: sess.user };
+        });
+    },
+
     signOut: function () {
       var sess = getSession();
       setSession(null);
@@ -223,10 +278,37 @@
         .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'remove failed (' + r.status + ')') }; });
     },
     listFriendIds: function () {
-      if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
-      return api._rest('GET', 'friends?select=friend_id')
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      /* filter explicitly: RLS also shows rows where others follow ME */
+      return api._rest('GET', 'friends?select=friend_id&user_id=eq.' + sess.user.id)
         .then(function (r) { return (r.ok && Array.isArray(r.j)) ? { ok: true, ids: r.j.map(function (x) { return x.friend_id; }) } : { ok: false, error: errMsg(r.j, 'list failed (' + r.status + ')') }; });
     },
+    /* incoming invites: people who follow me that I have not followed back */
+    listInvites: function () {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api._rest('GET', 'friends?select=user_id&friend_id=eq.' + sess.user.id).then(function (fr) {
+        if (!fr.ok || !Array.isArray(fr.j)) return { ok: false, error: errMsg(fr.j, 'invites fetch failed (' + fr.status + ')') };
+        var followers = fr.j.map(function (x) { return x.user_id; });
+        if (!followers.length) return { ok: true, rows: [] };
+        return api.listFriendIds().then(function (lf) {
+          if (!lf.ok) return lf;
+          var pending = followers.filter(function (id) { return lf.ids.indexOf(id) < 0; });
+          return api.fetchProfiles(pending).then(function (fp) {
+            return fp.ok ? { ok: true, rows: fp.rows } : fp;
+          });
+        });
+      });
+    },
+    /* accept = follow back; decline = delete their follow of me */
+    declineInvite: function (followerId) {
+      var sess = getSession();
+      if (!api.configured() || !sess) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return api._rest('DELETE', 'friends?user_id=eq.' + followerId + '&friend_id=eq.' + sess.user.id, null, 'return=minimal')
+        .then(function (r) { return r.ok ? { ok: true } : { ok: false, error: errMsg(r.j, 'decline failed (' + r.status + ')') }; });
+    },
+
     fetchProfiles: function (ids) {
       if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
       if (!ids || !ids.length) return Promise.resolve({ ok: true, rows: [] });

@@ -319,27 +319,62 @@
   ];
   function pathById(id) { for (var i = 0; i < PATHS.length; i++) if (PATHS[i].id === id) return PATHS[i]; return null; }
 
-  /* build a starting board from a path id */
-  function seedPreset(state, pathId) {
-    var p = pathById(pathId);
-    if (!p || p.id === 'general') return seed(state);
-    if (p.skills) state.skills.forEach(function (k, i) { if (p.skills[i]) k.name = p.skills[i]; });
+  var SKILL_ICONS = { Mind: '🧠', Body: '💪', Work: '💼', Social: '🤝', Money: '💎',
+    Study: '📚', Craft: '🛠️', Nutrition: '🥗', Build: '🏗️', Network: '🌐', Audience: '📣' };
+
+  /* build a starting board from one path id or an array of them (you can be a
+     student AND an athlete AND a founder - the board merges all of it) */
+  function seedPreset(state, pathIds) {
+    var ids = (Array.isArray(pathIds) ? pathIds : [pathIds]).filter(function (id, i, a) { return a.indexOf(id) === i; });
+    var paths = [];
+    ids.forEach(function (id) { var p = pathById(id); if (p && p.skills) paths.push(p); });
+    if (!paths.length) return seed(state);
+
+    /* life areas: shared ones first (they're every identity's foundation),
+       then each path's signature areas, taking turns; 5 slots, +1 per extra path, max 7 */
+    var want = Math.min(5 + (paths.length - 1), 7), names = [], count = {};
+    paths.forEach(function (p) { p.skills.forEach(function (n) { count[n] = (count[n] || 0) + 1; }); });
+    if (paths.length > 1) paths[0].skills.forEach(function (n) { if (count[n] > 1 && names.length < want) names.push(n); });
+    var cursors = paths.map(function () { return 0; }), moved = true;
+    while (names.length < want && moved) {
+      moved = false;
+      for (var pi = 0; pi < paths.length && names.length < want; pi++) {
+        var list = paths[pi].skills;
+        while (cursors[pi] < list.length && names.indexOf(list[cursors[pi]]) >= 0) cursors[pi]++;
+        if (cursors[pi] < list.length) { names.push(list[cursors[pi]++]); moved = true; }
+      }
+    }
+    while (state.skills.length < names.length) state.skills.push({ id: uid(), name: '', icon: '✨', xp: 0, level: 1 });
+    state.skills.forEach(function (k, i) { if (names[i]) { k.name = names[i]; if (SKILL_ICONS[names[i]]) k.icon = SKILL_ICONS[names[i]]; } });
+
     var sk = state.skills;
-    (p.quests || []).forEach(function (q) {
-      state.quests.push({ id: uid(), title: q[0], diff: DIFF[q[1]] ? q[1] : 'normal',
-        skillId: (sk[q[2]] || {}).id || null, due: null, recurring: !!q[3], days: null,
-        main: null, doneOn: null, createdOn: todayKey() });
-    });
-    (p.goodHabits || []).forEach(function (h) {
-      state.habits.push({ id: uid(), title: h[0], type: 'good', skillId: (sk[h[1]] || {}).id || null,
-        streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: h[2] || 7 });
-    });
-    (p.badHabits || []).forEach(function (t) {
-      state.habits.push({ id: uid(), title: t, type: 'bad', skillId: null, streak: 0, lastDoneOn: null,
-        slips: 0, cleanSince: todayKey(), history: [], bestClean: 0, target: 7, menace: 1 });
-    });
-    (p.market || []).forEach(function (m) {
-      state.shop.push({ id: uid(), title: m[0], price: m[1], tab: 'market', hp: 0, dmg: 0, special: null });
+    function skillFor(p, idx) {  /* a path's local skill index -> merged area id (null if that area was cut) */
+      var n = (p.skills || [])[idx]; if (!n) return null;
+      for (var i = 0; i < sk.length; i++) if (sk[i].name === n) return sk[i].id;
+      return null;
+    }
+    var nq = 0, nh = 0, nb = 0, nm = 0, seen = {};
+    paths.forEach(function (p) {
+      (p.quests || []).forEach(function (q) {
+        var key = 'q:' + q[0].toLowerCase(); if (seen[key] || nq >= 7) return; seen[key] = 1; nq++;
+        state.quests.push({ id: uid(), title: q[0], diff: DIFF[q[1]] ? q[1] : 'normal',
+          skillId: skillFor(p, q[2]), due: null, recurring: !!q[3], days: null,
+          main: null, doneOn: null, createdOn: todayKey() });
+      });
+      (p.goodHabits || []).forEach(function (h) {
+        var key = 'h:' + h[0].toLowerCase(); if (seen[key] || nh >= 7) return; seen[key] = 1; nh++;
+        state.habits.push({ id: uid(), title: h[0], type: 'good', skillId: skillFor(p, h[1]),
+          streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: h[2] || 7 });
+      });
+      (p.badHabits || []).forEach(function (t) {
+        var key = 'b:' + t.toLowerCase(); if (seen[key] || nb >= 4) return; seen[key] = 1; nb++;
+        state.habits.push({ id: uid(), title: t, type: 'bad', skillId: null, streak: 0, lastDoneOn: null,
+          slips: 0, cleanSince: todayKey(), history: [], bestClean: 0, target: 7, menace: 1 });
+      });
+      (p.market || []).forEach(function (m) {
+        var key = 'm:' + m[0].toLowerCase(); if (seen[key] || nm >= 8) return; seen[key] = 1; nm++;
+        state.shop.push({ id: uid(), title: m[0], price: m[1], tab: 'market', hp: 0, dmg: 0, special: null });
+      });
     });
     state.shop.push(
       { id: uid(), title: 'Power nap (20 min)', price: 25, tab: 'hotel', hp: 15, dmg: 0, special: null },

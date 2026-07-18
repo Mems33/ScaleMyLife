@@ -23,7 +23,7 @@ Setting it up for your own deployment:
 
 ## Start here
 
-First launch runs a short, skippable primer, then **Create your hero**: name, avatar, and a **starting path** (Student, Athlete, Founder, Creative or Balanced) that tailors your opening quests, habits, life areas and rewards so you never stare at an empty board. A new hero is then walked through an **interactive spotlight tour** that dims the screen and points at the real controls one by one (re-runnable any time from ⚙️ → Interactive tour). Everything you add is editable — every quest, main quest and habit has a ✎ button. The app opens on the **Today** tab.
+First launch runs a short, skippable primer, then **Create your hero**: name, avatar (eight **hand-drawn vector heroes** — Knight, Mage, Rogue, Ranger, Paladin, Witch, Monk, Bard — plus a big emoji grid), a **theme picked with a live preview** of the page behind, and your **identities**: pick *all* the paths that fit (Student, Athlete, Founder, Creative — a student can also be an athlete and a founder). The starter board blends every pick: life areas shared by your identities come first, each identity adds its signature areas (up to 7), and quests/habits/rewards merge without duplicates so you never stare at an empty board — or an overflowing one. A new hero is then walked through an **interactive spotlight tour** that dims the screen and points at the real controls one by one (re-runnable any time from ⚙️ → Interactive tour). Everything you add is editable — every quest, main quest and habit has a ✎ button. The app opens on the **Today** tab.
 
 ## The core loop
 
@@ -67,7 +67,9 @@ Race other heroes on **weekly XP**. Strictly opt-in from ⚙️ → Cloud sync: 
 
 Add specific people by a short **friend code** and race them on a private board — no need to join the public leaderboard. Enable from ⚙️ → Cloud sync → *Enable friends* (requires an account): you get an 8-character code to share, and paste a friend's code to add them. The Stats leaderboard gains a **Global / Friends** toggle so you can flip between the world and just your crew.
 
-It's privacy-first and one-directional: adding someone lets *you* see their public profile card (name, avatar, level, rank, weekly XP, best streak — never their save), and Postgres Row Level Security gates every read so a profile is only visible to itself, to the people who've added it, or to anyone who's on the global board. Codes are looked up through a `SECURITY DEFINER` function (callable only by signed-in users) so you can add a friend before either of you follows the other. Run `supabase/friends.sql` once to enable it; the app degrades gracefully if you haven't.
+It's privacy-first: adding someone lets *you* see their public profile card (name, avatar, level, rank, weekly XP, best streak — never their save), and Postgres Row Level Security gates every read so a profile is only visible to itself, to the people who've added it, to people it has added, or to anyone who's on the global board. Codes are looked up through a `SECURITY DEFINER` function (callable only by signed-in users) so you can add a friend before either of you follows the other.
+
+**Invites make it mutual with one code.** When someone adds your code, an **📨 Invites** row appears in your friends box (and a banner on your Friends board): *Add back* follows them in one tap — no code exchange in the other direction — and ✕ declines by removing their follow of you. Run `supabase/friends.sql` then `supabase/invites.sql` once to enable it; the app degrades gracefully if you haven't.
 
 **Tap any board row** — global or friends — to open that hero's profile: a big card plus a **head-to-head** table pitting their level, weekly XP, best streak and ascension against yours, with the leader of each metric highlighted. From a friend's card you can remove them in one tap; tapping your own row previews the exact card others see.
 
@@ -105,7 +107,11 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (742 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (785 tests).
+
+## Security
+
+The app is a static PWA with no server of its own; Supabase Postgres **Row Level Security is the security boundary** (the publishable key in `cloud.js` is public by design — it can only do what RLS policies allow). A `Content-Security-Policy` meta tag pins scripts, connections, frames and fonts to the exact origins the app uses, so injected external scripts can't load or phone home. Every piece of remote or user-entered text is HTML-escaped before rendering. Sign-in has a full **forgot-password flow** (reset email → new password on return). Only a six-field profile card is ever shared; the save itself is readable by its owner alone.
 
 ## Development
 
