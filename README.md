@@ -23,7 +23,7 @@ Setting it up for your own deployment:
 
 ## Start here
 
-First launch runs a short, skippable primer, then **Create your hero**: name, avatar (eight **hand-drawn vector heroes** — Knight, Mage, Rogue, Ranger, Paladin, Witch, Monk, Bard — plus a big emoji grid), a **theme picked with a live preview** of the page behind, and your **identities**: pick *all* the paths that fit (Student, Athlete, Founder, Creative — a student can also be an athlete and a founder). The starter board blends every pick: life areas shared by your identities come first, each identity adds its signature areas (up to 7), and quests/habits/rewards merge without duplicates so you never stare at an empty board — or an overflowing one. A new hero is then walked through an **interactive spotlight tour** that dims the screen and points at the real controls one by one (re-runnable any time from ⚙️ → Interactive tour). Everything you add is editable — every quest, main quest and habit has a ✎ button. The app opens on the **Today** tab.
+First launch runs a short, skippable primer, then **Create your hero**: name, avatar (sixteen **hand-drawn vector heroes** — Knight, Mage, Rogue, Ranger, Paladin, Witch, Monk, Bard, Samurai, Viking, Druid, Pirate, Valkyrie, Alchemist, Automaton, Kitsune — a 🎨 **design-your-own builder** that layers skin tone, hair style and colour, outfit and an extra like a crown or glasses into a portrait encoded as a tiny sync-safe token, plus a big emoji grid), a **theme picked with a live preview** of the page behind, and your **identities**: pick *all* the paths that fit (Student, Athlete, Founder, Creative — a student can also be an athlete and a founder). The starter board blends every pick: life areas shared by your identities come first, each identity adds its signature areas (up to 7), and quests/habits/rewards merge without duplicates so you never stare at an empty board — or an overflowing one. A new hero is then walked through an **interactive spotlight tour** that dims the screen and points at the real controls one by one (re-runnable any time from ⚙️ → Interactive tour). Everything you add is editable — every quest, main quest and habit has a ✎ button. The app opens on the **Today** tab.
 
 ## The core loop
 
@@ -107,11 +107,17 @@ Dark, game-flavoured, and deliberately not generic. A hand-written **WebGL shade
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (785 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` + `supabase/perf.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `test.js` + `test-cloud.js` + `test-ui.js` (800 tests).
 
 ## Security
 
 The app is a static PWA with no server of its own; Supabase Postgres **Row Level Security is the security boundary** (the publishable key in `cloud.js` is public by design — it can only do what RLS policies allow). A `Content-Security-Policy` meta tag pins scripts, connections, frames and fonts to the exact origins the app uses, so injected external scripts can't load or phone home. Every piece of remote or user-entered text is HTML-escaped before rendering. Sign-in has a full **forgot-password flow** (reset email → new password on return). Only a six-field profile card is ever shared; the save itself is readable by its owner alone.
+
+## Production readiness
+
+- **Database scale** — `supabase/perf.sql` clears every Supabase performance-advisor finding: covering indexes for the friends foreign key and the global-board query, `(select auth.uid())` in all RLS policies so auth is evaluated once per query instead of once per row, and a single merged DELETE policy on friends. Tables hold one row per user (plus one per friendship edge), so growth is linear and PK-indexed.
+- **Monitoring** — a global error hook stores the last 20 runtime errors in a local ring buffer; ⚙️ Settings grows a **🩺 Diagnostics** button whenever something was captured (view / copy / clear), so bug reports come with real evidence. Server-side, the Supabase dashboard provides API/DB logs and usage alerts.
+- **Recovery** — the save exists in three places (browser localStorage, cloud row, manual JSON export), sync conflicts resolve by game progress with a pre-sync backup you can restore from Settings, and deploys are plain static files on git — rollback is `git revert`.
 
 ## Development
 

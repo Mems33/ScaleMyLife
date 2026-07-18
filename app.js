@@ -1354,11 +1354,99 @@ var SVG_AVATARS={
   '@paladin':{name:'Paladin',emoji:'✨',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#6d5a24"/><path d="M12 8a12 5 0 0 0 24 0" fill="none" stroke="#ffe08a" stroke-width="2.4"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#e5c860"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#c2a63e"/><circle cx="24" cy="22" r="10" fill="#f5e3ae"/><path d="M14 22a10 10 0 0 1 20 0l-1.5 3h-17z" fill="#dcbe62"/><rect x="16" y="21" width="16" height="4.4" rx="2.2" fill="#57430f"/><path d="M23 10h2v6h-2zM20.5 12.5h7v2h-7z" fill="#8a6d1d"/></svg>'},
   '@witch':{name:'Witch',emoji:'🪄',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#3d2b52"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#6a4a8c"/><circle cx="24" cy="25" r="8" fill="#efc39b"/><path d="M15 30q9 6 18 0v6q-9 5-18 0z" fill="#4e3a68"/><path d="M24 4l6 13h-12z" fill="#7b5aa6"/><path d="M10 17h28l-3 3.4h-22z" fill="#5d4383"/><circle cx="35" cy="8" r="1.6" fill="#8be0c8"/><circle cx="21" cy="25" r="1.2" fill="#432e21"/><circle cx="27" cy="25" r="1.2" fill="#432e21"/><path d="M21.5 29.5q2.5 2 5 0" fill="none" stroke="#432e21" stroke-width="1.2" stroke-linecap="round"/></svg>'},
   '@monk':{name:'Monk',emoji:'🧘',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#7a4a22"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#d98c3f"/><path d="M9 46a15 11 0 0 1 30 0l-8-1-3-6h-8l-3 6z" fill="#b56f28"/><circle cx="24" cy="20" r="9.5" fill="#eab88b"/><path d="M14.5 20a9.5 9.5 0 0 1 19 0" fill="none" stroke="#d8a271" stroke-width="1.4"/><circle cx="21" cy="21" r="1.2" fill="#4a3018"/><circle cx="27" cy="21" r="1.2" fill="#4a3018"/><path d="M21 26q3 2.2 6 0" fill="none" stroke="#4a3018" stroke-width="1.3" stroke-linecap="round"/><circle cx="24" cy="13.6" r="1" fill="#c98f5f"/></svg>'},
-  '@bard':{name:'Bard',emoji:'🎸',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f4a4a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3f8a80"/><circle cx="24" cy="23" r="8.5" fill="#edbf98"/><path d="M14 17q10-9 21-1l-3.5 5q-7-6-14.5-1z" fill="#c8486b"/><circle cx="33.5" cy="13.5" r="3" fill="#c8486b"/><path d="M35 10l5-4-1.5 6z" fill="#f0d264"/><circle cx="21" cy="23" r="1.2" fill="#3c2a1c"/><circle cx="27" cy="23" r="1.2" fill="#3c2a1c"/><path d="M20.5 27.5q3.5 2.8 7 0" fill="none" stroke="#3c2a1c" stroke-width="1.3" stroke-linecap="round"/></svg>'}
+  '@bard':{name:'Bard',emoji:'🎸',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f4a4a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3f8a80"/><circle cx="24" cy="23" r="8.5" fill="#edbf98"/><path d="M14 17q10-9 21-1l-3.5 5q-7-6-14.5-1z" fill="#c8486b"/><circle cx="33.5" cy="13.5" r="3" fill="#c8486b"/><path d="M35 10l5-4-1.5 6z" fill="#f0d264"/><circle cx="21" cy="23" r="1.2" fill="#3c2a1c"/><circle cx="27" cy="23" r="1.2" fill="#3c2a1c"/><path d="M20.5 27.5q3.5 2.8 7 0" fill="none" stroke="#3c2a1c" stroke-width="1.3" stroke-linecap="round"/></svg>'},
+  '@samurai':{name:'Samurai',emoji:'🥋',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4a1f24"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8c3a42"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#6b2b32"/><circle cx="24" cy="21" r="10" fill="#d9535e"/><path d="M14 21a10 10 0 0 1 20 0l-1.5 3.5h-17z" fill="#a63a44"/><rect x="15.5" y="20" width="17" height="4.4" rx="2.2" fill="#2b1216"/><path d="M13 12l-4-5 7 2zM35 12l4-5-7 2z" fill="#e5b04c"/><circle cx="24" cy="12" r="2" fill="#e5b04c"/></svg>'},
+  '@viking':{name:'Viking',emoji:'🪓',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#2e3b46"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7a6a4f"/><circle cx="24" cy="22" r="8.5" fill="#e9bd93"/><path d="M15 30q9 7 18 0v7q-9 5-18 0z" fill="#c9822e"/><path d="M15 21a9 9 0 0 1 18 0l-1 2h-16z" fill="#9aa7b3"/><path d="M12 16l-5-8 8 4zM36 16l5-8-8 4z" fill="#d8d3c8"/><circle cx="21" cy="23" r="1.2" fill="#3a2a1a"/><circle cx="27" cy="23" r="1.2" fill="#3a2a1a"/><path d="M18 27q6 5 12 0l-1 4q-5 3-10 0z" fill="#c9822e"/></svg>'},
+  '@druid':{name:'Druid',emoji:'🌿',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f3a26"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4e7a54"/><circle cx="24" cy="23" r="8" fill="#dfb08c"/><path d="M24 6c8 0 12 6 11 13l-4 3 1-7h-16l1 7-4-3c-1-7 3-13 11-13z" fill="#3e6b45"/><path d="M11 14q4-6 9-4-5 4-3 8-5 0-6-4z" fill="#7bd88f"/><path d="M37 14q-4-6-9-4 5 4 3 8 5 0 6-4z" fill="#7bd88f"/><circle cx="21" cy="23" r="1.2" fill="#33241a"/><circle cx="27" cy="23" r="1.2" fill="#33241a"/><path d="M21 27.5q3 2.4 6 0" fill="none" stroke="#33241a" stroke-width="1.2" stroke-linecap="round"/></svg>'},
+  '@pirate':{name:'Pirate',emoji:'🏴‍☠️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#20303e"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7a3b32"/><circle cx="24" cy="23" r="8.5" fill="#e2ac80"/><path d="M12 18q12-11 24 0l-2 4q-10-8-20 0z" fill="#c03a30"/><circle cx="36" cy="20" r="1.5" fill="#f0d264"/><path d="M17.5 21.5h6.5v3.4h-6.5z" fill="#20242c"/><path d="M15 20l16-3" stroke="#20242c" stroke-width="1.4"/><circle cx="28" cy="23.5" r="1.3" fill="#33241a"/><path d="M20.5 29q4 2.6 7.5.4" fill="none" stroke="#33241a" stroke-width="1.3" stroke-linecap="round"/><circle cx="16" cy="27" r="1.3" fill="#f0d264"/></svg>'},
+  '@valkyr':{name:'Valkyrie',emoji:'🕊️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#3a3550"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8f9fc9"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#6b7aa8"/><circle cx="24" cy="22" r="8.5" fill="#f0c8a0"/><path d="M15 30q9 6 18 0v6q-9 5-18 0z" fill="#e5c860"/><path d="M15 21a9 9 0 0 1 18 0l-1 2.4h-16z" fill="#c3cede"/><path d="M12 17q-6-2-7-9 7 1 9 6zM36 17q6-2 7-9-7 1-9 6z" fill="#e8ecf5"/><circle cx="21" cy="23" r="1.2" fill="#3a2d20"/><circle cx="27" cy="23" r="1.2" fill="#3a2d20"/></svg>'},
+  '@alchem':{name:'Alchemist',emoji:'🧪',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#233a3a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4a6b5f"/><circle cx="24" cy="23" r="8.5" fill="#ecc3a0"/><path d="M13 15h22l-2 4h-18z" fill="#396056"/><path d="M16 9h16l2 6h-20z" fill="#2b4a42"/><circle cx="20" cy="23.5" r="2.6" fill="none" stroke="#d8b545" stroke-width="1.5"/><circle cx="28" cy="23.5" r="2.6" fill="none" stroke="#d8b545" stroke-width="1.5"/><path d="M22.6 23.5h2.8" stroke="#d8b545" stroke-width="1.5"/><circle cx="20" cy="23.5" r="1" fill="#66e0b8"/><circle cx="28" cy="23.5" r="1" fill="#66e0b8"/><path d="M21 28.5q3 2.2 6 0" fill="none" stroke="#4a3322" stroke-width="1.2" stroke-linecap="round"/></svg>'},
+  '@robot':{name:'Automaton',emoji:'🤖',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#25303c"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#5c748f"/><rect x="14" y="13" width="20" height="17" rx="5" fill="#9fb2c6"/><rect x="17" y="18" width="14" height="7" rx="3.5" fill="#1a232e"/><circle cx="21" cy="21.5" r="1.8" fill="#59c2ff"/><circle cx="27" cy="21.5" r="1.8" fill="#59c2ff"/><rect x="20" y="27" width="8" height="1.8" rx="0.9" fill="#3d4c5e"/><path d="M24 7v4" stroke="#9fb2c6" stroke-width="2"/><circle cx="24" cy="6" r="2" fill="#f5c542"/></svg>'},
+  '@kitsune':{name:'Kitsune',emoji:'🦊',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4a2a1a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#a8562a"/><path d="M13 10l3 10 6-6zM35 10l-3 10-6-6z" fill="#d97b3f"/><path d="M15 12l1.6 6 3.4-3.4zM33 12l-1.6 6-3.4-3.4z" fill="#f5e0d0"/><path d="M24 14c6.5 0 10 4.5 10 9 0 5.5-4.5 9-10 9s-10-3.5-10-9c0-4.5 3.5-9 10-9z" fill="#e08a4a"/><path d="M24 24q-5 6-2 8h4q3-2-2-8z" fill="#f5e0d0"/><circle cx="19.5" cy="22.5" r="1.4" fill="#2b1810"/><circle cx="28.5" cy="22.5" r="1.4" fill="#2b1810"/><path d="M23 28.6h2l-1 1.4z" fill="#2b1810"/></svg>'}
 };
+/* "design your own" hero: 5 layers encoded as a sync-safe token like #03214
+   (fits the 8-char avatar column, renders identically on friends' devices) */
+var AVB={
+  skin:['#f6d7b8','#eebe98','#d9a066','#b07b4f','#8a5a3b','#6b4630'],
+  hairC:['#2d2622','#5b3a24','#a5652a','#d9a441','#c9483c','#8a8f98','#7b5aa6','#3f8a80'],
+  outfit:['#5c748f','#7b5aa6','#3f8a80','#c8486b','#c2a63e','#5c8a4e','#4b5568','#b56f28'],
+  hairNames:['Short','Long','Spiky','Bun','Hood','Bald'],
+  accNames:['None','Glasses','Headband','Crown','Earring','Warpaint']
+};
+function isCustomAv(av){ return /^#[0-9a-z]{5}$/i.test(String(av||'')); }
+function customAvSvg(t){
+  var v=String(t).slice(1).split('').map(function(c){ return parseInt(c,36)||0; });
+  var skin=AVB.skin[v[0]%AVB.skin.length], hs=v[1]%6, hc=AVB.hairC[v[2]%AVB.hairC.length],
+      oc=AVB.outfit[v[3]%AVB.outfit.length], ac=v[4]%6;
+  var hair='';
+  if(hs===0) hair='<path d="M15 21a9 9 0 0 1 18 0l-2 1.6q-7-6.5-14 0z" fill="'+hc+'"/>';
+  else if(hs===1) hair='<path d="M15 21a9 9 0 0 1 18 0l1.5 12h-4.5l-.5-8q-5.5-5-11 0l-.5 8h-4.5z" fill="'+hc+'"/>';
+  else if(hs===2) hair='<path d="M15 22l-1.5-7.5 4.5 3 2-5.5 4 4.5 4-4.5 2 5.5 4.5-3-1.5 7.5q-9-6.5-18 0z" fill="'+hc+'"/>';
+  else if(hs===3) hair='<path d="M15 21a9 9 0 0 1 18 0l-2 1.4q-7-6-14 0z" fill="'+hc+'"/><circle cx="24" cy="10.5" r="3.4" fill="'+hc+'"/>';
+  else if(hs===4) hair='<path d="M24 8c8 0 12 6.5 12 14l-2 5h-2.5l.5-6h-16l.5 6H14l-2-5c0-7.5 4-14 12-14z" fill="'+oc+'"/>';
+  var acc='';
+  if(ac===1) acc='<circle cx="20.5" cy="23" r="2.7" fill="none" stroke="#20242c" stroke-width="1.4"/><circle cx="27.5" cy="23" r="2.7" fill="none" stroke="#20242c" stroke-width="1.4"/><path d="M23.2 23h1.6" stroke="#20242c" stroke-width="1.4"/>';
+  else if(ac===2) acc='<rect x="15.5" y="17.4" width="17" height="3" rx="1.5" fill="'+oc+'"/>';
+  else if(ac===3) acc='<path d="M17.5 13.5l3 2.8 3.5-4.3 3.5 4.3 3-2.8-1 5h-11z" fill="#f0c33c"/>';
+  else if(ac===4) acc='<circle cx="15.6" cy="26" r="1.3" fill="#f0c33c"/>';
+  else if(ac===5) acc='<path d="M27 19.5l3.6 4.4M30.6 19.5L27 23.9" stroke="#c94f4f" stroke-width="1.4" stroke-linecap="round"/>';
+  return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
+    '<circle cx="24" cy="24" r="22" fill="#20242e"/>'+
+    '<circle cx="24" cy="24" r="22" fill="'+oc+'" opacity="0.3"/>'+
+    '<path d="M9 46a15 11 0 0 1 30 0z" fill="'+oc+'"/>'+
+    '<circle cx="24" cy="22" r="8.5" fill="'+skin+'"/>'+
+    hair+
+    '<circle cx="21" cy="23" r="1.2" fill="#3a2b1e"/><circle cx="27" cy="23" r="1.2" fill="#3a2b1e"/>'+
+    '<path d="M21 27.4q3 2.3 6 0" fill="none" stroke="#3a2b1e" stroke-width="1.2" stroke-linecap="round"/>'+
+    acc+'</svg>';
+}
 /* avatar -> safe HTML (vector portrait for tokens, escaped text for emojis) */
-function avHtml(av){ var d=SVG_AVATARS[av]; return d?'<span class="svgav">'+d.svg+'</span>':esc(av||'🧙'); }
-function avPlain(av){ var d=SVG_AVATARS[av]; return d?d.emoji:(av||'🧙'); }  // canvas + notifications
+function avHtml(av){
+  var d=SVG_AVATARS[av]; if(d) return '<span class="svgav">'+d.svg+'</span>';
+  if(isCustomAv(av)) return '<span class="svgav">'+customAvSvg(String(av).toLowerCase())+'</span>';
+  return esc(av||'🧙');
+}
+function avPlain(av){ var d=SVG_AVATARS[av]; if(d) return d.emoji; if(isCustomAv(av)) return '🧑'; return av||'🧙'; }  // canvas + notifications
+
+/* ----- the builder itself ----- */
+var builderSel=null, builderReturn=null;
+function builderToken(){ return '#'+builderSel.map(function(n){ return n.toString(36); }).join(''); }
+function openAvatarBuilder(from){
+  builderReturn=from||'character';
+  var cur=pickedAv||(state&&state.hero.avatar)||'';
+  if(isCustomAv(cur)) builderSel=String(cur).toLowerCase().slice(1).split('').map(function(c){ return parseInt(c,36)||0; });
+  else if(!builderSel) builderSel=[0,0,0,0,0];
+  renderBuilder();
+}
+function bSet(i,v){ builderSel[i]=v; renderBuilder(); }
+function bRandom(){
+  builderSel=[AVB.skin.length,6,AVB.hairC.length,AVB.outfit.length,6].map(function(n){ return Math.floor(Math.random()*n); });
+  renderBuilder();
+}
+function renderBuilder(){
+  var m=$('#modal'); m.className='modal show';
+  function row(label,i,n,swatches){
+    var out='<div class="flabel">'+label+'</div><div class="bldrow">';
+    for(var j=0;j<n;j++){
+      var on=builderSel[i]===j;
+      out+='<button type="button" class="bld'+(on?' on':'')+(swatches?' sw':'')+'"'+(swatches?' style="background:'+swatches[j]+'"':'')+
+        ' aria-pressed="'+on+'" onclick="bSet('+i+','+j+')">'+(swatches?'':esc((i===1?AVB.hairNames:AVB.accNames)[j]))+'</button>';
+    }
+    return out+'</div>';
+  }
+  m.innerHTML='<div class="box"><h2>🎨 DESIGN YOUR HERO</h2>'+
+    '<div class="bldprev">'+avHtml(builderToken())+'</div>'+
+    row('Skin',0,AVB.skin.length,AVB.skin)+
+    row('Hair',1,6,null)+
+    row('Hair color',2,AVB.hairC.length,AVB.hairC)+
+    row('Outfit',3,AVB.outfit.length,AVB.outfit)+
+    row('Extra',4,6,null)+
+    '<div class="setrow" style="margin-top:12px"><button class="btn" onclick="bRandom()">🎲 Surprise me</button>'+
+    '<button class="btn go" onclick="bDone()">✓ Use this hero</button>'+
+    '<button class="btn" onclick="bCancel()">Cancel</button></div></div>';
+}
+function bDone(){ pickedAv=builderToken(); bCancel(); }
+function bCancel(){ if(builderReturn==='onboarding'||!state) onboarding(); else openCharacter(); }
 var pickedAv=null;
 function openCharacter(){
   pickedAv=pickedAv||state.hero.avatar;
@@ -1368,7 +1456,9 @@ function openCharacter(){
     '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(state.hero.title||'')+'">'+
     titleChips()+
     '<div class="flabel">Avatar - designed heroes</div><div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
-      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';openCharacter()">'+avHtml(k)+'</button>';}).join('')+'</div>'+
+      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';openCharacter()">'+avHtml(k)+'</button>';}).join('')+
+      (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\'character\')">'+avHtml(pickedAv)+'</button>':'')+
+      '<button class="bldopen" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\'character\')">🎨</button></div>'+
     '<div class="flabel">…or an emoji</div><div class="avpick">'+AVATARS.map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';openCharacter()">'+a+'</button>';}).join('')+'</div>'+
     '<div class="setrow"><input id="chCustomAv" maxlength="4" placeholder="…or type any emoji" style="max-width:180px"><span class="hint">overrides the grid pick</span></div>'+
@@ -1507,7 +1597,8 @@ function openSettings(){
     }).join('')+'</div>'+
     cloudSection()+
     '<div class="setrow"><button class="btn" onclick="exportSave()">⬇ Export save (JSON)</button>'+
-    '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button></div>'+
+    '<button class="btn" onclick="$(\'#importFile\').click()">⬆ Import save</button>'+
+    (clientErrors().length?'<button class="btn" onclick="closeModal();openDiagnostics()">🩺 Diagnostics ('+clientErrors().length+')</button>':'')+'</div>'+
     '<input type="file" id="importFile" accept=".json" style="display:none" onchange="importSave(this)">'+
     (hasPreCloudBackup()?'<div class="setrow"><button class="btn" onclick="restorePreCloud()" title="Bring back the save from just before the last cloud load">↩ Restore save from before last sync</button></div>':'')+
     '<div class="setrow"><button class="btn" style="border-color:var(--hp);color:var(--hp)" onclick="resetAll()">Reset everything</button>'+
@@ -2125,7 +2216,9 @@ function onboarding(){
     '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
     '<div class="flabel">Pick an avatar</div>'+
     '<div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
-      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';onboarding()">'+avHtml(k)+'</button>';}).join('')+'</div>'+
+      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';onboarding()">'+avHtml(k)+'</button>';}).join('')+
+      (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\'onboarding\')">'+avHtml(pickedAv)+'</button>':'')+
+      '<button class="bldopen" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\'onboarding\')">🎨</button></div>'+
     '<div class="avpick scroll">'+AVATARS.map(function(a){
       return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';onboarding()">'+a+'</button>';}).join('')+'</div>'+
     '<div class="flabel">Who are you? Pick ALL that fit - a student can also be an athlete and a founder. Your starting quests, habits, life areas and rewards blend everything you pick.</div>'+
@@ -2234,6 +2327,42 @@ document.addEventListener('visibilitychange', function(){
   if(now-lastVisPull>5*60000){ lastVisPull=now; cloudBootPull(); }
 });
 window.addEventListener('pagehide', function(){ if(state) flushCloudPush(); });
+
+/* ---------- diagnostics: keep the last runtime errors so problems are visible ---------- */
+var ERRLOG_KEY='sml.errlog.v1';
+function logClientError(msg){
+  try{
+    var log=JSON.parse(localStorage.getItem(ERRLOG_KEY)||'[]');
+    log.unshift({t:new Date().toISOString(),m:String(msg).slice(0,300)});
+    if(log.length>20) log.length=20;
+    localStorage.setItem(ERRLOG_KEY,JSON.stringify(log));
+  }catch(e){}
+}
+function clientErrors(){ try{ return JSON.parse(localStorage.getItem(ERRLOG_KEY)||'[]'); }catch(e){ return []; } }
+window.addEventListener('error',function(ev){
+  logClientError((ev.message||'error')+' @ '+String(ev.filename||'').split('/').pop()+':'+(ev.lineno||0));
+});
+window.addEventListener('unhandledrejection',function(ev){
+  logClientError('unhandled promise: '+((ev.reason&&ev.reason.message)||ev.reason));
+});
+function openDiagnostics(){
+  var log=clientErrors();
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>🩺 DIAGNOSTICS</h2>'+
+    (log.length?'<div class="hint">The app hit '+log.length+' error'+(log.length===1?'':'s')+' recently. Copy this when reporting a bug.</div>'+
+      '<div class="errlog">'+log.map(function(e){ return '<div class="errrow"><span class="et">'+esc(e.t.slice(5,16).replace('T',' '))+'</span>'+esc(e.m)+'</div>'; }).join('')+'</div>'+
+      '<div class="setrow"><button class="btn" onclick="copyErrLog()">📋 Copy</button>'+
+      '<button class="btn" onclick="localStorage.removeItem(ERRLOG_KEY);openDiagnostics()">🧹 Clear</button>'+
+      '<button class="btn" onclick="closeModal()">Close</button></div>'
+     :'<div class="hint">No errors recorded. If something ever glitches, the details land here.</div>'+
+      '<div class="setrow"><button class="btn" onclick="closeModal()">Close</button></div>')+
+    '</div>';
+}
+function copyErrLog(){
+  var txt=clientErrors().map(function(e){ return e.t+' '+e.m; }).join('\n');
+  try{ navigator.clipboard&&navigator.clipboard.writeText(txt); }catch(e){}
+  toast('📋 <span class="p">Error log copied</span>');
+}
 
 boot();
 if('serviceWorker' in navigator && location.protocol==='https:'){
