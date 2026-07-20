@@ -129,6 +129,22 @@ ok(rq.doneOn === null, 'recurring quest reopened');
 ok(s7.hero.streak === 0, 'streak broken after skipped day');
 ok(RPG.dailyReset(s7) === false, 'reset is idempotent same day');
 
+section('All-habits-kept bonus');
+(function () {
+  var ab = RPG.newState('AB');
+  A.addHabit(ab, { title: 'One', type: 'good' });
+  A.addHabit(ab, { title: 'Two', type: 'good' });
+  A.addHabit(ab, { title: 'Monster', type: 'bad' });
+  var r1 = A.doHabit(ab, ab.habits[0].id);
+  ok(!r1.allHabits, 'no bonus while a good habit is still unchecked');
+  var r2 = A.doHabit(ab, ab.habits[1].id);
+  ok(r2.allHabits === true && r2.bonusCoins >= 20, 'clearing the last good habit pays the full-garden bonus');
+  ok(ab.log.some(function (e) { return e.icon === '🌟'; }), 'bonus is logged');
+  var solo = RPG.newState('SOLO');
+  A.addHabit(solo, { title: 'Only one', type: 'good' });
+  ok(!A.doHabit(solo, solo.habits[0].id).allHabits, 'single-habit boards cannot farm the bonus');
+})();
+
 section('Skills management');
 (function () {
   var cap = RPG.newState('CAP');

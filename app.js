@@ -311,8 +311,8 @@ function chestScreen(res){
   }
   var o=$('#overlay'); o.className='show';
   o.innerHTML='<div class="levelbox"><div class="big">🎁 DAILY CHEST</div>'+
-    '<div class="sub">All dailies cleared. The chest creaks open…</div>'+
-    '<div class="sub"><span style="color:var(--xp)">+'+res.xp+' XP</span> &nbsp; <span style="color:var(--gold)">+'+res.coins+' 💰</span></div>'+
+    '<div class="sub">All dailies cleared. You got:</div>'+
+    '<div class="sub" style="font-size:17px"><b style="color:var(--xp)">+'+res.xp+' XP</b> &nbsp; <b style="color:var(--gold)">+'+res.coins+' 💰</b></div>'+
     loot+
     '<button class="btn go" onclick="closeOverlay()">Nice ▶</button></div>';
 }
@@ -454,7 +454,24 @@ function chestChip(){
   if(c.total===0) return '';
   if(c.claimed) return '<span class="chestchip claimed">🎁 claimed ✓</span>';
   if(c.eligible) return '<button class="chestchip ready" onclick="claimChest()">🎁 OPEN CHEST!</button>';
-  return '<span class="chestchip">🎁 '+c.done+'/'+c.total+'</span>';
+  return '<button class="chestchip" onclick="openChestPreview()" title="What could be inside?">🎁 '+c.done+'/'+c.total+'</button>';
+}
+/* peek inside: what the chest can drop today, with live odds (Fortune shifts them) */
+function openChestPreview(){
+  var c=A.chestStatus(state);
+  var lucky=RPG.boonCount(state,'fortune')>0;
+  var jack=lucky?20:14, pot=lucky?18:12, fr=lucky?12:8;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>🎁 DAILY CHEST</h2>'+
+    '<div class="hint">Clear <b>all '+c.total+'</b> of today’s dailies ('+c.done+'/'+c.total+' done) and the chest opens. Inside:</div>'+
+    '<div class="ranklist" style="margin-top:10px">'+
+      '<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">💰</span><div class="grow"><b>25 XP + 20-50 coins</b> - every chest, guaranteed</div><span class="rl">100%</span></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">🧞</span><div class="grow"><b>Coin jackpot</b> - an extra 40-100 💰 on top</div><span class="rl">'+jack+'%</span></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--skill);border-color:var(--skill)">🧪</span><div class="grow"><b>Focus Elixir</b> - ×2 XP for a whole day</div><span class="rl">'+pot+'%</span></div>'+
+      '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">🖼</span><div class="grow"><b>Glowing avatar frame</b> - rare cosmetic, collect all 6</div><span class="rl">'+fr+'%</span></div>'+
+    '</div>'+
+    (lucky?'<div class="hint" style="margin-top:8px">🍀 Fortune boon active - the good stuff drops more often.</div>':'')+
+    '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="closeModal()">Back to the grind</button></div></div>';
 }
 
 /* main quest card with nested steps */
@@ -1316,7 +1333,11 @@ function delGoal(id){
   var g=state.goals.find(function(x){return x.id===id;});
   withUndo('🗑 Main quest deleted'+(g?': '+esc(g.title):'')+' (steps kept as side quests)', function(){ A.deleteGoal(state,id); });
 }
-function doHabit(id){ var r=A.doHabit(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction(); }
+function doHabit(id){
+  var r=A.doHabit(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck();
+  if(r&&r.allHabits){ confetti(); toast('🌟 <span class="c">Every habit kept today - +'+r.bonusCoins+' bonus 💰</span>'); }
+  afterAction();
+}
 function slip(id){
   undoSnap=JSON.stringify(state); // misclicks happen - honesty still wins
   var r=A.slipHabit(state,id); persist(); render(); fx(r); afterAction();
@@ -1354,7 +1375,15 @@ function delShop(id){
   var it=state.shop.find(function(x){return x.id===id;});
   withUndo('🗑 Reward removed'+(it?': '+esc(it.title):''), function(){ A.deleteShopItem(state,id); });
 }
-function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ chestScreen(r); flyCoins(r.coins); } afterAction(); }
+function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ chestAnim(r); flyCoins(r.coins); } afterAction(); }
+/* the claim itself is instant (state-wise); this is just the shake-then-reveal */
+function chestAnim(r){
+  if(reduceMotion()){ chestScreen(r); return; }
+  var o=$('#overlay'); o.className='show';
+  o.innerHTML='<div class="levelbox"><div class="chestshake" aria-hidden="true">🎁</div>'+
+    '<div class="sub">The chest rattles…</div></div>';
+  setTimeout(function(){ if($('#overlay').classList.contains('show')) chestScreen(r); },1700);
+}
 function saveJournal(){
   var mood=pendingMood||((state.journal[RPG.todayKey()]||{}).mood);
   if(!mood){ toast('<span class="h">Pick a mood first</span>','dmg'); return; }
