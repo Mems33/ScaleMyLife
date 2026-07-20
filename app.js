@@ -376,7 +376,7 @@ function renderSkills(){
       '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+tierChip+
       '<button class="del" aria-label="Remove life area" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
   }).join('');
-  html += '<button class="addskill" onclick="addSkillPrompt()">+ life area</button>';
+  if(state.skills.length<RPG.MAX_SKILLS) html += '<button class="addskill" onclick="addSkillPrompt()">+ life area</button>';
   $('#skillsRow').innerHTML = html;
 }
 
@@ -1364,20 +1364,36 @@ function saveSleep(){
   var sl=state.sleep[RPG.todayKey()];
   var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
   var r=A.logSleep(state,$('#slHours').value,q); pendingHours=null; pendingQuality=null; persist(); render(); fx(r); afterAction(); }
-function addSkillPrompt(){ openSkillModal(); }
+function addSkillPrompt(){
+  if(state.skills.length>=RPG.MAX_SKILLS){ toast('<span class="h">Life-area limit reached ('+RPG.MAX_SKILLS+') - remove one first</span>','dmg'); return; }
+  openSkillModal();
+}
+/* curated emoji grid so creating an area never needs a copy-paste trip */
+var SKILL_EMOJIS=['🧠','💪','📚','💼','🤝','💎','🎨','🎸','🎹','🎬','📷','✍️','💻','🔬','📈','🛠️','🎯','⚽','🏀','🏊','🏃','🧘','⛰️','🚴','🍳','🥗','🌱','🌍','✈️','🚗','🏠','🐶','♟️','🗣️','🇫🇷','🇪🇸','🇩🇪','🇮🇹','🇯🇵','🇰🇷'];
+var skIconSel=null;
+function skPickEmoji(btn,e){
+  skIconSel=e;
+  var all=document.querySelectorAll('#skEmojiGrid button');
+  for(var i=0;i<all.length;i++) all[i].className=all[i]===btn?'on':'';
+}
 function openSkillModal(){
+  skIconSel=null;
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>✨ NEW LIFE AREA</h2>'+
     '<div class="flabel">Name</div><input id="skName" maxlength="20" placeholder="e.g. French, Driving, Music">'+
-    '<div class="flabel">Emoji</div><div class="setrow"><input id="skIcon" maxlength="4" placeholder="type any emoji, e.g. 🇫🇷 🚗 🎸" style="max-width:220px"></div>'+
+    '<div class="flabel">Pick an emoji</div><div class="avpick" id="skEmojiGrid">'+SKILL_EMOJIS.map(function(e){
+      return '<button type="button" onclick="skPickEmoji(this,\''+e+'\')">'+e+'</button>';}).join('')+'</div>'+
+    '<div class="setrow"><input id="skIcon" maxlength="4" placeholder="…or type any emoji" style="max-width:200px"><span class="hint">overrides the grid pick</span></div>'+
     '<div class="setrow" style="margin-top:12px"><button class="btn go" onclick="saveSkill()">Create</button>'+
     '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
   $('#skName').focus();
 }
 function saveSkill(){
   var n=$('#skName').value.trim(); if(!n){ toast('<span class="h">Give it a name</span>','dmg'); return; }
-  var ic=$('#skIcon').value.trim()||'✨';
-  A.addSkill(state,n,ic); persist(); closeModal(); render();
+  var ic=$('#skIcon').value.trim()||skIconSel||'✨';
+  var s=A.addSkill(state,n,ic);
+  if(!s){ toast('<span class="h">Life-area limit reached ('+RPG.MAX_SKILLS+')</span>','dmg'); return; }
+  persist(); closeModal(); render();
 }
 function delSkill(id){
   var sk=state.skills.find(function(k){return k.id===id;});
