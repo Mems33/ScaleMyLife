@@ -903,7 +903,7 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 /* ==========================================================================
    v25: focus-active pill (persists across tabs) + sync
    ========================================================================== */
-#focuspill{position:fixed;top:calc(8px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:61;
+#focuspill{position:fixed;top:calc(8px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));z-index:61;
   display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-weight:700;font-size:13px;
   padding:7px 14px;border-radius:20px;border:1px solid var(--gold);color:var(--ink);cursor:pointer;
   background:color-mix(in srgb,var(--panel) 88%,transparent);backdrop-filter:blur(8px);box-shadow:var(--elev1)}
