@@ -129,6 +129,22 @@ ok(rq.doneOn === null, 'recurring quest reopened');
 ok(s7.hero.streak === 0, 'streak broken after skipped day');
 ok(RPG.dailyReset(s7) === false, 'reset is idempotent same day');
 
+section('Focus banked on a side quest');
+(function () {
+  var fq = RPG.newState('FQ');
+  var side = A.addQuest(fq, { title: 'Write cover letter', diff: 'normal' });
+  var t0 = Date.now();
+  A.startFocus(fq, { work: 30, brk: 0, questId: side.id, now: t0 });
+  A.tickFocus(fq, t0 + 30 * 60000 + 5);
+  var fr = A.stopFocus(fq, t0 + 30 * 60000 + 5);
+  ok(fr.questTitle === 'Write cover letter', 'stop reports the linked side quest');
+  ok(side.focusMin === 30, '30 min banked on the side quest');
+  var mg = RPG.migrate(JSON.parse(JSON.stringify(RPG.newState('MGQ'))));
+  A.addQuest(mg, { title: 'x' });
+  delete mg.quests[0].focusMin;
+  ok(RPG.migrate(mg).quests[0].focusMin === 0, 'migration seeds quest focusMin');
+})();
+
 section('All-habits-kept bonus');
 (function () {
   var ab = RPG.newState('AB');
