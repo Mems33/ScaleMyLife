@@ -24,7 +24,7 @@
   var SLEEP_XP = 10;
   var CHEST_XP = 25, CHEST_COIN_MIN = 20, CHEST_COIN_SPREAD = 30;
   var CHEST_JACKPOT_MIN = 40, CHEST_JACKPOT_SPREAD = 60; // rare "big coins" loot
-  var BOSS_XP = 500, BOSS_COINS = 250, BOSS_DAYS = 7;
+  var BOSS_XP = 500, BOSS_COINS = 250;   // boss is due by the Sunday closing its week (bossSunday)
   var BREAK_HP = 3;               // completing a pomodoro break heals a little
   var FOCUS_MIN_PAY = 5;          // sessions under 5 worked minutes pay nothing
   var FOCUS_MAX_PAY_MIN = 240;    // cap payout at 4h per session
@@ -226,6 +226,17 @@
     L.push('END:VCALENDAR');
     return L.join('\r\n');
   }
+  /* Sunday that closes a boss week: this week's Sunday on Mon-Fri; naming a
+     boss on Sat/Sun rolls to next week's Sunday. weeksAhead shifts further. */
+  function bossSunday(now, weeksAhead) {
+    var d = now ? new Date(now) : new Date();
+    d.setHours(0, 0, 0, 0);
+    var add = (7 - d.getDay()) % 7;          // days until Sunday (0 if today is Sunday)
+    if (add <= 1) add += 7;                  // Sat (1) / Sun (0) → next week's Sunday
+    d.setDate(d.getDate() + add + 7 * (weeksAhead || 0));
+    return todayKey(d);
+  }
+
   function cleanDaysOf(h) {
     if (!h.cleanSince) return 0;
     var a = new Date(h.cleanSince + 'T00:00:00'), b = new Date(todayKey() + 'T00:00:00');
@@ -1073,11 +1084,13 @@
       return actions.tickFocus(state, now);
     },
 
-    /* ----- weekly boss: one big task, 7 days to slay it ----- */
+    /* ----- weekly boss: one big task, due by Sunday of its week -----
+       A weekly boss ends when the week ends, not 7 floating days after you set
+       it. Naming one on Saturday or Sunday targets NEXT week's Sunday, so it is
+       never due in under two days. o.due (a bossSunday key) picks the week. */
     setBoss: function (state, o) {
       if (state.boss && !state.boss.doneOn) return null;
-      var d = new Date(); d.setDate(d.getDate() + BOSS_DAYS);
-      state.boss = { title: o.title.trim(), setOn: todayKey(), due: todayKey(d), doneOn: null };
+      state.boss = { title: o.title.trim(), setOn: todayKey(o.now), due: o.due || bossSunday(o.now), doneOn: null };
       addLog(state, '🐲', 'Weekly boss appears: ' + state.boss.title);
       return state.boss;
     },
@@ -1443,7 +1456,7 @@
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     progressKey: progressKey, compareProgress: compareProgress,
     skillTier: skillTier, boonById: boonById, frameById: frameById, pathById: pathById,
-    boonCount: boonCount, maxHpOf: maxHpOf, menaceOf: menaceOf, ascendReady: ascendReady, buffXpMult: buffXpMult,
+    boonCount: boonCount, maxHpOf: maxHpOf, menaceOf: menaceOf, ascendReady: ascendReady, buffXpMult: buffXpMult, bossSunday: bossSunday,
     buyInfo: buyInfo, buyPrice: buyPrice, buyCount: buyCount,
     newState: newState, seed: seed, seedPreset: seedPreset, dailyReset: dailyReset, migrate: migrate,
     grant: grant, damage: damage, ascend: ascend, rise: rise, usePotion: usePotion, addLog: addLog,
