@@ -572,7 +572,7 @@
       }
     }
     if (state.boss && !state.boss.doneOn && today > state.boss.due) {
-      addLog(state, '💀', 'The boss escaped: ' + state.boss.title + '. Name a new one on Friday.');
+      addLog(state, '💀', 'The boss escaped: ' + state.boss.title + '. Name a new one when you’re ready.');
       state.boss = null;
     }
     state.hero.woundedOn = null; // wounds heal overnight

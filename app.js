@@ -347,7 +347,7 @@ function renderHUD(){
   var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
   $('#hud').innerHTML=
     '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+avHtml(h.avatar)+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
+    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">Rank '+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
     (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
@@ -477,7 +477,7 @@ function goalCard(g){
     '<div class="stepadd"><input id="step_'+g.id+'" placeholder="Add a step to this main quest…">'+
     '<select id="stepd_'+g.id+'"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
     '<input type="date" id="stepdue_'+g.id+'" title="Due date (optional)">'+
-    '<button class="btn small" onclick="addStep(\''+g.id+'\')">+ Step</button></div></div>';
+    '<button class="btn go small" style="flex-shrink:0;white-space:nowrap" onclick="addStep(\''+g.id+'\')">Add step</button></div></div>';
 }
 
 function renderQuests(){
@@ -491,9 +491,8 @@ function renderQuests(){
 
   $('#view').innerHTML=bossStrip()+
     '<div class="panel" style="border-color:var(--gold);margin-bottom:14px"><h3 style="color:var(--gold)">🏆 Main quests - the big goals</h3>'+goalHtml+
-      '<div class="form"><div class="row"><input id="gTitle" placeholder="New main quest… (e.g. Pass my driving test)">'+
-      '<button class="btn" onclick="addGoal()">+ Main quest</button></div>'+
-      '<input id="gNote" placeholder="Why it matters (optional)"></div></div>'+
+      '<div class="form"><div class="row"><input id="gTitle" placeholder="New main quest… (e.g. Pass my driving test, Finish my portfolio)">'+
+      '<button class="btn go" onclick="addGoal()">🏆 Add main quest</button></div></div></div>'+
     '<div class="grid two">'+
     '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
       '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
@@ -506,8 +505,7 @@ function renderQuests(){
       }).join('')+'<span class="hint">none selected = every day</span></div>'+
       '<button class="btn wide go" onclick="addDaily()">+ Add daily</button></div></div>'+
     '<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div></div>'+
-    '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span>'+
-      '<button class="btn small right" onclick="exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">📅 Export due dates</button></h3>'+
+    '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span></h3>'+
       '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
       (sides.map(questRow).join('')||emptyState('📌','No side quests','Add a one-off task below. The ⬆ button upgrades one into a main quest.'))+
       '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
@@ -536,7 +534,7 @@ function bossStrip(){
   }
   return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
     '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
-    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰. Ideal during Friday planning.</div></div>'+
+    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰.</div></div>'+
     '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:260px">'+
     '<button class="btn" onclick="setBoss()">🐲 Name it</button></div>';
 }
@@ -566,8 +564,9 @@ function bossKillScreen(r){
 function agendaPanel(){
   var items=A.agenda(state);
   var names={overdue:'⚠ OVERDUE',today:'🔥 DUE TODAY',week:'📅 THIS WEEK',later:'🌙 LATER'};
-  if(!items.length) return '<h3>📅 Deadlines</h3>'+emptyState('🗓️','Nothing scheduled','Give side quests a due date and they line up here by priority.');
-  var out='<h3>📅 Deadlines <span class="cnt">'+items.length+'</span></h3>', last='';
+  var exportBtn='<button class="btn small right" onclick="exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">📅 Export due dates</button>';
+  if(!items.length) return '<h3>📅 Deadlines'+exportBtn+'</h3>'+emptyState('🗓️','Nothing scheduled','Give side quests a due date and they line up here by priority.');
+  var out='<h3>📅 Deadlines <span class="cnt">'+items.length+'</span>'+exportBtn+'</h3>', last='';
   items.forEach(function(it){
     if(it.bucket!==last){ out+='<div class="logday">'+names[it.bucket]+'</div>'; last=it.bucket; }
     var when=it.days<0?(-it.days)+'d late':it.days===0?'today':it.days===1?'tomorrow':'in '+it.days+'d';
@@ -590,7 +589,7 @@ function renderToday(){
   var due=A.agenda(state).filter(function(it){return it.bucket==='overdue'||it.bucket==='today';});
 
   $('#view').innerHTML=
-    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">'+new Date().toDateString()+'</span>'+
+    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">Today · '+new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</span>'+
     (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
     (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
       '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
@@ -933,7 +932,7 @@ function renderMarket(){
     '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
     (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
     (shopTab==='black'?'<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">':'')+
-    (shopTab!=='hotel'?'<input id="sLimit" type="number" min="0" placeholder="max/day" style="max-width:100px" title="0 = unlimited">':'')+
+    (shopTab!=='hotel'?'<input id="sLimit" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">':'')+
     '<button class="btn buy" onclick="addShop()">+ Stock it</button></div>'+presetChips('shop')+'</div></div>';
 }
 function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
@@ -1073,7 +1072,7 @@ function leaderboardPanel(){
 }
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
-  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString(undefined,{weekday:'long'}):'-';
+  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'}):'-';
   return '<div class="review">'+
     '<div class="rv"><span class="k">🏅 Best day</span><span class="v">'+best+' · '+rev.bestXp+' XP</span></div>'+
     (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
@@ -1088,7 +1087,7 @@ function journalArchive(){
   var cur=RPG.todayKey().slice(0,7);
   return '<input id="jSearch" placeholder="Search your entries…" oninput="filterJournal(this.value)" style="margin-bottom:8px">'+
     months.map(function(m){
-      var label=new Date(m+'-01T00:00:00').toLocaleDateString(undefined,{month:'long',year:'numeric'});
+      var label=new Date(m+'-01T00:00:00').toLocaleDateString('en-US',{month:'long',year:'numeric'});
       var rows=by[m].map(function(d){
         var e=state.journal[d], mo=RPG.MOODS.find(function(x){return x.key===e.mood;});
         var s=state.sleep[d];
@@ -1138,7 +1137,7 @@ function renderStats(){
       }).join('');
   }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
 
-  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review - for your Friday planning'+
+  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review'+
     '<button class="btn small right" onclick="shareRecap()" title="Create a shareable image of your week">📸 Share my week</button></h3>'+
     reviewBox()+
     '<div class="statgrid">'+
@@ -1254,7 +1253,7 @@ function addStep(goalId){
   persist(); render();
 }
 function addGoal(){ var t=$('#gTitle').value.trim(); if(!t) return;
-  A.addGoal(state,{title:t,note:$('#gNote').value}); persist(); render(); }
+  A.addGoal(state,{title:t,note:''}); persist(); render(); }
 function doGoal(id){
   var p=A.goalProgress(state,id);
   if(p.total>0 && p.done<p.total && !confirm('Steps are at '+p.done+'/'+p.total+'. Complete the main quest anyway?')) return;
@@ -1585,10 +1584,11 @@ function openSettings(){
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
     '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+
     '<button class="btn" onclick="toggleMascotSetting()">'+(state.settings.mascot!==false?'🦉 Sage ON':'🦉 Sage OFF')+'</button></div>'+
-    (state.settings.reminders?'<div class="setrow"><label class="hint" style="align-self:center" for="remHour">🕕 Daily nudge at</label>'+
-      '<select id="remHour" onchange="setReminderHour(this.value)">'+[16,17,18,19,20,21,22].map(function(h){
+    (state.settings.reminders?'<div class="setrow" style="align-items:center"><label class="hint" style="margin:0" for="remHour">🕕 Daily nudge at</label>'+
+      '<select id="remHour" style="max-width:120px" onchange="setReminderHour(this.value)">'+[16,17,18,19,20,21,22].map(function(h){
         return '<option value="'+h+'"'+((state.settings.reminderHour==null?18:state.settings.reminderHour)===h?' selected':'')+'>'+(h%12||12)+':00 '+(h<12?'AM':'PM')+'</option>';
-      }).join('')+'</select><span class="hint" style="flex:1;align-self:center">when today’s unfinished dailies get a friendly reminder.</span></div>':'')+
+      }).join('')+'</select></div>'+
+      '<div class="hint" style="margin-top:2px;margin-bottom:8px">Today’s unfinished dailies get a friendly reminder at this time.</div>':'')+
     '<div class="setrow"><button class="btn'+(state.settings.hardcore?' hcon':'')+'" onclick="toggleHardcore()" title="Defeat costs half your coins and revives you at just 10 HP">'+(state.settings.hardcore?'💀 Hardcore ON':'🛡️ Hardcore OFF')+'</button>'+
     '<span class="hint" style="flex:1;align-self:center">Defeat bites harder: bigger coin loss, lower revival HP.</span></div>'+
     '<div class="flabel">🌙 Rest days <span class="hint" style="display:inline">- your streak won’t break on these</span></div>'+
@@ -2102,15 +2102,16 @@ function saveEditHabit(id){
 /* ---------- interactive spotlight tour ---------- */
 var tourStep=0;
 var TOUR=[
-  {tab:'today', sel:'#hud', title:'Your hero', body:'Your rank, level, XP, HP, coins and streak live here. Tap your avatar any time to rename, re-theme or ascend.'},
-  {tab:'today', sel:'#skillsRow', title:'Life areas', body:'Tag quests, habits and focus sessions to these areas. Each one levels up and unlocks mastery bonuses on its own actions.'},
+  {tab:'today', sel:'#hud', title:'Your hero', body:'Your rank, level, experience (XP), health points (HP), coins and streak live here. Tap your avatar any time to rename or re-theme.'},
+  {tab:'today', sel:'#skillsRow', title:'Life areas', body:'Each of these areas levels up and unlocks mastery bonuses on its own actions. Connect quests, habits and focus sessions to these areas.'},
   {tab:'today', sel:'.tabs', title:'Getting around', body:'Today is home base. Quests, Habits, Focus, Market, Journal and Stats each live in their own tab.'},
-  {tab:'today', sel:'.quick', title:'Daily rituals', body:'Log your mood and sleep, and start a focus run, right from here. Keeping the streak alive multiplies all your XP.'},
-  {tab:'quests', sel:'.boss', title:'The weekly boss', body:'Name THE task of your week and slay it within 7 days for a big reward.'},
-  {tab:'quests', sel:'.panel', title:'Quests', body:'Main quests are big goals broken into steps. Daily quests reset each morning and fill the chest. The ✎ button edits anything you added.'},
+  {tab:'today', sel:'.quick', title:'Quick Add', body:'Log your mood and sleep, and start a focus run, right from here. Keeping the streak alive multiplies all your XP.'},
+  {tab:'quests', sel:'.boss', title:'The weekly boss', body:'Name THE task of your week and slay it before the week ends for a big reward.'},
+  {tab:'quests', sel:'.panel', title:'Quests', body:'Main quests are big goals broken into steps. Daily quests reset each morning and fill the chest. Side quests are one-off tasks with an optional due date. The ✎ button edits anything you added.'},
   {tab:'focus', sel:'.focusbox', title:'Focus = paid deep work', body:'Pomodoro cycles that pay you for every worked minute. Tag a life area so it shows up in your Stats breakdown.'},
   {tab:'market', sel:'.shoptabs', title:'Spend what you earned', body:'Turn coins into real rewards, guilt-free. Prices climb if you binge the same treat in one day.'},
-  {tab:'stats', sel:'.review', title:'See your patterns', body:'Your week in review, a focus-by-area breakdown, and insights on what actually moves your mood.'}
+  {tab:'stats', sel:'.review', title:'See your patterns', body:'Your week in review, a focus-by-area breakdown, and insights on what actually moves your mood.'},
+  {tab:'stats', sel:'#mascot', title:'Sage, your guide', body:'The owl in the corner. Tap Sage any time for a daily briefing: what is urgent, what is left today, and where to go next.'}
 ];
 function startTour(){ closeModal(); tourStep=0; showTourStep(); }
 function showTourStep(){
