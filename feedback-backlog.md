@@ -10,7 +10,7 @@
 - [ ] **Save-history table for point-in-time recovery** (idea) — cloud currently keeps only the latest save row.
 
 ### Needs verification on the live site (can't be tested from the dev sandbox)
-- [ ] **Confirm the canonical URL** — meta tags, `sitemap.xml` and `robots.txt` assume `https://mems33.github.io/ScaleMyLife/`; swap everywhere if hosted elsewhere.
+- [x] **Canonical URL confirmed** — `https://scale-my-life.vercel.app` (from the vault's project note); meta tags, `sitemap.xml` and `robots.txt` updated to it.
 - [ ] **One-time PWA refresh on phones** — fully close and reopen the installed app (twice if needed, or re-add from Safari) so the new auto-update mechanism takes over; updates are automatic afterwards.
 - [ ] **Password-reset flow end-to-end** — request the email on the live site, open the link on the same device, set a new password.
 - [ ] **Break alarm audibility on iPhone** — WebAudio unlock + resume shipped; confirm the bell actually sounds at break time on the device.
