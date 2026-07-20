@@ -28,11 +28,15 @@ This file is your memory. At the end of every working session:
 ### Do
 
 <!-- YYYY-MM-DD — rule -->
-- 2026-07-20 — Apply Supabase migrations directly via the MCP tools; never hand Mehmet SQL to paste into the dashboard (his explicit correction: "can you not do it yourself next time?").
+- 2026-07-20 — Apply Supabase migrations directly via the MCP tools; never hand Mehmet SQL to paste into the dashboard (his explicit correction: "can you not do it yourself next time?"). *Amended 2026-07-21:* if the permission layer blocks the MCP migration, don't work around it - append the SQL to the matching `supabase/*.sql` file, park dependent client code on a clearly-labeled unmerged branch, and surface it at session end.
 - 2026-07-20 — Ship loop per increment: full test suite green → Playwright browser QA with screenshots → commit → PR → self-merge → reset the working branch onto origin/main. This pattern has been accepted ~35 times.
 - 2026-07-20 — Explain punitive mechanics in-app BEFORE they can bite (the defeat system got a tappable HP bar + "What if I lose?" explainer on request).
 - 2026-07-20 — When a feature spans devices, resolve conflicts by game progress (RPG.progressKey), never by wall-clock timestamps; always stash a restorable backup before adopting a remote save.
-- 2026-07-20 — Bump the sw.js CACHE version whenever any precached asset changes (a test guards this); new user-facing pages get added to ASSETS.
+- 2026-07-20 — Bump the sw.js CACHE version whenever any precached asset changes (a test guards this); new user-facing pages get added to ASSETS. *Amended 2026-07-21:* bump it in the SAME commit as the asset change - the guard diffs commits, so it passes on uncommitted work and only fails after a stale merge lands.
+- 2026-07-21 — Any control whose handler calls `render()` must not wipe typed input: keep drafts in module-level state (`pendingNote`/`focusDraft` pattern) and re-hydrate `value=`/`selected` from them on every render.
+- 2026-07-21 — Keep state mutations synchronous and animate only the reveal (chest-rattle pattern): jsdom tests assert state right after the call, and reduced-motion users get the instant path for free.
+- 2026-07-21 — When a UI change deliberately breaks a UI test, update the test in the same batch and say so in the commit body; never delete or skip it.
+- 2026-07-21 — User-facing date labels always pass `'en-US'` to `toLocaleDateString`; device-locale output ("lundi" for best day) reads as a bug in an English app.
 - 2026-07-20 — Anything stored in the leaderboard `avatar` column must fit 8 chars; encode rich avatars as short tokens (`@knight`, `#03214`) and render them client-side.
 
 ### Don't
@@ -43,3 +47,5 @@ This file is your memory. At the end of every working session:
 - 2026-07-20 — Don't restructure systems the user only asked to tune ("don't change a lot if not useful" on life areas — renames beat redesigns until told otherwise).
 - 2026-07-20 — Don't rewrite commits that aren't yours: GitHub's squash-merge commits (noreply@github.com) and Mehmet's own commits stay untouched even when the stop-hook flags them as Unverified.
 - 2026-07-20 — Don't claim a live-site behavior is fixed when the sandbox can't reach the host; put it in feedback-backlog.md under "needs verification on the live site" instead.
+- 2026-07-21 — Don't merge client code that reads/writes a new Supabase column before the migration ran on the live project; PostgREST rejects unknown columns and every upsert breaks (see `title-sharing-leaderboard` branch pattern).
+- 2026-07-21 — Don't `git add -A` on a session's first commit before checking `git status` for untracked local artifacts (graphify-out/ nearly shipped 16k lines); gitignore tool-output directories immediately.
