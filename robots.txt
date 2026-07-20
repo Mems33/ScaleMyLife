@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://mems33.github.io/ScaleMyLife/sitemap.xml
+Sitemap: https://scale-my-life.vercel.app/sitemap.xml
