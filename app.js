@@ -353,7 +353,9 @@ function renderHUD(){
   $('#hud').innerHTML=
     '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+avHtml(h.avatar)+'</div>'+
     '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">Rank '+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
-    (h.title?'<div class="herotitle">“'+esc(h.title)+'”</div>':'')+
+    (h.title
+      ?'<div class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</div>'
+      :'<div class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</div>')+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
       '<div class="bar hp" role="button" tabindex="0" style="cursor:pointer" title="What happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+(h.hp/maxHp*100)+'%"></i><b>HP '+h.hp+' / '+maxHp+'</b></div>'+
@@ -653,7 +655,8 @@ function renderToday(){
           (done?'<span style="color:var(--good);font-weight:700">✓</span>'
             :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
       }).join('')||emptyState('🌱','No habits planted','Grow good habits (and name your monsters) in the Habits tab.','<button class="btn small" onclick="go(\'habits\')">🌱 To the Habits tab</button>'))+
-    '</div></div>';
+    '</div></div>'+
+    (A.agenda(state).length?'<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div>':'');
 }
 
 function habitDots(h){
@@ -1332,7 +1335,16 @@ function firstQuestScreen(){
     '<div class="big" style="color:var(--xp)">FIRST QUEST DONE!</div>'+
     '<div class="sub">That just earned you <b style="color:var(--xp)">XP</b> (fills your bar and levels you up) and <b style="color:var(--gold)">coins</b> (spend them on real rewards in the 🏪 Market).</div>'+
     '<div class="sub" style="color:var(--muted)">Clear all of a day’s dailies to pop the 🎁 chest, and keep a daily streak to multiply everything. That’s the whole game.</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Let’s go ▶</button></div>';
+    '<button class="btn go" id="fqGo" disabled style="opacity:.5" onclick="closeOverlay()">Let’s go ▶ <span id="fqCd">3</span></button></div>';
+  /* 3-second unlock so the explanation actually gets read */
+  var left=3;
+  var iv=setInterval(function(){
+    left--;
+    var cd=$('#fqCd'), btn=$('#fqGo');
+    if(!btn){ clearInterval(iv); return; }
+    if(left<=0){ clearInterval(iv); btn.disabled=false; btn.style.opacity=''; if(cd) cd.textContent=''; }
+    else if(cd) cd.textContent=String(left);
+  },1000);
 }
 function delQuest(id){
   var q=state.quests.find(function(x){return x.id===id;});
@@ -1715,6 +1727,37 @@ function titleChips(){
 function wearTitle(id){
   var a=RPG.ACHIEVEMENTS.find(function(x){return x.id===id;});
   if(a && $('#chTitle')) $('#chTitle').value=a.name;
+}
+/* one-tap title picker straight from the hero bar */
+function openTitlePicker(){
+  var unlocked=state.achievements.map(function(u){
+    return RPG.ACHIEVEMENTS.find(function(a){return a.id===u.id;});
+  }).filter(Boolean);
+  var locked=RPG.ACHIEVEMENTS.length-unlocked.length;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>✦ WEAR A TITLE</h2>'+
+    '<div class="hint">Your title glows under your name'+(state.settings.board||state.settings.friends?' - friends and the leaderboard see it too (once title sharing is live)':'')+'. Earn achievements to unlock more.</div>'+
+    (unlocked.length?'<div class="titlechips" style="margin-top:10px">'+unlocked.map(function(a){
+      var worn=state.hero.title===a.name;
+      return '<button style="'+(worn?'border-color:var(--gold);color:var(--gold)':'')+'" onclick="wearTitleNow(\''+a.id+'\')">'+a.icon+' '+esc(a.name)+(worn?' ✓':'')+'</button>';
+    }).join('')+'</div>':'<div class="hint" style="margin-top:8px">Nothing unlocked yet - your first quest unlocks <b>First Blood</b>.</div>')+
+    '<div class="flabel">…or write your own</div>'+
+    '<div class="setrow"><input id="tpCustom" maxlength="34" placeholder="e.g. Essay Slayer" value="'+esc(state.hero.title||'')+'">'+
+    '<button class="btn go" onclick="wearCustomTitle()">Wear it</button></div>'+
+    '<div class="setrow" style="margin-top:10px">'+(state.hero.title?'<button class="btn" onclick="wearTitleNow(null)">✕ No title</button>':'')+
+    '<button class="btn" onclick="closeModal()">Close</button></div>'+
+    (locked?'<div class="hint" style="margin-top:8px">'+locked+' more titles locked in 📊 Stats → Achievements.</div>':'')+'</div>';
+}
+function wearTitleNow(id){
+  if(id===null){ state.hero.title=''; }
+  else{ var a=RPG.ACHIEVEMENTS.find(function(x){return x.id===id;}); if(a) state.hero.title=a.name; }
+  persist(); closeModal(); render();
+  if(state.hero.title){ SND.ach(); toast('✦ <span class="c">Now wearing “'+esc(state.hero.title)+'”</span>'); }
+}
+function wearCustomTitle(){
+  var t=($('#tpCustom')?$('#tpCustom').value:'').trim();
+  state.hero.title=t; persist(); closeModal(); render();
+  if(t){ SND.ach(); toast('✦ <span class="c">Now wearing “'+esc(t)+'”</span>'); }
 }
 function setTheme(k){ state.settings.theme=k; persist(); applyTheme(); openCharacter(); }
 function saveCharacter(){

@@ -35,7 +35,16 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .hud .avatar:hover{transform:scale(1.06)}
 .hud .who{min-width:0}
 .hud .name{font-family:var(--px);font-size:13px;letter-spacing:1px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.herotitle{font-size:12px;color:var(--muted);font-style:italic;margin-top:3px}
+/* wearable title: a glowing badge, not a shy quote */
+.herotitle{display:inline-block;margin-top:4px;padding:2px 10px;border-radius:12px;font-size:11.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer;
+  color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);
+  background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 16%,transparent),transparent);
+  text-shadow:0 0 10px color-mix(in srgb,var(--gold) 65%,transparent);
+  animation:titleglow 2.6s ease-in-out infinite}
+.herotitle:hover{border-color:var(--gold)}
+.herotitle.empty{color:var(--muted);border-style:dashed;border-color:var(--line);background:none;text-shadow:none;animation:none;text-transform:none;letter-spacing:.3px;font-weight:700}
+@keyframes titleglow{0%,100%{box-shadow:0 0 6px color-mix(in srgb,var(--gold) 25%,transparent)}50%{box-shadow:0 0 16px color-mix(in srgb,var(--gold) 45%,transparent)}}
+@media (prefers-reduced-motion: reduce){.herotitle{animation:none}}
 .rank{font-family:var(--px);font-size:9px;background:var(--panel2);border:1px solid;padding:4px 7px;border-radius:4px}
 .bars{margin-top:10px;display:grid;gap:7px;max-width:560px}
 .bar{position:relative;height:22px;background:#0d0b18;border:1px solid var(--line);border-radius:5px;overflow:hidden}
@@ -116,7 +125,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .hd.today{outline:1px solid var(--muted);outline-offset:1px}
 
 /* ---------- skills ---------- */
-.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
+.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:20px}
 .skillcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;position:relative}
 .skillcard .t{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px}
 .skillcard .t small{color:var(--skill);font-family:var(--mono);font-weight:700}
