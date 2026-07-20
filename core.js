@@ -310,6 +310,18 @@
       goodHabits: [['Deep work block', 2, 5], ['Workout / walk 30 min', 1, 4], ['Read / learn 20 min', 0, 7]],
       badHabits: ['Doomscrolling', 'Context-switching'],
       market: [['Gaming: 1 hour', 60], ['Nice dinner out', 120], ['Weekend fully off', 300]] },
+    { id: 'coder', icon: '💻', name: 'Coder', blurb: 'Ship code, learn deeper, keep the body running.',
+      skills: ['Mind', 'Body', 'Code', 'Social', 'Money'],
+      quests: [['Code for 1 focused hour', 'hard', 2, true], ['Solve one practice problem', 'normal', 2, true], ['Read docs / learn 20 min', 'easy', 0, true]],
+      goodHabits: [['Commit something daily', 2, 5], ['Workout / walk 30 min', 1, 4], ['In bed by 23:30', 1, 7]],
+      badHabits: ['Doomscrolling', 'Late-night YouTube'],
+      market: [['Gaming: 1 hour', 60], ['1 episode of a series', 40], ['New gadget (save up!)', 500]] },
+    { id: 'gamer', icon: '🎮', name: 'Gamer', blurb: 'Handle real life first - then game guilt-free.',
+      skills: ['Mind', 'Body', 'Work', 'Social', 'Money'],
+      quests: [['Clear the day\'s must-do task', 'normal', 2, true], ['Tidy desk / space 10 min', 'easy', 0, true]],
+      goodHabits: [['Workout / walk 30 min', 1, 4], ['In bed by midnight', 0, 7], ['Read 20 pages', 0, 3]],
+      badHabits: ['Gaming before work is done', 'Energy drink binge'],
+      market: [['Gaming: 1 hour', 40], ['Gaming: full evening', 120], ['New game (save up!)', 600]] },
     { id: 'creative', icon: '🎨', name: 'Creative', blurb: 'Making, publishing and building a body of work.',
       skills: ['Mind', 'Body', 'Craft', 'Audience', 'Money'],
       quests: [['Create for 1 focused hour', 'hard', 2, true], ['Publish / share one thing', 'normal', 3, true], ['Collect one reference / idea', 'easy', 0, true]],
@@ -320,7 +332,7 @@
   function pathById(id) { for (var i = 0; i < PATHS.length; i++) if (PATHS[i].id === id) return PATHS[i]; return null; }
 
   var SKILL_ICONS = { Mind: '🧠', Body: '💪', Work: '💼', Social: '🤝', Money: '💎',
-    Study: '📚', Craft: '🛠️', Nutrition: '🥗', Build: '🏗️', Network: '🌐', Audience: '📣' };
+    Study: '📚', Craft: '🛠️', Nutrition: '🥗', Build: '🏗️', Network: '🌐', Audience: '📣', Code: '💻' };
 
   /* build a starting board from one path id or an array of them (you can be a
      student AND an athlete AND a founder - the board merges all of it) */

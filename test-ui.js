@@ -298,10 +298,16 @@ setTimeout(async function () {
   console.log('\nCharacter customization');
   w.openCharacter();
   ok(!!d.querySelector('#modal.show'), 'character modal opens');
+  ok(d.querySelectorAll('.avtabs button').length === 3, 'avatar tabs: heroes / emoji / customize');
+  ok(d.querySelector('#chCustomAv') === null, 'custom-emoji input hidden on the heroes tab');
   d.querySelector('#chName').value = 'Mehmet';
   d.querySelector('#chTitle').value = 'Essay Slayer';
+  w.avTab = 'emoji'; w.openCharacter();   // switch to the emoji tab (re-render keeps typed name/title)
+  ok(d.querySelector('#chName').value === 'Mehmet', 'typed name survives the avatar-tab switch');
+  ok(d.querySelector('.avpick.scroll') !== null, 'emoji grid shows on the emoji tab');
   d.querySelector('#chCustomAv').value = '🚀';
   w.saveCharacter();
+  w.avTab = 'heroes';
   ok(w.state.hero.name === 'Mehmet' && w.state.hero.title === 'Essay Slayer' && w.state.hero.avatar === '🚀', 'name, title, custom emoji saved');
   ok(d.querySelector('#hud').textContent.indexOf('Essay Slayer') >= 0, 'title shown in HUD');
   w.openCharacter();
