@@ -19,6 +19,7 @@
   var FOCUS_XP_PER_MIN = 1.2, FOCUS_COIN_PER_MIN = 0.6; // 50 min = 60xp/30c (a Hard quest)
   var GOAL_XP = 300, GOAL_COINS = 150;
   var HABIT_XP = 12, HABIT_COINS = 6;
+  var HABITS_ALL_BONUS = 20;      // small coin bonus when every good habit is kept in one day
   var SLIP_HP = 12, SLIP_COINS = 10;
   var JOURNAL_XP = 15, JOURNAL_COINS = 5;
   var SLEEP_XP = 10;
@@ -943,6 +944,18 @@
       var res = grant(state, { xp: HABIT_XP + bonus, coins: HABIT_COINS }, h.skillId);
       addLog(state, '🌱', 'Habit kept: ' + h.title + ' (streak ' + h.streak + ')', { xp: res.xp, coins: res.coins });
       res.streak = h.streak;
+      /* full garden bonus: checking off EVERY good habit in one day pays extra
+         (needs 2+ good habits so a one-habit board can't farm it) */
+      var goods = state.habits.filter(function (x) { return x.type === 'good'; });
+      if (goods.length >= 2 && goods.every(function (x) { return x.lastDoneOn === todayKey(); })) {
+        var extra = Math.round(HABITS_ALL_BONUS * coinBoonMult(state));
+        if (!state.hero.downed) {
+          state.hero.coins += extra;
+          res.coins += extra;
+          res.allHabits = true; res.bonusCoins = extra;
+          addLog(state, '🌟', 'Every habit kept today - +' + extra + ' bonus coins!', { coins: extra });
+        }
+      }
       return res;
     },
 
