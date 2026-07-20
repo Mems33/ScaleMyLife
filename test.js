@@ -29,7 +29,7 @@ section('New state + seed');
 var s = RPG.seed(RPG.newState('Alp', '🧙'));
 ok(s.hero.name === 'Alp' && s.hero.level === 1 && s.hero.coins === 50, 'hero initialized');
 ok(s.skills.length === 5, '5 default skills');
-ok(s.quests.length === 2 && s.habits.length === 3 && s.shop.length === 6, 'seed content present');
+ok(s.quests.length === 2 && s.habits.length === 5 && s.shop.length === 6, 'seed content present');
 
 section('Quests');
 var q = A.addQuest(s, { title: 'Write essay outline', diff: 'hard', skillId: s.skills[0].id });
@@ -130,6 +130,21 @@ ok(s7.hero.streak === 0, 'streak broken after skipped day');
 ok(RPG.dailyReset(s7) === false, 'reset is idempotent same day');
 
 section('Skills management');
+(function () {
+  var cap = RPG.newState('CAP');
+  while (cap.skills.length < RPG.MAX_SKILLS) A.addSkill(cap, 'Area ' + cap.skills.length, '✨');
+  ok(cap.skills.length === RPG.MAX_SKILLS, 'life areas fill up to the cap');
+  ok(A.addSkill(cap, 'One too many', '🚫') === null, 'addSkill refuses past MAX_SKILLS (12)');
+})();
+(function () {
+  var sd = RPG.seed(RPG.newState('SD'));
+  ['Read 20 pages', 'Workout / walk 30 min', 'Reach out to a friend', 'Review spending 10 min'].forEach(function (t) {
+    ok(sd.habits.some(function (h) { return h.title === t; }), 'starter board shows a use case: ' + t);
+  });
+  var social = sd.skills[3].id, money = sd.skills[4].id;
+  ok(sd.habits.some(function (h) { return h.skillId === social; }), 'Social area has a starter habit');
+  ok(sd.habits.some(function (h) { return h.skillId === money; }), 'Money area has a starter habit');
+})();
 var s8 = RPG.newState('X');
 var sk = A.addSkill(s8, 'French', '🇫🇷');
 var qf = A.addQuest(s8, { title: 'verbes', diff: 'easy', skillId: sk.id });
@@ -616,7 +631,7 @@ ok(stu.quests.length >= 2 && stu.habits.length >= 3, 'student path seeds a full 
 ok(stu.shop.some(function (i) { return i.special === 'shield'; }), 'path boards stock a Streak Shield');
 ok(stu.habits.some(function (h) { return h.type === 'bad' && h.menace === 1; }), 'path monsters start at menace 1');
 var gen = RPG.seedPreset(RPG.newState('GEN'), 'general');
-ok(gen.quests.length === 2 && gen.habits.length === 3 && gen.shop.length === 6, 'general path == classic seed');
+ok(gen.quests.length === 2 && gen.habits.length === 5 && gen.shop.length === 6, 'general path == classic seed');
 ok(stu.skills.some(function (k) { return k.name === 'Study' && k.icon === '📚'; }), 'path life areas get matching icons');
 
 section('Multi-path onboarding (student AND founder AND more)');
@@ -635,7 +650,7 @@ ok(multi3.habits.filter(function (h) { return h.type === 'bad'; }).length <= 4, 
 var single = RPG.seedPreset(RPG.newState('S1'), ['athlete']);
 ok(single.skills.length === 5 && single.skills[2].name === 'Nutrition', 'a single path in array form behaves like the classic pick');
 var degen = RPG.seedPreset(RPG.newState('D1'), ['general', 'nonsense']);
-ok(degen.quests.length === 2 && degen.habits.length === 3, 'unknown/balanced-only picks fall back to the classic seed');
+ok(degen.quests.length === 2 && degen.habits.length === 5, 'unknown/balanced-only picks fall back to the classic seed');
 
 section('Migration to schema 5');
 var v4 = RPG.newState('V4');

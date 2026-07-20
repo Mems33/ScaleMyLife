@@ -29,6 +29,7 @@
   var FOCUS_MIN_PAY = 5;          // sessions under 5 worked minutes pay nothing
   var FOCUS_MAX_PAY_MIN = 240;    // cap payout at 4h per session
   var MAX_HP = 100;
+  var MAX_SKILLS = 12;            // life-area cap - keeps the board focused
   /* ---------- defeat / Last Stand ----------
      Dropping to 0 HP knocks you DOWN, not out for good. Death must sting enough
      to matter but never destroy honest progress (you never lose levels/XP), and
@@ -277,13 +278,17 @@
 
   function seed(state) {
     var mind = state.skills[0].id, body = state.skills[1].id, craft = state.skills[2].id;
+    var social = state.skills[3] ? state.skills[3].id : null, money = state.skills[4] ? state.skills[4].id : null;
     state.quests.push(
       { id: uid(), title: 'Plan tomorrow in 10 minutes', diff: 'easy', skillId: mind, due: null, recurring: true, main: null, doneOn: null, createdOn: todayKey() },
       { id: uid(), title: 'Deep work session (50 min)', diff: 'normal', skillId: craft, due: null, recurring: true, main: null, doneOn: null, createdOn: todayKey() }
     );
+    /* every default life area ships with one starter that shows its use case */
     state.habits.push(
       { id: uid(), title: 'Read 20 pages', type: 'good', skillId: mind, streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: 7 },
       { id: uid(), title: 'Workout / walk 30 min', type: 'good', skillId: body, streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: 3 },
+      { id: uid(), title: 'Reach out to a friend', type: 'good', skillId: social, streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: 3 },
+      { id: uid(), title: 'Review spending 10 min', type: 'good', skillId: money, streak: 0, lastDoneOn: null, slips: 0, cleanSince: null, history: [], bestClean: 0, target: 1 },
       { id: uid(), title: 'Doomscrolling', type: 'bad', skillId: mind, streak: 0, lastDoneOn: null, slips: 0, cleanSince: todayKey(), history: [], bestClean: 0, target: 7 }
     );
     state.shop.push(
@@ -1290,6 +1295,7 @@
     },
 
     addSkill: function (state, name, icon) {
+      if (state.skills.length >= MAX_SKILLS) return null;
       var s = { id: uid(), name: name.trim(), icon: icon || '✨', xp: 0, level: 1 };
       state.skills.push(s);
       return s;
@@ -1450,7 +1456,7 @@
   }
 
   return {
-    SCHEMA: SCHEMA, DIFF: DIFF, RANKS: RANKS, MOODS: MOODS, ACHIEVEMENTS: ACHIEVEMENTS, MAX_HP: MAX_HP, KEY: KEY,
+    SCHEMA: SCHEMA, DIFF: DIFF, RANKS: RANKS, MOODS: MOODS, ACHIEVEMENTS: ACHIEVEMENTS, MAX_HP: MAX_HP, MAX_SKILLS: MAX_SKILLS, KEY: KEY,
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
     uid: uid, todayKey: todayKey, clamp: clamp,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
