@@ -610,6 +610,12 @@ function renderToday(){
         return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+mainTag+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
         '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
       }).join('')+'</div>':'')+
+    '<div class="panel" style="margin-bottom:14px"><h3>⚡ Quick Add</h3><div class="quick">'+
+      '<button class="'+((j&&sl)?'done':'')+'" onclick="go(\'journal\')">'+((j&&sl)?'📔 Mood &amp; sleep ✓':'📔 Log mood &amp; sleep · +15xp, heals ❤️')+'</button>'+
+      '<button onclick="go(\'focus\')">⏳ Start a focus run</button>'+
+      '<button onclick="go(\'quests\')">📌 Add a side quest</button>'+
+      ((state.inventory.potion||0)>0?'<button class="potion" onclick="usePotion()">🧪 Focus Elixir ×'+state.inventory.potion+' · ×2 XP today</button>':'')+
+    '</div></div>'+
     '<div class="grid two">'+
     '<div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
       (dailies.map(questRow).join('')||emptyState('🔁','Nothing to clear today','Add repeating quests in the Quests tab and they line up here every morning.','<button class="btn small" onclick="go(\'quests\')">📜 To the Quests tab</button>'))+'</div>'+
@@ -622,12 +628,7 @@ function renderToday(){
           (done?'<span style="color:var(--good);font-weight:700">✓</span>'
             :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
       }).join('')||emptyState('🌱','No habits planted','Grow good habits (and name your monsters) in the Habits tab.','<button class="btn small" onclick="go(\'habits\')">🌱 To the Habits tab</button>'))+
-    '<div class="quick">'+
-      '<button class="'+(j?'done':'')+'" onclick="go(\'journal\')">'+(j?'📔 Journal ✓':'📔 Log mood · +15xp')+'</button>'+
-      '<button class="'+(sl?'done':'')+'" onclick="go(\'journal\')">'+(sl?'🌙 Sleep ✓':'🌙 Log sleep · heals ❤️')+'</button>'+
-      '<button onclick="go(\'focus\')">⏳ Start a focus run</button>'+
-      ((state.inventory.potion||0)>0?'<button class="potion" onclick="usePotion()">🧪 Focus Elixir ×'+state.inventory.potion+' · ×2 XP today</button>':'')+
-    '</div></div></div>';
+    '</div></div>';
 }
 
 function habitDots(h){
@@ -945,24 +946,46 @@ function toggleEscalate(){ state.settings.escalate=state.settings.escalate===fal
 
 function renderJournal(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
+  var hrs=pendingHours!=null?String(pendingHours):((sl||{}).hours!=null?String(sl.hours):'');
+  var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
   $('#view').innerHTML='<div class="grid two">'+
-    '<div class="panel"><h3>Today\'s mood '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰')+'</h3>'+
+    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+    '<div class="flabel">Mood</div>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
       var on=(pendingMood||((entry||{}).mood))===m.key;
       return '<button class="'+(on?'on':'')+'" title="'+m.label+'" aria-label="Mood: '+m.label+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingMood=\''+m.key+'\';render()">'+m.emoji+'</button>';
     }).join('')+'</div>'+
-    '<textarea id="jNote" rows="3" placeholder="One honest line about today…" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
-    '<button class="btn wide go" style="margin-top:8px" onclick="saveJournal()">'+(entry?'Update entry':'Log entry')+'</button>'+
-    '<h3 style="margin-top:18px">🌙 Sleep '+(sl?'<span class="cnt">logged ✓</span>':'· restores ❤️')+'</h3>'+
-    '<div class="row" style="display:flex;gap:8px;align-items:center">'+
-    '<input id="slHours" type="number" step="0.5" min="0" max="16" value="'+(pendingHours!=null?esc(pendingHours):((sl||{}).hours||7.5))+'" oninput="pendingHours=this.value" style="max-width:90px"> <span class="hint">hours</span>'+
+    '<textarea id="jNote" rows="3" placeholder="One honest line about today… (optional)" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
+    '<div class="flabel">🌙 Sleep last night '+(sl?'<span class="cnt" style="font-size:10px">logged ✓</span>':'')+'</div>'+
+    '<div class="row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+    [7,8,9].map(function(n){
+      var on=hrs!==''&&Number(hrs)===n;
+      return '<button type="button" class="hrbtn'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingHours='+n+';render()">'+n+'h</button>';
+    }).join('')+
+    '<input id="slHours" type="number" step="0.5" min="0" max="16" value="'+esc(hrs)+'" placeholder="other…" oninput="pendingHours=this.value" style="max-width:90px">'+
     '<div class="stars">'+[1,2,3,4,5].map(function(n){
-      var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
       var on=n<=q;
-      return '<button class="'+(on?'on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div>'+
-    '<button class="btn go" onclick="saveSleep()">'+(sl?'Update':'Log sleep')+'</button></div></div>'+
+      return '<button class="'+(on?'on':'')+'" title="Sleep quality '+n+'/5" aria-pressed="'+(on?'true':'false')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div></div>'+
+    '<div class="hint" style="margin-top:2px">Pick a quick 7-9h button or type your own. Stars = how rested you feel.</div>'+
+    '<button class="btn wide go" style="margin-top:10px" onclick="saveDailyLog()">'+((entry||sl)?'Update entry':'Log entry')+'</button></div>'+
     '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
     journalArchive()+'</div></div>';
+}
+/* one button logs the whole day: mood + note, and sleep when hours are set */
+function saveDailyLog(){
+  var today=RPG.todayKey();
+  var mood=pendingMood||((state.journal[today]||{}).mood);
+  if(!mood){ toast('<span class="h">Pick a mood first</span>','dmg'); return; }
+  var r=A.logJournal(state,mood,$('#jNote').value);
+  var hrsEl=$('#slHours'), hrs=hrsEl?hrsEl.value:'';
+  var r2=null;
+  if(hrs!==''){
+    var sl=state.sleep[today];
+    var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
+    r2=A.logSleep(state,hrs,q);
+  }
+  pendingMood=null; pendingNote=null; pendingHours=null; pendingQuality=null;
+  persist(); render(); fx(r); if(r2&&r2.hp) fx({hp:r2.hp}); afterAction();
 }
 
 function insightsPanel(){
@@ -1113,6 +1136,21 @@ function filterJournal(q){
   document.querySelectorAll('details.jmonth').forEach(function(dt){ if(q) dt.open=true; });
 }
 
+/* third chart row: sleep hours per day, weekly total + long-run average */
+function sleepChartHtml(w){
+  var slMax=9, slWeek=0, logged=false;
+  w.days.forEach(function(d){ var s=state.sleep[d]; if(s&&s.hours>slMax) slMax=s.hours; });
+  var cols=w.days.map(function(d){
+    var s=state.sleep[d], v=s?s.hours:0; slWeek+=v; if(v) logged=true;
+    var lbl=['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()];
+    return '<div class="col"><div class="cl" style="color:var(--blue)">'+(v||'')+'</div><div class="colbar sleep" style="height:'+Math.max(2,Math.round(v/slMax*100))+'%"></div><div class="cl">'+lbl+'</div></div>';
+  }).join('');
+  var all=Object.keys(state.sleep).map(function(k){ return state.sleep[k].hours; });
+  var avg=all.length?Math.round(all.reduce(function(a,b){return a+b;},0)/all.length*10)/10:0;
+  if(!logged) return '<div class="hint" style="text-align:center;margin-top:6px">🌙 Log sleep in the Journal and your sleep chart appears here.</div>';
+  return '<div class="chart sleepchart" style="margin-top:10px">'+cols+'</div>'+
+    '<div class="hint" style="text-align:center;margin-top:2px">sleep hours, last 7 days · <b style="color:var(--blue)">'+(Math.round(slWeek*10)/10)+'h</b> this week'+(all.length?' · '+avg+'h long-run average':'')+'</div>';
+}
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
@@ -1162,7 +1200,8 @@ function renderStats(){
     '<div class="chart">'+chart+'</div>'+
     '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
-    '<div class="hint" style="text-align:center">mood, last 7 days</div></div>'+
+    '<div class="hint" style="text-align:center">mood, last 7 days</div>'+
+    sleepChartHtml(w)+'</div>'+
     focusPanel()+
     heatmapPanel()+
     insightsPanel()+

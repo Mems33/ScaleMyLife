@@ -249,7 +249,8 @@ setTimeout(async function () {
   w.go('stats');
   var sv = d.querySelector('#view').textContent;
   ok(sv.indexOf('Week in review') >= 0, 'week review renders');
-  ok(d.querySelectorAll('.chart .col').length === 7, '7-day XP chart renders');
+  ok(d.querySelectorAll('.chart:not(.sleepchart) .col').length === 7, '7-day XP chart renders');
+  ok(d.querySelectorAll('.chart.sleepchart .col').length === 7, '7-day sleep chart renders below mood');
   ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'all achievements shown');
   ok(d.querySelectorAll('.ach.unlocked').length >= 1, 'at least one achievement unlocked (first_blood)');
   ok(sv.indexOf('Adventure log') >= 0 && sv.indexOf('Focus session') >= 0, 'log includes focus session');

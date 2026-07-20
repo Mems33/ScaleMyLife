@@ -267,6 +267,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .avtabs button.on{border-color:var(--gold);color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,transparent)}
 .avtabs button.customize{margin-left:auto;border-style:dashed;border-color:var(--skill);color:var(--skill)}
 .avtabs button.customize:hover{border-style:solid;background:color-mix(in srgb,var(--skill) 12%,transparent)}
+.colbar.sleep{background:var(--blue)}
+.hrbtn{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:12px;padding:6px 12px;font-size:13px;font-weight:700}
+.hrbtn.on{border-color:var(--blue);color:var(--blue);background:color-mix(in srgb,var(--blue) 12%,transparent)}
 .stars{display:flex;gap:4px}
 .stars button{background:none;border:none;font-size:21px;filter:grayscale(1);padding:2px}
 .stars button.on{filter:none}
@@ -274,7 +277,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .jrow .d{font-family:var(--mono);color:var(--muted);font-size:12px;min-width:84px}
 
 /* stats */
-.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:14px}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:6px;margin-bottom:14px}
 .stat{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center}
 .stat .v{font-family:var(--px);font-size:15px;color:var(--gold)}
 .stat .v.g{color:var(--xp)} .stat .v.r{color:var(--hp)} .stat .v.b{color:var(--blue)}
