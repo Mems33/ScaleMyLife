@@ -2,8 +2,9 @@
 var $ = function(s,el){ return (el||document).querySelector(s); };
 var A = RPG.actions;
 var state = RPG.load(localStorage);
-var tab='today', shopTab='market', pendingMood=null, pendingQuality=3;
+var tab='today', shopTab='market', pendingMood=null, pendingQuality=null;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
+var focusDraft={label:'',skill:'',goal:''}; // focus form draft - selecting music/mode must never wipe typed text
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var boardView='global';          // Stats leaderboard: 'global' | 'friends'
@@ -58,8 +59,11 @@ var THEMES={
 };
 var MUSIC={
   none:{name:'🔇 No music',id:null},
-  lofi:{name:'🎧 Lofi Girl radio',id:'jfKfPfyJRdk'},
+  lofi:{name:'🎧 Lofi study mix',id:'lTRiuFIWV54'},
   synth:{name:'🌆 Synthwave radio',id:'4xDzrJKXOOY'},
+  epic:{name:'🏮 Epic Chinese',id:'hjQ0q6lz-pY'},
+  valhalla:{name:'🪓 Valhalla',id:'x67GelOetvo'},
+  craft:{name:'⛏️ Minecraft',id:'vCTRNKPJr40'},
   custom:{name:'🔗 Custom YouTube URL',id:null}
 };
 
@@ -794,12 +798,12 @@ function renderFocus(){
         '<button class="'+(focusMode.custom?'on':'')+'" onclick="focusMode={work:focusMode.work,brk:focusMode.brk,custom:true};render()">⚙ Custom</button>'+
       '</div>'+
       '<div class="form" style="max-width:460px;margin:0 auto;border:none;padding-top:0">'+
-      '<input id="fLabel" placeholder="What are you working on? (e.g. Essay draft)">'+
-      '<div class="row"><select id="fSkill">'+skillOptions()+'</select>'+
-      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest"><option value="">- main quest -</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'">🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
+      '<input id="fLabel" placeholder="What are you working on? (e.g. Essay draft)" value="'+esc(focusDraft.label)+'" oninput="focusDraft.label=this.value">'+
+      '<div class="row"><select id="fSkill" onchange="focusDraft.skill=this.value">'+skillOptions(focusDraft.skill)+'</select>'+
+      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest" onchange="focusDraft.goal=this.value"><option value="">- main quest -</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'"'+(focusDraft.goal===g.id?' selected':'')+'>🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
       '</div>'+
-      (focusMode.custom?'<div class="row"><label style="font-size:12px;color:var(--muted)">Work<input id="fWork" type="number" min="5" max="180" value="'+focusMode.work+'" placeholder="work min" style="max-width:90px"></label>'+
-        '<label style="font-size:12px;color:var(--muted)">Break<input id="fBrk" type="number" min="0" max="60" value="'+focusMode.brk+'" placeholder="break" style="max-width:80px"></label></div>':'')+
+      (focusMode.custom?'<div class="row"><label style="font-size:12px;color:var(--muted)">Work<input id="fWork" type="number" min="5" max="180" value="'+focusMode.work+'" placeholder="work min" style="max-width:90px" oninput="focusMode.work=Number(this.value)||focusMode.work"></label>'+
+        '<label style="font-size:12px;color:var(--muted)">Break<input id="fBrk" type="number" min="0" max="60" value="'+focusMode.brk+'" placeholder="break" style="max-width:80px" oninput="focusMode.brk=this.value===\'\'?focusMode.brk:(Number(this.value)||0)"></label></div>':'')+
       '<div class="flabel" style="text-align:left">Study music / background</div>'+
       '<div class="row"><select id="fMusic" onchange="state.settings.music=this.value;persist();render()">'+
       Object.keys(MUSIC).map(function(k){return '<option value="'+k+'"'+(state.settings.music===k?' selected':'')+'>'+MUSIC[k].name+'</option>';}).join('')+
@@ -814,6 +818,7 @@ function startFocus(){
   var w=wEl?(Number(wEl.value)||focusMode.work):focusMode.work;
   var b=bEl?(bEl.value===''?focusMode.brk:Number(bEl.value)):focusMode.brk;
   A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,goalId:($('#fGoal')||{}).value||null,label:$('#fLabel').value});
+  focusDraft={label:'',skill:'',goal:''};
   persist(); render();
 }
 function stopFocus(){
@@ -951,8 +956,9 @@ function renderJournal(){
     '<div class="row" style="display:flex;gap:8px;align-items:center">'+
     '<input id="slHours" type="number" step="0.5" min="0" max="16" value="'+(pendingHours!=null?esc(pendingHours):((sl||{}).hours||7.5))+'" oninput="pendingHours=this.value" style="max-width:90px"> <span class="hint">hours</span>'+
     '<div class="stars">'+[1,2,3,4,5].map(function(n){
-      var on=n<=(sl?sl.quality:pendingQuality);
-      return '<button class="'+(on?'on':'')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div>'+
+      var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
+      var on=n<=q;
+      return '<button class="'+(on?'on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div>'+
     '<button class="btn go" onclick="saveSleep()">'+(sl?'Update':'Log sleep')+'</button></div></div>'+
     '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
     journalArchive()+'</div></div>';
@@ -1093,7 +1099,7 @@ function journalArchive(){
         var s=state.sleep[d];
         return '<div class="jrow jarch"><span class="d">'+d.slice(5)+'</span><span>'+(mo?mo.emoji:'')+'</span>'+
           '<span style="flex:1">'+esc(e.note||'-')+'</span>'+
-          (s?'<span class="hint">🌙'+s.hours+'h</span>':'')+'</div>';
+          (s?'<span class="hint">🌙'+s.hours+'h'+(s.quality?' <span style="color:var(--gold)">'+Array((s.quality||0)+1).join('⭐')+'</span>':'')+'</span>':'')+'</div>';
       }).join('');
       return '<details class="jmonth"'+(m===cur?' open':'')+'><summary>'+label+' <span class="cnt">'+by[m].length+'</span></summary>'+rows+'</details>';
     }).join('');
@@ -1307,7 +1313,10 @@ function saveJournal(){
   if(!mood){ toast('<span class="h">Pick a mood first</span>','dmg'); return; }
   var r=A.logJournal(state,mood,$('#jNote').value); pendingMood=null; pendingNote=null; persist(); render(); fx(r); afterAction();
 }
-function saveSleep(){ var r=A.logSleep(state,$('#slHours').value,pendingQuality); pendingHours=null; persist(); render(); fx(r); afterAction(); }
+function saveSleep(){
+  var sl=state.sleep[RPG.todayKey()];
+  var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
+  var r=A.logSleep(state,$('#slHours').value,q); pendingHours=null; pendingQuality=null; persist(); render(); fx(r); afterAction(); }
 function addSkillPrompt(){ openSkillModal(); }
 function openSkillModal(){
   var m=$('#modal'); m.className='modal show';
