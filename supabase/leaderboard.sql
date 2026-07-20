@@ -31,3 +31,9 @@ create policy "board: update own"  on public.leaderboard for update using (auth.
 create policy "board: leave own"   on public.leaderboard for delete using (auth.uid() = user_id);
 
 create index if not exists leaderboard_week_xp_idx on public.leaderboard (week_xp desc);
+
+/* migration (2026-07): wearable hero title, shown on the board and friend
+   profiles. Cosmetic and user-chosen; length-capped like every text column. */
+alter table public.leaderboard add column if not exists title text not null default '';
+alter table public.leaderboard drop constraint if exists leaderboard_title_len;
+alter table public.leaderboard add constraint leaderboard_title_len check (char_length(title) <= 34);

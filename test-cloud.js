@@ -98,11 +98,12 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   fx.route('grant_type=password', 200, { access_token: 'at3', refresh_token: 'rt3', user: SESS.user });
   await Cloud.signIn('a@b.c', 'pw123456');
   fx.route('/rest/v1/leaderboard?on_conflict', 201, {});
-  var pb = await Cloud.pushBoard({ name: 'A-very-long-hero-name-that-overflows', avatar: '🧙', level: 14, rank: 'C', weekXp: 1432.7, bestStreak: 15, ascension: 1 });
+  var pb = await Cloud.pushBoard({ name: 'A-very-long-hero-name-that-overflows', avatar: '🧙', level: 14, rank: 'C', title: 'An-extremely-long-wearable-title-that-should-be-cut', weekXp: 1432.7, bestStreak: 15, ascension: 1 });
   ok(pb.ok === true, 'board push succeeds');
   var pbReq = log[log.length - 1];
   ok(/on_conflict=user_id/.test(pbReq.url) && /merge-duplicates/.test(pbReq.headers.Prefer), 'board push is an upsert');
   ok(pbReq.body[0].name.length <= 24 && pbReq.body[0].week_xp === 1433, 'profile snapshot is clamped and rounded');
+  ok(pbReq.body[0].title.length <= 34, 'wearable title is length-clamped in the snapshot');
   ok(!('data' in pbReq.body[0]) && !('coins' in pbReq.body[0]), 'only the tiny public profile is shared — never the save');
   fx.route('/rest/v1/leaderboard?select', 200, [
     { user_id: 'u9', name: 'Rival', avatar: '🥷', level: 20, rank_code: 'B', week_xp: 2000, best_streak: 30, ascension: 0 },
