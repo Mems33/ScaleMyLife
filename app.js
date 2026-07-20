@@ -531,21 +531,28 @@ function bossStrip(){
   if(b && !b.doneOn){
     var days=A.bossDaysLeft(state);
     var when=days<0?'escaped':days===0?'due TODAY':days+' day'+(days===1?'':'s')+' left';
+    var dueTxt=new Date(b.due+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
     return '<div class="boss"><span class="ic">🐲</span><div class="grow">'+
       '<div class="t">WEEKLY BOSS: '+esc(b.title)+'</div>'+
-      '<div class="sub"><b>'+when+'</b> · slay it for 500xp / 250💰 · escapes after 7 days</div></div>'+
+      '<div class="sub"><b>'+when+'</b> · slay it for 500xp / 250💰 · due '+dueTxt+'</div></div>'+
       '<button class="btn slip" onclick="slayBoss()">🗡️ SLAY</button>'+
       '<button class="btn ghost" aria-label="Abandon boss" onclick="abandonBoss()">✕</button></div>';
   }
+  var s0=RPG.bossSunday(), s1=RPG.bossSunday(null,1);
+  function sunTxt(k){ return 'Sunday '+new Date(k+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
   return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
     '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
-    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰.</div></div>'+
-    '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:260px">'+
+    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰 · due by the Sunday that closes its week.</div></div>'+
+    '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:220px">'+
+    '<select id="bossDue" title="Which week does this boss close?" style="max-width:170px">'+
+      '<option value="'+s0+'">by '+sunTxt(s0)+'</option>'+
+      '<option value="'+s1+'">by '+sunTxt(s1)+'</option></select>'+
     '<button class="btn" onclick="setBoss()">🐲 Name it</button></div>';
 }
 function setBoss(){
   var t=$('#bossTitle').value.trim(); if(!t) return;
-  A.setBoss(state,{title:t}); persist(); render(); SND.dmg();
+  var dueEl=$('#bossDue');
+  A.setBoss(state,{title:t,due:(dueEl&&dueEl.value)||null}); persist(); render(); SND.dmg();
   toast('🐲 <span class="h">The weekly boss awaits</span>');
 }
 function slayBoss(){
