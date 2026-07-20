@@ -691,7 +691,8 @@ setTimeout(async function () {
   console.log('\nFocus → main quest + HUD glance (v7)');
   var fgUI = w.A.addGoal(w.state, { title: 'UI goal' });
   w.go('focus');
-  ok(d.querySelector('#fGoal') !== null, 'focus form offers the main-quest selector');
+  ok(d.querySelector('#fTask') !== null, 'focus form offers the quest-link selector');
+  ok(d.querySelector('#fTask optgroup[label*="Main"]') !== null, 'main quests grouped in the selector');
   var tg = Date.now();
   w.A.startFocus(w.state, { work: 25, brk: 0, goalId: fgUI.id, now: tg });
   w.A.tickFocus(w.state, tg + 25 * 60000 + 5); w.A.stopFocus(w.state, tg + 25 * 60000 + 5);

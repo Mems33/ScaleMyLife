@@ -1004,6 +1004,7 @@
       var now = o.now || Date.now();
       state.activeFocus = { work: work, brk: brk, phase: 'work', phaseEnd: now + work * 60000,
         workedMs: 0, cycles: 0, skillId: o.skillId || null, goalId: o.goalId || null,
+        questId: o.questId || null,
         label: (o.label || '').trim(), startedAt: new Date(now).toISOString(),
         pausedAt: null, awaitingBreak: false };
       return state.activeFocus;
@@ -1088,6 +1089,11 @@
       if (f.goalId) {
         var g = state.goals.find(function (x) { return x.id === f.goalId && !x.doneOn; });
         if (g) { g.focusMin = (g.focusMin || 0) + paid; res.goalTitle = g.title; }
+      }
+      /* ...and the same for a linked side quest */
+      if (f.questId) {
+        var lq = state.quests.find(function (x) { return x.id === f.questId; });
+        if (lq) { lq.focusMin = (lq.focusMin || 0) + paid; res.questTitle = lq.title; }
       }
       addLog(state, '⏳', 'Focus session: ' + paid + ' min' + (label ? ' - ' + label : ''), { xp: res.xp, coins: res.coins, min: paid, sk: skillId, label: label });
       res.minutes = paid;
@@ -1340,7 +1346,7 @@
     if (typeof s.inventory.potion !== 'number') s.inventory.potion = 0;
     if (!s.cosmetics || typeof s.cosmetics !== 'object') s.cosmetics = { frames: [] };
     if (!Array.isArray(s.cosmetics.frames)) s.cosmetics.frames = [];
-    (s.quests || []).forEach(function (q) { if (!('days' in q)) q.days = null; });
+    (s.quests || []).forEach(function (q) { if (!('days' in q)) q.days = null; if (typeof q.focusMin !== 'number') q.focusMin = 0; });
     (s.goals || []).forEach(function (g) { if (typeof g.focusMin !== 'number') g.focusMin = 0; });
     if (!('redemption' in s)) s.redemption = null;
     if (typeof s.hero.bestStreak !== 'number') s.hero.bestStreak = Math.max(0, s.hero.streak || 0);

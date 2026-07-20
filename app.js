@@ -438,6 +438,7 @@ function questRow(q){
   if(q.skillId&&skillName(q.skillId)) meta.push('<span class="chip skill">'+skillName(q.skillId)+'</span>');
   if(q.recurring&&q.days&&q.days.length) meta.push('<span class="chip sched" title="Repeats on selected days">🗓 '+MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n][0];}).join('')+'</span>');
   if(q.due){ meta.push('<span class="chip '+(q.due<today?'late':'due')+'">'+(q.due<today?'⚠ late ':'due ')+q.due+'</span>'); }
+  if((q.focusMin||0)>0) meta.push('<span class="chip" style="color:var(--blue)" title="Focus time invested on this quest">⏳ '+fmtHm(q.focusMin)+'</span>');
   var action = done ? '<span style="color:var(--good);font-weight:700">✓</span>'
     : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
     : '<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>';
@@ -744,11 +745,30 @@ function syncMusicPlayer(){
   if(!host){ host=document.createElement('div'); host.id='smlmusic'; document.body.appendChild(host); }
   if(host.getAttribute('data-id')!==id){
     host.setAttribute('data-id',id);
-    host.innerHTML='<div class="mp-bar"><span class="mp-t">🎧 '+esc((MUSIC[state.settings.music]||{}).name||'Music')+'</span>'+
+    host.innerHTML='<div class="mp-bar" title="Drag to move"><span class="mp-t">🎧 '+esc((MUSIC[state.settings.music]||{}).name||'Music')+'</span>'+
       '<button aria-label="Pop out" title="Pop out to its own window" onclick="openMusicWin()">⧉</button>'+
       '<button aria-label="Hide music" title="Hide" onclick="hideMusicPlayer()">✕</button></div>'+
       '<iframe src="https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&playsinline=1&rel=0" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen title="study music"></iframe>';
+    musicDragInit(host);
   }
+}
+/* drag the docked player anywhere by its title bar (size via the CSS resize
+   corner). Position lives on the host element, so track changes keep it. */
+function musicDragInit(host){
+  var bar=host.querySelector('.mp-bar'); if(!bar) return;
+  bar.style.cursor='move'; bar.style.touchAction='none';
+  bar.addEventListener('pointerdown',function(e){
+    if(e.target.tagName==='BUTTON') return;
+    var r=host.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top;
+    function mv(ev){
+      var x=Math.max(4,Math.min(window.innerWidth-r.width-4,ev.clientX-ox));
+      var y=Math.max(4,Math.min(window.innerHeight-36,ev.clientY-oy));
+      host.style.left=x+'px'; host.style.top=y+'px'; host.style.bottom='auto'; host.style.right='auto';
+    }
+    function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
+    e.preventDefault();
+  });
 }
 function hideMusicPlayer(){ var h=document.getElementById('smlmusic'); if(h) h.remove(); }
 function openMusicWin(){
@@ -826,7 +846,7 @@ function renderFocus(){
       '<div class="form" style="max-width:460px;margin:0 auto;border:none;padding-top:0">'+
       '<input id="fLabel" placeholder="What are you working on? (e.g. Essay draft)" value="'+esc(focusDraft.label)+'" oninput="focusDraft.label=this.value">'+
       '<div class="row"><select id="fSkill" onchange="focusDraft.skill=this.value">'+skillOptions(focusDraft.skill)+'</select>'+
-      (state.goals.some(function(g){return !g.doneOn;})?'<select id="fGoal" title="Bank this deep work on a main quest" onchange="focusDraft.goal=this.value"><option value="">- main quest -</option>'+state.goals.filter(function(g){return !g.doneOn;}).map(function(g){return '<option value="'+g.id+'"'+(focusDraft.goal===g.id?' selected':'')+'>🏆 '+esc(g.title)+'</option>';}).join('')+'</select>':'')+
+      focusTaskSelect()+
       '</div>'+
       (focusMode.custom?'<div class="row"><label style="font-size:12px;color:var(--muted)">Work<input id="fWork" type="number" min="5" max="180" value="'+focusMode.work+'" placeholder="work min" style="max-width:90px" oninput="focusMode.work=Number(this.value)||focusMode.work"></label>'+
         '<label style="font-size:12px;color:var(--muted)">Break<input id="fBrk" type="number" min="0" max="60" value="'+focusMode.brk+'" placeholder="break" style="max-width:80px" oninput="focusMode.brk=this.value===\'\'?focusMode.brk:(Number(this.value)||0)"></label></div>':'')+
@@ -839,11 +859,29 @@ function renderFocus(){
       '<div class="payline" style="margin-top:14px">Lifetime focus: <b>'+Math.floor(state.counters.focusMin/60)+'h '+(state.counters.focusMin%60)+'m</b></div></div>';
   }
 }
+/* one select covering main AND side quests ('g:'/'q:' prefixed) - linking is
+   always optional, you can just work on whatever */
+function focusTaskSelect(){
+  var goals=state.goals.filter(function(g){return !g.doneOn;});
+  var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
+  if(!goals.length && !sides.length) return '';
+  return '<select id="fTask" title="Bank this deep work on a quest (optional)" onchange="focusDraft.goal=this.value">'+
+    '<option value="">- link a quest (optional) -</option>'+
+    (goals.length?'<optgroup label="🏆 Main quests">'+goals.map(function(g){
+      return '<option value="g:'+g.id+'"'+(focusDraft.goal==='g:'+g.id?' selected':'')+'>🏆 '+esc(g.title)+'</option>';}).join('')+'</optgroup>':'')+
+    (sides.length?'<optgroup label="📌 Side quests">'+sides.map(function(q){
+      return '<option value="q:'+q.id+'"'+(focusDraft.goal==='q:'+q.id?' selected':'')+'>📌 '+esc(q.title)+'</option>';}).join('')+'</optgroup>':'')+
+    '</select>';
+}
 function startFocus(){
   var wEl=$('#fWork'), bEl=$('#fBrk');
   var w=wEl?(Number(wEl.value)||focusMode.work):focusMode.work;
   var b=bEl?(bEl.value===''?focusMode.brk:Number(bEl.value)):focusMode.brk;
-  A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,goalId:($('#fGoal')||{}).value||null,label:$('#fLabel').value});
+  var link=($('#fTask')||{}).value||'';
+  A.startFocus(state,{work:w,brk:b,skillId:$('#fSkill').value||null,
+    goalId:link.slice(0,2)==='g:'?link.slice(2):null,
+    questId:link.slice(0,2)==='q:'?link.slice(2):null,
+    label:$('#fLabel').value});
   focusDraft={label:'',skill:'',goal:''};
   persist(); render();
 }
@@ -854,6 +892,7 @@ function stopFocus(){
   SND.chest(); confetti(); fx(r);
   toast('⏳ <span class="p">'+r.minutes+' min of real work collected</span>');
   if(r.goalTitle) toast('🏆 <span class="c">'+fmtHm(r.minutes)+' banked on “'+esc(r.goalTitle)+'”</span>');
+  if(r.questTitle) toast('📌 <span class="c">'+fmtHm(r.minutes)+' banked on “'+esc(r.questTitle)+'”</span>');
   afterAction();
 }
 function startBreakBtn(){ A.startBreak(state); persist(); render(); SND.resume(); }
