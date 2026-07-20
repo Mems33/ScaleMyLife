@@ -975,7 +975,8 @@ function renderMarket(){
     black:'Break your own rules - the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
   $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span>'+
     '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
-    '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+'</div>'+
+    '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+
+      '<button class="royaltab" onclick="openRoyalChamber()" title="Cosmetics and deep stats. Never power.">👑 Royal</button></div>'+
     '<div class="hint" style="margin-bottom:10px">'+blurb+'</div>'+
     (items.length?'<div class="shopgrid">'+items.map(function(i){
       var isShield=i.special==='shield';
@@ -1770,13 +1771,48 @@ function saveCharacter(){
   persist(); closeModal(); render();
 }
 
+/* ---------- The Royal Chamber (premium, Phase A: coming soon) ----------
+   Spec: docs/PREMIUM_SPEC.md. Cosmetic-only forever - never pay to win.
+   Always rendered in dungeon-dark so it looks premium under every theme. */
+var ROYAL_THEME_PREVIEWS=[['Obsidian','#0b0b0e','#c9ccd6'],['Aurora','#06231f','#5ef2b8'],['Sakura','#231320','#ff9ecb'],['Starfield','#0a1030','#e8ecff']];
+function openRoyalChamber(){
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box royal"><h2>👑 THE ROYAL CHAMBER</h2>'+
+    '<div class="rc-sub">Dress your legend. Your climb stays free, always.</div>'+
+    '<div class="rc-offer founder"><div class="rc-t">Founder’s Crest</div>'+
+      '<div class="rc-price">19 EUR, once. Yours forever.</div>'+
+      '<div class="rc-body">Every royal perk, for life. Every future one too. Plus the Founder badge, only for those who were here first.</div>'+
+      '<button class="btn rc-buy" disabled>Coming soon</button></div>'+
+    '<div class="rc-offer"><div class="rc-t">Royal Pass</div>'+
+      '<div class="rc-price">2.49 EUR / month</div>'+
+      '<div class="rc-body">All royal perks while your pass is active.</div>'+
+      '<button class="btn rc-buy" disabled>Coming soon</button></div>'+
+    '<div class="rc-note">The chamber opens after launch. Everything you see stays cosmetic.</div>'+
+    '<div class="rc-perks">'+
+      '<div class="rc-perk"><div class="rc-pt">🎨 Royal Themes</div>'+
+        '<div class="rc-swatches">'+ROYAL_THEME_PREVIEWS.map(function(t){
+          return '<span class="rc-sw" title="'+t[0]+'" style="background:'+t[1]+'"><i style="background:'+t[2]+'"></i></span>';}).join('')+'</div>'+
+        '<div class="rc-pb">Four new realms for your interface. Obsidian, Aurora, Sakura, Starfield.</div></div>'+
+      '<div class="rc-perk"><div class="rc-pt">🖼 Legend’s Wardrobe</div>'+
+        '<div class="rc-ring" aria-hidden="true">🧙</div>'+
+        '<div class="rc-pb">Glowing frames, new hero styles, and a shimmer on your title.</div></div>'+
+      '<div class="rc-perk"><div class="rc-pt">🦉 Sage’s Ledger</div>'+
+        '<div class="rc-chart" aria-hidden="true"><i style="height:35%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:65%"></i></div>'+
+        '<div class="rc-pb">The owl opens his ledger. Deep charts on your habits, focus, and skills.</div></div>'+
+    '</div>'+
+    '<div class="rc-footer"><b>Never pay to win.</b> No XP for money. No shields for money. No shortcuts, ever. Premium is style and stats, nothing else. Quests, habits, focus, and streaks are free for everyone, forever.</div>'+
+    '<div class="setrow" style="margin-top:12px;justify-content:center"><button class="btn" onclick="closeModal()">Back to the quest</button></div></div>';
+}
+
 /* ---------- settings ---------- */
 function openSettings(){
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>⚙️ SETTINGS</h2>'+
     '<div class="setrow"><button class="btn" onclick="closeModal();openCharacter()">🧝 Character & theme</button>'+
     '<button class="btn" onclick="closeModal();startTour()">🎯 Interactive tour</button></div>'+
-    '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button></div>'+
+    '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button>'+
+    '<button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="closeModal();openRoyalChamber()">👑 The Royal Chamber</button></div>'+
+    '<div class="hint" style="margin-top:-4px">Cosmetics and deep stats. Never power.</div>'+
     '<div class="setrow">'+
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
     '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scalemylife-static",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/private/tmp/claude-501/-Users-mems-Documents-ScaleMyLife/5ce8fdc3-b2f8-410c-9608-b15fd4ff3491/scratchpad/serve.js"],
+      "port": 8123
+    }
+  ]
+}
