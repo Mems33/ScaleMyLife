@@ -277,6 +277,36 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .avtabs button.customize{margin-left:auto;border-style:dashed;border-color:var(--skill);color:var(--skill)}
 .avtabs button.customize:hover{border-style:solid;background:color-mix(in srgb,var(--skill) 12%,transparent)}
 .colbar.sleep{background:var(--blue)}
+/* ---------- The Royal Chamber (premium, Phase A) ----------
+   Hardcoded dungeon-dark palette so the chamber stays premium under every
+   theme, including Daylight. Cosmetic-only by design - see docs/PREMIUM_SPEC.md */
+.box.royal{background:#12101f;border-color:#f5c542;color:#e8e4ff;box-shadow:0 0 40px rgba(245,197,66,.14)}
+.box.royal h2{color:#f5c542;justify-content:center}
+.rc-sub{text-align:center;color:#8f88b8;font-style:italic;margin-bottom:14px}
+.rc-offer{border:1px solid #2e2950;border-radius:12px;padding:14px;margin-top:10px;background:#1b1830;text-align:center}
+.rc-offer.founder{border-color:#f5c542;background:linear-gradient(180deg,rgba(245,197,66,.10),rgba(245,197,66,.02));box-shadow:0 0 18px rgba(245,197,66,.18)}
+.rc-t{font-family:var(--px);font-size:12px;color:#f5c542;letter-spacing:1px}
+.rc-offer:not(.founder) .rc-t{color:#e8e4ff}
+.rc-price{font-size:19px;font-weight:800;margin:6px 0 4px}
+.rc-body{font-size:13px;color:#8f88b8;max-width:420px;margin:0 auto}
+.rc-buy{margin-top:10px;border-color:#f5c542;color:#f5c542;opacity:.55;cursor:not-allowed}
+.rc-note{text-align:center;font-size:12px;color:#8f88b8;margin:10px 0 4px}
+.rc-perks{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.rc-perk{border:1px solid #2e2950;border-radius:12px;background:#1b1830;padding:12px;text-align:center}
+.rc-pt{font-weight:800;font-size:13px;margin-bottom:8px}
+.rc-pb{font-size:12px;color:#8f88b8;margin-top:8px}
+.rc-swatches{display:flex;gap:6px;justify-content:center}
+.rc-sw{width:30px;height:30px;border-radius:8px;border:1px solid #2e2950;display:inline-flex;align-items:flex-end;justify-content:center;padding:3px}
+.rc-sw i{display:block;width:14px;height:5px;border-radius:2px}
+.rc-ring{width:44px;height:44px;margin:0 auto;border-radius:50%;border:2px solid #b07bff;display:flex;align-items:center;justify-content:center;font-size:22px;
+  box-shadow:0 0 12px #b07bff;animation:titleglow 2.6s ease-in-out infinite}
+.rc-chart{display:flex;gap:4px;align-items:flex-end;height:44px;justify-content:center}
+.rc-chart i{width:10px;border-radius:3px 3px 0 0;background:linear-gradient(180deg,#f5c542,#7a6a2e)}
+.rc-footer{margin-top:14px;border:1px dashed #2e2950;border-radius:12px;padding:10px 12px;font-size:12.5px;color:#8f88b8;text-align:center}
+.rc-footer b{color:#3ddc84}
+.royaltab{border:1px solid color-mix(in srgb,var(--gold) 55%,var(--line));color:var(--gold);background:color-mix(in srgb,var(--gold) 8%,transparent);border-radius:10px;padding:7px 12px;font-weight:800;font-size:13px}
+.royaltab:hover{border-color:var(--gold)}
+
 /* chest reveal: rattle before it creaks open */
 .chestshake{font-size:76px;display:inline-block;animation:chestrattle .28s infinite;filter:drop-shadow(0 0 18px color-mix(in srgb,var(--gold) 60%,transparent))}
 @keyframes chestrattle{0%,100%{transform:rotate(0) translateX(0)}25%{transform:rotate(-7deg) translateX(-3px)}75%{transform:rotate(7deg) translateX(3px)}}

@@ -406,6 +406,25 @@ setTimeout(async function () {
   console.log('\nTutorial replay');
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('How it works') >= 0 && d.querySelector('#modal').textContent.indexOf('Interactive tour') >= 0, 'tutorial + interactive tour available in settings');
+
+  console.log('\nThe Royal Chamber (premium, Phase A)');
+  ok(d.querySelector('#modal').textContent.indexOf('Royal Chamber') >= 0, 'settings links to the Royal Chamber');
+  w.openRoyalChamber();
+  var rc = d.querySelector('#modal');
+  ok(rc.querySelector('.box.royal') !== null, 'chamber renders in its dark box');
+  ok(rc.textContent.indexOf('Founder’s Crest') >= 0 && rc.textContent.indexOf('19 EUR, once') >= 0, 'Founder offer anchors the screen');
+  ok(rc.textContent.indexOf('Royal Pass') >= 0 && rc.textContent.indexOf('2.49 EUR / month') >= 0, 'monthly pass shown below the anchor');
+  var rcFounder = rc.querySelector('.rc-offer.founder'), rcAll = rc.querySelectorAll('.rc-offer');
+  ok(rcAll.length === 2 && rcAll[0] === rcFounder, 'Founder card comes first (price anchoring)');
+  ok(rc.querySelectorAll('.rc-perk').length === 3, 'exactly three cosmetic perk cards');
+  ok(rc.textContent.indexOf('Never pay to win.') >= 0, 'never-pay-to-win footer promise present');
+  var rcBuys = rc.querySelectorAll('.rc-buy');
+  ok(rcBuys.length === 2 && rcBuys[0].disabled && rcBuys[1].disabled, 'Phase A: both purchase buttons disabled (coming soon)');
+  ok(rc.textContent.indexOf('—') < 0 && rc.textContent.indexOf('⚔') < 0, 'chamber copy: no em-dashes, no sword emoji');
+  w.closeModal();
+  w.go('market');
+  ok(d.querySelector('.royaltab') !== null, 'market shows the Royal entry');
+  w.openSettings();
   w.tut(0);
   ok(d.querySelector('.tdots') !== null, 'tutorial replays');
   w.tut(4);
