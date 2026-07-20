@@ -242,6 +242,7 @@
         avatar: String(profile.avatar || '🧙').slice(0, 8),
         level: profile.level || 1,
         rank_code: String(profile.rank || 'E').slice(0, 3),
+        title: String(profile.title || '').slice(0, 34),
         week_xp: Math.max(0, Math.min(100000, Math.round(profile.weekXp || 0))),
         best_streak: Math.max(0, profile.bestStreak || 0),
         ascension: Math.max(0, profile.ascension || 0),
@@ -313,7 +314,7 @@
       if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
       if (!ids || !ids.length) return Promise.resolve({ ok: true, rows: [] });
       var inList = '(' + ids.map(function (i) { return '"' + i + '"'; }).join(',') + ')';
-      return api._rest('GET', 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&user_id=in.' + inList + '&order=week_xp.desc,level.desc')
+      return api._rest('GET', 'leaderboard?select=user_id,name,avatar,level,rank_code,title,week_xp,best_streak,ascension&user_id=in.' + inList + '&order=week_xp.desc,level.desc')
         .then(function (r) { return (r.ok && Array.isArray(r.j)) ? { ok: true, rows: r.j } : { ok: false, error: errMsg(r.j, 'profiles fetch failed (' + r.status + ')') }; });
     },
     /* composed Friends board: me + everyone I follow, ranked */
@@ -338,7 +339,7 @@
     /* reads are public: works with just the apikey, auth attached when present */
     fetchBoard: function (limit) {
       if (!api.configured()) return Promise.resolve({ ok: false, error: 'not configured' });
-      var path = 'leaderboard?select=user_id,name,avatar,level,rank_code,week_xp,best_streak,ascension&on_board=eq.true&order=week_xp.desc,level.desc&limit=' + (limit || 25);
+      var path = 'leaderboard?select=user_id,name,avatar,level,rank_code,title,week_xp,best_streak,ascension&on_board=eq.true&order=week_xp.desc,level.desc&limit=' + (limit || 25);
       var sess = getSession();
       var h = authHeaders(sess ? { 'Authorization': 'Bearer ' + sess.access_token } : null);
       return req(cfg.url + '/rest/v1/' + path, { method: 'GET', headers: h })

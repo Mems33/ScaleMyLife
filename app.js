@@ -97,7 +97,7 @@ function cloudOn(){ return typeof SMLCloud!=='undefined' && SMLCloud.configured(
 function boardProfile(){
   var w=RPG.weekStats(state), r=RPG.rankFor(state.hero.level);
   return { name:state.hero.name, avatar:state.hero.avatar, level:state.hero.level, rank:r.code,
-    weekXp:w.tot.xp, bestStreak:state.hero.bestStreak||0, ascension:state.hero.ascension||0 };
+    title:state.hero.title||'', weekXp:w.tot.xp, bestStreak:state.hero.bestStreak||0, ascension:state.hero.ascension||0 };
 }
 var cloudSyncErr=false;   // true when the last push failed - surfaced as a retry chip
 function pushCloudNow(){
@@ -1123,6 +1123,7 @@ function boardRowsHtml(rows, me){
     return '<div class="brow'+(mine?' me':'')+(r.user_id?' tap':'')+'"'+tap+'><span class="bpos">'+(medals[i]||('#'+(i+1)))+'</span>'+
       '<span class="bav">'+avHtml(r.avatar)+'</span>'+
       '<div class="grow"><div class="bname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
+      (r.title?'<div class="bmeta" style="color:var(--gold)">✦ '+esc(r.title)+'</div>':'')+
       '<div class="bmeta">'+esc(r.rank_code||'E')+' · Lv.'+(r.level||1)+((r.ascension||0)>0?' · ✦S'+r.ascension:'')+' · 🔥best '+(r.best_streak||0)+'</div></div>'+
       '<span class="bxp">'+(r.week_xp||0)+' <small>xp/wk</small></span></div>';
   }).join('')||'<div class="empty">The board is empty - be the first hero on it.</div>';
@@ -1155,7 +1156,7 @@ function leaderboardPanel(){
     },0);
     return head+'<div id="boardInv"></div><div id="boardBody">'+boardSkeleton(4)+'</div></div>';
   }
-  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync - only name, avatar, level, rank, weekly XP and best streak are shared.</div>'+
+  if(!state.settings.board) return head+'<div class="empty">You\u2019re synced but not on the global board. Join from ⚙️ → Cloud sync - only name, avatar, title, level, rank, weekly XP and best streak are shared.</div>'+
     '<button class="btn wide" onclick="openSettings()">🏆 Join the leaderboard</button></div>';
   setTimeout(function(){
     SMLCloud.fetchBoard(25).then(function(r){
@@ -1736,7 +1737,7 @@ function openTitlePicker(){
   var locked=RPG.ACHIEVEMENTS.length-unlocked.length;
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>✦ WEAR A TITLE</h2>'+
-    '<div class="hint">Your title glows under your name'+(state.settings.board||state.settings.friends?' - friends and the leaderboard see it too (once title sharing is live)':'')+'. Earn achievements to unlock more.</div>'+
+    '<div class="hint">Your title glows under your name'+(state.settings.board||state.settings.friends?' - friends and the leaderboard see it too':'')+'. Earn achievements to unlock more.</div>'+
     (unlocked.length?'<div class="titlechips" style="margin-top:10px">'+unlocked.map(function(a){
       var worn=state.hero.title===a.name;
       return '<button style="'+(worn?'border-color:var(--gold);color:var(--gold)':'')+'" onclick="wearTitleNow(\''+a.id+'\')">'+a.icon+' '+esc(a.name)+(worn?' ✓':'')+'</button>';
@@ -1998,7 +1999,7 @@ function cloudSection(){
     '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
     '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button>'+
     '<button class="btn" onclick="toggleFriends()">'+(state.settings.friends?'🤝 Friends: ON':'🤝 Enable friends')+'</button></div>'+
-    '<div class="hint">'+(state.settings.board?'On the global board - sharing name, avatar, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those six fields - never your save.')+'</div>'+
+    '<div class="hint">'+(state.settings.board?'On the global board - sharing name, avatar, title, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those seven small fields - never your save.')+'</div>'+
     friendsBox()+
     '<div class="hint" id="cMsg"></div>';
 }
@@ -2185,6 +2186,7 @@ function showProfile(id){
   var stars=(r.ascension||0)>0?' <span class="asc">✦S'+r.ascension+'</span>':'';
   var head='<div class="pcard"><div class="pav">'+avHtml(r.avatar)+'</div>'+
     '<div class="pname">'+esc(r.name||'Hero')+(mine?' <span class="chip muted">you</span>':'')+'</div>'+
+    (r.title?'<div class="herotitle" style="cursor:default;animation:none">✦ '+esc(r.title)+' ✦</div>':'')+
     '<div class="pmeta"><span class="chip">'+esc(r.rank_code||'E')+'</span> Lv.'+(r.level||1)+stars+'</div></div>';
   var body;
   if(mine){
