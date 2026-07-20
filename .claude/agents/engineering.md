@@ -28,7 +28,18 @@ This file is your memory. At the end of every working session:
 ### Do
 
 <!-- YYYY-MM-DD — rule -->
+- 2026-07-20 — Apply Supabase migrations directly via the MCP tools; never hand Mehmet SQL to paste into the dashboard (his explicit correction: "can you not do it yourself next time?").
+- 2026-07-20 — Ship loop per increment: full test suite green → Playwright browser QA with screenshots → commit → PR → self-merge → reset the working branch onto origin/main. This pattern has been accepted ~35 times.
+- 2026-07-20 — Explain punitive mechanics in-app BEFORE they can bite (the defeat system got a tappable HP bar + "What if I lose?" explainer on request).
+- 2026-07-20 — When a feature spans devices, resolve conflicts by game progress (RPG.progressKey), never by wall-clock timestamps; always stash a restorable backup before adopting a remote save.
+- 2026-07-20 — Bump the sw.js CACHE version whenever any precached asset changes (a test guards this); new user-facing pages get added to ASSETS.
+- 2026-07-20 — Anything stored in the leaderboard `avatar` column must fit 8 chars; encode rich avatars as short tokens (`@knight`, `#03214`) and render them client-side.
 
 ### Don't
 
 <!-- YYYY-MM-DD — rule -->
+- 2026-07-20 — No em-dashes anywhere in user-facing copy, and never the ⚔ emoji (renders tiny); both are explicit bans from Mehmet.
+- 2026-07-20 — Don't write long explainer modals: the defeat-system modal was cut to ~4 rows after "a bit too much text" feedback. One line per concept, bold the numbers.
+- 2026-07-20 — Don't restructure systems the user only asked to tune ("don't change a lot if not useful" on life areas — renames beat redesigns until told otherwise).
+- 2026-07-20 — Don't rewrite commits that aren't yours: GitHub's squash-merge commits (noreply@github.com) and Mehmet's own commits stay untouched even when the stop-hook flags them as Unverified.
+- 2026-07-20 — Don't claim a live-site behavior is fixed when the sandbox can't reach the host; put it in feedback-backlog.md under "needs verification on the live site" instead.
