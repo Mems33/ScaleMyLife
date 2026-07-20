@@ -68,6 +68,7 @@ var MUSIC={
 };
 
 var pickedTheme=null;            // onboarding live preview (no state yet)
+var avTab='heroes';              // avatar picker tab: 'heroes' (designed) | 'emoji'
 function applyTheme(){
   var t=THEMES[(state&&state.settings.theme)||pickedTheme||'dungeon']||THEMES.dungeon;
   var r=document.documentElement.style;
@@ -1456,20 +1457,33 @@ function renderBuilder(){
 function bDone(){ pickedAv=builderToken(); bCancel(); }
 function bCancel(){ if(builderReturn==='onboarding'||!state) onboarding(); else openCharacter(); }
 var pickedAv=null;
+/* avatar picker with two small tabs (designed heroes / emoji) + a distinct
+   Customize button - everything at once was too much on one screen */
+function avPickerHtml(from){
+  var bReturn=from==='onboarding'?'onboarding':'character';
+  return '<div class="avtabs">'+
+    '<button type="button" class="'+(avTab==='heroes'?'on':'')+'" aria-pressed="'+(avTab==='heroes')+'" onclick="avTab=\'heroes\';'+from+'()">🛡️ Heroes</button>'+
+    '<button type="button" class="'+(avTab==='emoji'?'on':'')+'" aria-pressed="'+(avTab==='emoji')+'" onclick="avTab=\'emoji\';'+from+'()">😀 Emoji</button>'+
+    '<button type="button" class="customize" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\''+bReturn+'\')">🎨 Customize</button></div>'+
+    (avTab==='heroes'
+      ?'<div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
+          return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';'+from+'()">'+avHtml(k)+'</button>';}).join('')+
+        (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\''+bReturn+'\')">'+avHtml(pickedAv)+'</button>':'')+'</div>'
+      :'<div class="avpick scroll">'+AVATARS.map(function(a){
+          return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';'+from+'()">'+a+'</button>';}).join('')+'</div>');
+}
 function openCharacter(){
   pickedAv=pickedAv||state.hero.avatar;
+  /* preserve half-typed name/title across in-modal re-renders (avatar taps etc.) */
+  var keepN=$('#chName')?$('#chName').value:state.hero.name;
+  var keepT=$('#chTitle')?$('#chTitle').value:(state.hero.title||'');
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>🧝 CHARACTER</h2>'+
-    '<div class="flabel">Name</div><input id="chName" maxlength="24" value="'+esc(state.hero.name)+'">'+
-    '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(state.hero.title||'')+'">'+
+    '<div class="flabel">Name</div><input id="chName" maxlength="24" value="'+esc(keepN)+'">'+
+    '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(keepT)+'">'+
     titleChips()+
-    '<div class="flabel">Avatar - designed heroes</div><div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
-      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';openCharacter()">'+avHtml(k)+'</button>';}).join('')+
-      (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\'character\')">'+avHtml(pickedAv)+'</button>':'')+
-      '<button class="bldopen" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\'character\')">🎨</button></div>'+
-    '<div class="flabel">…or an emoji</div><div class="avpick">'+AVATARS.map(function(a){
-      return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';openCharacter()">'+a+'</button>';}).join('')+'</div>'+
-    '<div class="setrow"><input id="chCustomAv" maxlength="4" placeholder="…or type any emoji" style="max-width:180px"><span class="hint">overrides the grid pick</span></div>'+
+    '<div class="flabel">Avatar</div>'+avPickerHtml('openCharacter')+
+    (avTab==='emoji'?'<div class="setrow"><input id="chCustomAv" maxlength="4" placeholder="…or type any emoji" style="max-width:180px"><span class="hint">overrides the grid pick</span></div>':'')+
     '<div class="flabel">Theme</div><div class="themes">'+Object.keys(THEMES).map(function(k){
       var t=THEMES[k];
       return '<button class="'+(state.settings.theme===k?'on':'')+'" title="'+t.name+'" style="background:'+t.panel+'" onclick="setTheme(\''+k+'\')"><i style="background:'+t.accent+'"></i></button>';
@@ -1576,7 +1590,8 @@ function setTheme(k){ state.settings.theme=k; persist(); applyTheme(); openChara
 function saveCharacter(){
   var n=$('#chName').value.trim(); if(n) state.hero.name=n;
   state.hero.title=$('#chTitle').value.trim();
-  var custom=$('#chCustomAv').value.trim();
+  var customEl=$('#chCustomAv');
+  var custom=customEl?customEl.value.trim():'';
   state.hero.avatar=custom||pickedAv||state.hero.avatar;
   pickedAv=null;
   persist(); closeModal(); render();
@@ -2225,13 +2240,7 @@ function onboarding(){
     '<div class="hint" style="margin-bottom:6px">Your real life is the game. Name your character:</div>'+
     '<input id="obName" placeholder="Hero name (required)" maxlength="24" value="'+esc(keep)+'" oninput="obNameCheck()">'+
     '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
-    '<div class="flabel">Pick an avatar</div>'+
-    '<div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
-      return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';onboarding()">'+avHtml(k)+'</button>';}).join('')+
-      (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\'onboarding\')">'+avHtml(pickedAv)+'</button>':'')+
-      '<button class="bldopen" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\'onboarding\')">🎨</button></div>'+
-    '<div class="avpick scroll">'+AVATARS.map(function(a){
-      return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';onboarding()">'+a+'</button>';}).join('')+'</div>'+
+    '<div class="flabel">Pick an avatar</div>'+avPickerHtml('onboarding')+
     '<div class="flabel">Who are you? Pick ALL that fit - a student can also be an athlete and a founder. Your starting quests, habits, life areas and rewards blend everything you pick.</div>'+
     '<div class="pathpick">'+RPG.PATHS.map(function(p){
       return '<button class="'+(pickedPaths.indexOf(p.id)>=0?'on':'')+'" aria-pressed="'+(pickedPaths.indexOf(p.id)>=0)+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';

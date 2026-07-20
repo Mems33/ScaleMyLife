@@ -261,6 +261,12 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .moods{display:flex;gap:8px;margin-bottom:10px}
 .moods button{flex:1;font-size:26px;padding:9px 0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;filter:grayscale(.7);transition:all .15s}
 .moods button.on{filter:none;border-color:var(--gold);transform:scale(1.08)}
+/* avatar picker tabs: heroes / emoji, plus a stand-out customize button */
+.avtabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.avtabs button{border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:14px;padding:6px 14px;font-size:13px;font-weight:700}
+.avtabs button.on{border-color:var(--gold);color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,transparent)}
+.avtabs button.customize{margin-left:auto;border-style:dashed;border-color:var(--skill);color:var(--skill)}
+.avtabs button.customize:hover{border-style:solid;background:color-mix(in srgb,var(--skill) 12%,transparent)}
 .stars{display:flex;gap:4px}
 .stars button{background:none;border:none;font-size:21px;filter:grayscale(1);padding:2px}
 .stars button.on{filter:none}
