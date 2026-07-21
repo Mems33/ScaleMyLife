@@ -2573,7 +2573,7 @@ function sageApplyAction(type, params){
   }
   if(type==='log_mood'){
     if(!RPG.MOODS.some(function(m){ return m.key===params.mood; })) return false;
-    var r=A.logJournal(state, params.mood, ''); persist(); render(); fx(r); return true;
+    var r=A.logJournal(state, params.mood, (state.journal[RPG.todayKey()]||{}).note || ''); persist(); render(); fx(r); return true;
   }
   if(type==='add_quest'){
     var t=String(params.title||'').trim(); if(!t) return false;

@@ -1242,6 +1242,16 @@ setTimeout(async function () {
   await new Promise(function (r) { setTimeout(r, 20); });
   ok(w.state.journal[w.RPG.todayKey()] && w.state.journal[w.RPG.todayKey()].mood === 'great', 'log_mood writes today\'s journal entry');
 
+  w.A.logJournal(w.state, 'ok', 'my real note today');
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'log_mood', params: { mood: 'great' } }, remaining: 18 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'log that I feel great today';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.journal[w.RPG.todayKey()].mood === 'great', 'log_mood re-applying still updates today\'s mood');
+  ok(w.state.journal[w.RPG.todayKey()].note === 'my real note today', 'log_mood does not wipe an existing journal note for today');
+
   w.SMLCloud.configure({ fetch: function () {
     return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Sure!', action: { type: 'delete_everything', params: {} }, remaining: 17 })); } });
   } });
