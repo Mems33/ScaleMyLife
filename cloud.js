@@ -64,7 +64,8 @@
     return h;
   }
   function errMsg(j, fallback) {
-    return (j && (j.error_description || j.msg || j.message || (j.error && j.error.message))) || fallback;
+    var errField = j && j.error;
+    return (j && (j.error_description || j.msg || j.message || (typeof errField === 'string' ? errField : errField && errField.message))) || fallback;
   }
   function sessionFromToken(j) {
     return { access_token: j.access_token, refresh_token: j.refresh_token,
@@ -218,6 +219,27 @@
     },
 
     lastSync: function () { var s = store(); return (s && s.getItem(SYNC_LS)) || null; },
+
+    /* Sage Phase 2: one chat turn via the sage-chat Edge Function. The
+       Anthropic key never touches the client - only a short text reply
+       comes back. -> {ok, reply, remaining} or {ok:false, error} */
+    chatSage: function (message, brief) {
+      function once() {
+        var sess = getSession();
+        if (!sess) return Promise.resolve({ status: 401, ok: false, j: {} });
+        var h = authHeaders({ 'Authorization': 'Bearer ' + sess.access_token });
+        return req(cfg.url + '/functions/v1/sage-chat', { method: 'POST', headers: h,
+          body: JSON.stringify({ message: message, brief: brief || '' }) });
+      }
+      if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
+      return once().then(function (r) {
+        if (r.status !== 401) return r;
+        return api.refresh().then(function (rf) { return rf.ok ? once() : r; });
+      }).then(function (r) {
+        if (!r.ok) return { ok: false, error: errMsg(r.j, 'Sage could not reply (' + r.status + ')') };
+        return { ok: true, reply: r.j.reply, remaining: r.j.remaining };
+      });
+    },
 
     /* ---------- opt-in leaderboard ----------
        Having a row IS the opt-in; deleting it is the opt-out. Only the tiny
