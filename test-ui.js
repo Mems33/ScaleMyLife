@@ -1206,6 +1206,58 @@ setTimeout(async function () {
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
 
+  console.log('\nSage Actions: auto-apply (complete_quest, complete_habit, log_mood)');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok2', refresh_token: 'sage-rt2', user: { id: 'sage-uid2', email: 's@b.c' } }));
+  var qFixture = w.A.addQuest(w.state, { title: 'Sage test quest', diff: 'easy', skillId: null, due: null, recurring: false, days: null, main: null });
+  var hFixture = w.A.addHabit(w.state, { title: 'Sage test habit', type: 'good', skillId: null, target: 7 });
+  var todayCalls = [];
+  w.SMLCloud.configure({ fetch: function (url, opts) {
+    var b = opts && opts.body ? JSON.parse(opts.body) : null;
+    todayCalls.push(b);
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'complete_quest', params: { quest_id: qFixture.id } }, remaining: 20 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'mark my first quest done';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(todayCalls[0].today.indexOf(qFixture.id) >= 0, 'a compact today payload with the real quest id rides along');
+  ok(w.state.quests.find(function (q) { return q.id === qFixture.id; }).doneOn === w.RPG.todayKey(), 'complete_quest actually completes the quest via the existing engine call');
+  ok(d.querySelector('.mchat-action') === null, 'auto-apply actions never show a confirm card');
+
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Nice work!', action: { type: 'complete_habit', params: { habit_id: hFixture.id } }, remaining: 19 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'check off my reading habit';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.habits.find(function (h) { return h.id === hFixture.id; }).lastDoneOn === w.RPG.todayKey(), 'complete_habit actually checks off the habit');
+  var sageRows1 = d.querySelectorAll('.mchat-row.sage');
+  ok(sageRows1[sageRows1.length - 1].textContent.indexOf('Nice work') >= 0, 'accompanying reply text still renders as a normal Sage bubble');
+
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'log_mood', params: { mood: 'great' } }, remaining: 18 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'log that I feel great today';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.journal[w.RPG.todayKey()] && w.state.journal[w.RPG.todayKey()].mood === 'great', 'log_mood writes today\'s journal entry');
+
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Sure!', action: { type: 'delete_everything', params: {} }, remaining: 17 })); } });
+  } });
+  var questsBefore = w.state.quests.length, habitsBefore = w.state.habits.length;
+  d.querySelector('#mChatInput').value = 'do something unsupported';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.quests.length === questsBefore && w.state.habits.length === habitsBefore, 'an unrecognized action.type is silently ignored, no crash, no state change');
+  var sageRows2 = d.querySelectorAll('.mchat-row.sage');
+  ok(sageRows2[sageRows2.length - 1].textContent.indexOf('Sure') >= 0, 'the accompanying reply still renders even when the action itself is ignored');
+
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
   // Escape closes an open modal (focus-trap keydown handler)

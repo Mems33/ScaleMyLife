@@ -2552,6 +2552,42 @@ function sageBrief(){
   if(state.hero.downed) bits.push('currently downed');
   return bits.join(', ');
 }
+function sageToday(state){
+  var today=RPG.todayKey();
+  var qs=(state.quests||[]).filter(function(q){ return !q.doneOn || q.doneOn===today; }).slice(-15)
+    .map(function(q){ return 'quest '+q.id+': '+String(q.title||'').replace(/[":;]/g,' '); });
+  var hs=(state.habits||[]).filter(function(h){ return h.type==='good'; }).slice(-15)
+    .map(function(h){ return 'habit '+h.id+': '+String(h.title||'').replace(/[":;]/g,' '); });
+  return qs.concat(hs).join('; ').slice(0,1200);
+}
+var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm'};
+function sageApplyAction(type, params){
+  params=params||{};
+  if(type==='complete_quest'){
+    if(!state.quests.some(function(q){ return q.id===params.quest_id; })) return false;
+    doQuest(params.quest_id); return true;
+  }
+  if(type==='complete_habit'){
+    if(!state.habits.some(function(h){ return h.id===params.habit_id; })) return false;
+    doHabit(params.habit_id); return true;
+  }
+  if(type==='log_mood'){
+    if(!RPG.MOODS.some(function(m){ return m.key===params.mood; })) return false;
+    var r=A.logJournal(state, params.mood, ''); persist(); render(); fx(r); return true;
+  }
+  if(type==='add_quest'){
+    var t=String(params.title||'').trim(); if(!t) return false;
+    var diff=['easy','normal','hard','epic'].indexOf(params.difficulty)>=0?params.difficulty:'normal';
+    A.addQuest(state,{title:t,diff:diff,skillId:null,due:params.due||null,recurring:false,days:null,main:null});
+    persist(); render(); return true;
+  }
+  if(type==='add_habit'){
+    var t2=String(params.title||'').trim(); if(!t2) return false;
+    A.addHabit(state,{title:t2,type:'good',skillId:null,target:Number(params.target)||7});
+    persist(); render(); return true;
+  }
+  return false;
+}
 function openSageChat(){
   mascotView='chat';
   var host=ensureMascot(); if(!host) return;
@@ -2576,10 +2612,21 @@ function sageSend(){
   mascotChatBusy=true;
   var bub=document.getElementById('mBubble'); if(bub) bub.innerHTML=mascotChatHtml();
   var log=document.getElementById('mChatLog'); if(log) log.scrollTop=log.scrollHeight;
-  SMLCloud.chatSage(text, sageBrief()).then(function(r){
+  SMLCloud.chatSage(text, sageBrief(), sageToday(state)).then(function(r){
     mascotChatBusy=false;
-    if(r.ok) mascotChatLog.push({who:'sage',text:r.reply});
-    else mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
+    if(r.ok){
+      var tier=r.action && SAGE_ACTION_TIERS[r.action.type];
+      if(tier==='auto'){
+        sageApplyAction(r.action.type, r.action.params);
+        if(r.reply) mascotChatLog.push({who:'sage',text:r.reply});
+      } else if(tier==='confirm'){
+        mascotChatLog.push({who:'sage',text:r.reply||'',pendingAction:{type:r.action.type,params:r.action.params}});
+      } else if(r.reply){
+        mascotChatLog.push({who:'sage',text:r.reply});
+      }
+    } else {
+      mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
+    }
     if(mascotView==='chat'){
       var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
       var l=document.getElementById('mChatLog'); if(l) l.scrollTop=l.scrollHeight;
