@@ -1,5 +1,5 @@
 /* ScaleMyLife service worker: cache-first so the hosted app works offline */
-var CACHE = 'sml-v46';
+var CACHE = 'sml-v47';
 var ASSETS = ['./', './index.html', './styles.css', './core.js', './app.js', './gradient.js', './cloud.js', './manifest.json', './icon-192.png', './icon-512.png', './privacy.html', './terms.html'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(ASSETS); }).then(function () { return self.skipWaiting(); }));
