@@ -1,5 +1,12 @@
 # Feedback backlog
 
+## Done — 2026-07-21, post-session bug fixes (live bug report)
+
+Two real bugs found via systematic debugging (not part of Update 2 scope):
+1. **Dailies/habits stuck "completed" after an overnight app resume** — a backgrounded PWA resume (or bfcache restore) never re-ran boot(), and the foreground handler only conditionally pulled from cloud, which was usually a no-op. Fixed: foreground resume now forces a render()/dailyReset() check immediately.
+2. **Delayed overlay reveals (chest rattle, first-quest celebration) could stomp a different overlay** opened in the interim — found while chasing what looked like a flaky test. Fixed with a shared `overlaySeq` ownership token checked before any delayed write.
+Both merged to main directly (targeted fixes, not batched). 813 → 860 tests.
+
 ## Done — 2026-07-21 session (Update 2 + Premium Phase A)
 
 Shipped to main in 10 merged batches, 813 → 851 tests, all green, browser-QA'd:

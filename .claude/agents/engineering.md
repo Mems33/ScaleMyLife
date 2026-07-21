@@ -38,6 +38,8 @@ This file is your memory. At the end of every working session:
 - 2026-07-21 — When a UI change deliberately breaks a UI test, update the test in the same batch and say so in the commit body; never delete or skip it.
 - 2026-07-21 — User-facing date labels always pass `'en-US'` to `toLocaleDateString`; device-locale output ("lundi" for best day) reads as a bug in an English app.
 - 2026-07-20 — Anything stored in the leaderboard `avatar` column must fit 8 chars; encode rich avatars as short tokens (`@knight`, `#03214`) and render them client-side.
+- 2026-07-21 — Any `setTimeout` that later writes to a shared UI surface (the `#overlay` reveal pattern) must snapshot an ownership token when scheduled and re-check it before writing, not just "is something currently showing" - otherwise a legitimately newer overlay gets stomped by a stale timer. Found by chasing what looked like a flaky test; it was a real collision.
+- 2026-07-21 — When reasoning alone can't confirm a root cause (async races, cross-device sync timing), write an isolated repro script (mock the clock/state, no app.js needed if core.js logic suffices) before touching app code. Confirmed one hypothesis was wrong and the real one right in under 5 minutes this way.
 
 ### Don't
 
@@ -49,3 +51,4 @@ This file is your memory. At the end of every working session:
 - 2026-07-20 — Don't claim a live-site behavior is fixed when the sandbox can't reach the host; put it in feedback-backlog.md under "needs verification on the live site" instead.
 - 2026-07-21 — Don't merge client code that reads/writes a new Supabase column before the migration ran on the live project; PostgREST rejects unknown columns and every upsert breaks (see `title-sharing-leaderboard` branch pattern).
 - 2026-07-21 — Don't `git add -A` on a session's first commit before checking `git status` for untracked local artifacts (graphify-out/ nearly shipped 16k lines); gitignore tool-output directories immediately.
+- 2026-07-21 — Don't pipe app.js/core.js source through shell `sed`/`perl` one-liners to do a repeated JS-text replacement - `$('#id')` inside the pattern gets mangled by shell quoting even with careful escaping. It corrupted app.js once this session (recovered via `git checkout`). Use the Edit tool's `replace_all` for identical-string repeats across a file instead.
