@@ -2554,6 +2554,14 @@ var lastVisPull=0;
 document.addEventListener('visibilitychange', function(){
   if(!state) return;
   if(document.hidden){ flushCloudPush(); return; }   // leaving -> save the latest right away
+  /* Returning to the foreground - including a backgrounded PWA resume or a
+     bfcache restore, neither of which re-runs boot(). Catch up on a missed
+     day rollover right away instead of waiting on the 1s poll interval, which
+     can be suspended for hours while the app is backgrounded. Without this,
+     a cloud pull below can also silently no-op (the pulled save isn't "ahead"
+     if nothing changed overnight), leaving yesterday's completed dailies on
+     screen until something else happens to trigger a render. */
+  if(state.lastSeenDay!==RPG.todayKey()) render();
   var now=Date.now();
   if(now-lastVisPull>5*60000){ lastVisPull=now; cloudBootPull(); }
 });

@@ -1185,6 +1185,26 @@ setTimeout(async function () {
   var swSrc = fs2.readFileSync(__dirname + '/sw.js', 'utf8');
   ok(swSrc.indexOf('gradient.js') > 0, 'gradient.js is precached by the service worker');
 
+  console.log('\nDay rollover on resume (bug report: dailies "still completed" the next morning)');
+  (function () {
+    // Simulate: cleared a daily last night, then the app is merely brought back
+    // to the foreground the next day (backgrounded PWA resume / bfcache restore) -
+    // no full reload, so boot() never re-runs. Only 'visibilitychange' fires.
+    var daily = w.state.quests.find(function (q) { return q.recurring; });
+    ok(!!daily, 'have a recurring daily to test against');
+    var yesterday = new w.Date(); yesterday.setDate(yesterday.getDate() - 1);
+    var yKey = w.RPG.todayKey(yesterday);
+    daily.doneOn = yKey;
+    w.state.lastSeenDay = yKey;
+    w.persist();
+    ok(w.state.lastSeenDay !== w.RPG.todayKey(), 'state primed as stale (still "yesterday")');
+    // dispatch synchronously and assert BEFORE the 1s poll interval could possibly
+    // fire, so this proves the foreground handler itself fixes it, not the timer
+    d.dispatchEvent(new w.Event('visibilitychange'));
+    ok(w.state.lastSeenDay === w.RPG.todayKey(), 'foreground resume immediately corrects the stale day (no reload, no waiting on the poll interval)');
+    ok(daily.doneOn !== yKey, 'yesterday\'s completed daily is reset on resume, not stuck showing done');
+  })();
+
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
 
