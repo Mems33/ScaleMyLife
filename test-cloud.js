@@ -187,6 +187,14 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   ok(scReq.method === 'POST' && /\/functions\/v1\/sage-chat$/.test(scReq.url), 'posts to the sage-chat function, not the REST API');
   ok(scReq.headers.Authorization === 'Bearer ' + Cloud.session().access_token, 'carries the signed-in user\'s bearer token');
   ok(scReq.body.message === 'how am I doing?' && scReq.body.brief === 'level 5, streak 3d', 'message + brief context sent as JSON, nothing else');
+  fx.route('/functions/v1/sage-chat', 200, { reply: 'On it!', action: { type: 'complete_quest', params: { quest_id: 'q1' } }, remaining: 11 });
+  var scAction = await Cloud.chatSage('mark my workout done', 'level 5, streak 3d', 'quest q1: Workout');
+  ok(scAction.ok === true && scAction.action && scAction.action.type === 'complete_quest' && scAction.action.params.quest_id === 'q1', 'a tool-call response surfaces action.type and action.params');
+  var scActionReq = log[log.length - 1];
+  ok(scActionReq.body.today === 'quest q1: Workout', 'the today payload rides along as a third field');
+  fx.route('/functions/v1/sage-chat', 200, { reply: 'Sounds good.', action: null, remaining: 10 });
+  var scNoAction = await Cloud.chatSage('how am I doing?', '', '');
+  ok(scNoAction.ok === true && scNoAction.action === null, 'a plain-text reply has action: null, not undefined');
   fx.route('/functions/v1/sage-chat', 401, {});
   fx.route('grant_type=refresh_token', 200, { access_token: 'at-sage', refresh_token: 'rt-sage', user: SESS.user });
   fx.route('/functions/v1/sage-chat', 200, { reply: 'Back with a fresh token.', remaining: 11 });
