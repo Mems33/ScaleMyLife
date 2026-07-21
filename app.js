@@ -2597,13 +2597,33 @@ function openSageChat(){
   var inp=document.getElementById('mChatInput'); if(inp) inp.focus();
 }
 function mascotChatHtml(){
-  var rows=mascotChatLog.map(function(m){
-    return '<div class="mchat-row '+m.who+'">'+esc(m.text)+'</div>';
+  var rows=mascotChatLog.map(function(m,i){
+    var body=m.text?esc(m.text):'';
+    if(m.pendingAction){
+      var p=m.pendingAction, label=(p.type==='add_quest'?'Add quest: "':'Add habit: "')+esc(String(p.params.title||''))+'"';
+      body+='<div class="mchat-action"><div>'+label+'</div>'+
+        '<button class="btn go small" onclick="sageConfirmAction('+i+')">Yes, add it</button>'+
+        '<button class="btn ghost small" onclick="sageCancelAction('+i+')">Cancel</button></div>';
+    }
+    return '<div class="mchat-row '+m.who+'">'+body+'</div>';
   }).join('') || '<div class="hint" style="text-align:center;margin-top:10px">Ask Sage about your quests, habits, or how to catch up today.</div>';
   return '<div class="mhead"><button class="btn ghost small" aria-label="Back" onclick="toggleMascot(true)">◀</button><b>🦉 Sage</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
     '<div class="mchat-log" id="mChatLog">'+rows+(mascotChatBusy?'<div class="mchat-row sage typing">…</div>':'')+'</div>'+
     '<div class="mchat-input"><input id="mChatInput" maxlength="500" placeholder="Ask Sage…" '+(mascotChatBusy?'disabled':'')+' onkeydown="if(event.key===\'Enter\')sageSend()">'+
     '<button class="btn go small" '+(mascotChatBusy?'disabled':'')+' onclick="sageSend()">Send</button></div>';
+}
+function sageConfirmAction(i){
+  var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
+  var applied=sageApplyAction(m.pendingAction.type, m.pendingAction.params);
+  m.pendingAction=null;
+  m.text=(m.text?m.text+'\n\n':'')+(applied?'Done!':'Could not add that.');
+  var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
+}
+function sageCancelAction(i){
+  var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
+  m.pendingAction=null;
+  m.text=(m.text?m.text+'\n\n':'')+'Cancelled.';
+  var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
 }
 function sageSend(){
   var inp=document.getElementById('mChatInput'); if(!inp||mascotChatBusy) return;

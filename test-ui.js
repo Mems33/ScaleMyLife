@@ -1258,6 +1258,42 @@ setTimeout(async function () {
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
 
+  console.log('\nSage Actions: confirm-first (add_quest, add_habit)');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok3', refresh_token: 'sage-rt3', user: { id: 'sage-uid3', email: 's@b.c' } }));
+  var questsBefore2 = w.state.quests.length;
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Want me to add that?', action: { type: 'add_quest', params: { title: 'Learn bachata', difficulty: 'normal' } }, remaining: 16 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'add a quest to learn bachata';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.quests.length === questsBefore2, 'add_quest does not touch state until confirmed');
+  var card = d.querySelector('.mchat-action');
+  ok(card !== null && card.textContent.indexOf('Learn bachata') >= 0, 'a confirm card renders with the proposed quest title');
+  d.querySelector('.mchat-action .btn.go').click();
+  ok(w.state.quests.length === questsBefore2 + 1, 'confirming adds the quest');
+  ok(w.state.quests[w.state.quests.length - 1].title === 'Learn bachata' && w.state.quests[w.state.quests.length - 1].diff === 'normal', 'the added quest matches the proposed title and difficulty');
+  ok(d.querySelector('.mchat-action') === null, 'the card disappears once resolved');
+
+  var habitsBefore2 = w.state.habits.length;
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'add_habit', params: { title: 'Stretch daily', target: 5 } }, remaining: 15 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'add a habit to stretch daily';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var habitCard = d.querySelector('.mchat-action');
+  ok(habitCard !== null && habitCard.textContent.indexOf('Stretch daily') >= 0, 'a confirm card renders for add_habit too');
+  d.querySelector('.mchat-action .btn.ghost').click();
+  ok(w.state.habits.length === habitsBefore2, 'cancelling an add_habit card does not add the habit');
+  ok(d.querySelector('.mchat-action') === null, 'the card disappears once cancelled');
+
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
   // Escape closes an open modal (focus-trap keydown handler)
