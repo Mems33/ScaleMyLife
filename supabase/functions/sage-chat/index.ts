@@ -23,7 +23,7 @@ function corsHeaders(origin: string | null) {
   const allow = origin && ALLOWED_ORIGINS.has(origin) ? origin : "https://scale-my-life.vercel.app";
   return {
     "Access-Control-Allow-Origin": allow,
-    "Access-Control-Allow-Headers": "authorization, content-type",
+    "Access-Control-Allow-Headers": "authorization, content-type, apikey",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin",
   };
