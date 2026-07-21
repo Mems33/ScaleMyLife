@@ -1053,9 +1053,31 @@ setTimeout(async function () {
   var freshUX = w.state; w.state = w.RPG.seedPreset(w.RPG.newState('Newbie'), 'general'); w.state.counters.quests = 0; delete w.state.firstQuestCelebrated; w.render();
   var firstQ = w.state.quests[0];
   w.doQuest(firstQ.id);
-  await new Promise(function (r) { setTimeout(r, 700); });
+  // poll for the overlay instead of a fixed wait - a flat 700ms margin against
+  // app.js's 650ms setTimeout is too tight under real system load variance
+  var waited = 0;
+  while (!d.querySelector('#overlay.show') && waited < 3000) {
+    await new Promise(function (r) { setTimeout(r, 50); });
+    waited += 50;
+  }
   ok(w.state.firstQuestCelebrated === true, 'first cleared quest marks the celebration as seen');
   ok(d.querySelector('#overlay').textContent.indexOf('FIRST QUEST') >= 0, 'first-quest explainer overlay appears');
+
+  console.log('\nOverlay ownership token (regression: a stale chest-reveal must never stomp another overlay)');
+  await (async function () {
+    // Reproduces the exact collision found this session: a chest rattle is
+    // mid-animation when a DIFFERENT overlay legitimately opens before the
+    // 1.7s reveal fires. The reveal must be a no-op, not overwrite it.
+    var before = w.overlaySeq;
+    w.chestAnim({ xp: 25, coins: 20 });
+    ok(w.overlaySeq === before + 1, 'chestAnim bumps the shared overlay sequence');
+    ok(d.querySelector('#overlay').textContent.indexOf('rattles') >= 0, 'rattle screen shows immediately');
+    w.firstQuestScreen(); // a different overlay opens before the rattle's delayed reveal fires
+    ok(w.overlaySeq === before + 2, 'a second overlay open bumps the sequence again');
+    await new Promise(function (r) { setTimeout(r, 1750); });
+    ok(d.querySelector('#overlay').textContent.indexOf('FIRST QUEST') >= 0, 'the later overlay survives - stale chest reveal did not stomp it');
+    w.closeOverlay();
+  })();
   w.closeOverlay();
   var q2 = w.state.quests.find(function (q) { return !q.doneOn; });
   if (q2) { w.doQuest(q2.id); await new Promise(function (r) { setTimeout(r, 50); }); ok(!d.querySelector('#overlay').classList.contains('show'), 'the explainer does not fire again on later quests'); }

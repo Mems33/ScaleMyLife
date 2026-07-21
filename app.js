@@ -2,6 +2,11 @@
 var $ = function(s,el){ return (el||document).querySelector(s); };
 var A = RPG.actions;
 var state = RPG.load(localStorage);
+/* bumped every time #overlay is (re)opened; a delayed reveal (chest rattle,
+   first-quest celebration) checks its own snapshot against this before
+   writing, so a DIFFERENT overlay that opened in the meantime is never
+   stomped by a stale timer firing late. */
+var overlaySeq=0;
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=null;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
 var focusDraft={label:'',skill:'',goal:''}; // focus form draft - selecting music/mode must never wipe typed text
@@ -255,7 +260,7 @@ function announceAchievements(list){
 }
 function levelUp(lv){
   SND.levelup(); confetti();
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="big">⬆ LEVEL UP!</div>'+
     '<div class="sub">'+esc(state.hero.name)+' reached <b style="color:var(--gold)">Level '+lv+'</b></div>'+
     '<div class="sub" style="color:var(--good)">❤️ HP fully restored</div>'+
@@ -264,7 +269,7 @@ function levelUp(lv){
 function rankUp(rank, lv){
   SND.rankup(); confetti(true); setTimeout(function(){confetti(true);},600);
   var col=RANK_COLORS[rank.code]||'#f5c542';
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="big">🎖 RANK UP</div>'+
     '<div class="rankbig" style="color:'+col+'">'+rank.code+'</div>'+
     '<div class="rankname" style="color:'+col+'">'+esc(rank.name).toUpperCase()+'</div>'+
@@ -285,7 +290,7 @@ function defeatScreen(res){
 }
 function riseScreen(cb){
   SND.rankup(); confetti(true); if(!reduceMotion()){ setTimeout(function(){confetti(true);},400); }
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--orange);font-size:60px">🔥</div>'+
     '<div class="big" style="color:var(--orange)">YOU ROSE AGAIN</div>'+
     '<div class="sub">Back to full strength. Comeback #'+(cb&&cb.comebacks||1)+'.</div>'+
@@ -309,7 +314,7 @@ function chestScreen(res){
     else if(res.loot.type==='potion') loot='<div class="lootline">🧪 Rare drop: <b>Focus Elixir</b> - quaff it any day for ×2 XP.</div>';
     else if(res.loot.type==='frame') loot='<div class="lootline" style="color:'+res.loot.frame.color+'">🖼 Rare drop: <b>'+esc(res.loot.frame.name)+' frame</b> - equip it on your avatar.</div>';
   }
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="big">🎁 DAILY CHEST</div>'+
     '<div class="sub">All dailies cleared. You got:</div>'+
     '<div class="sub" style="font-size:17px"><b style="color:var(--xp)">+'+res.xp+' XP</b> &nbsp; <b style="color:var(--gold)">+'+res.coins+' 💰</b></div>'+
@@ -585,7 +590,7 @@ function abandonBoss(){
 }
 function bossKillScreen(r){
   SND.rankup(); confetti(true); shake();
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--hp);font-size:72px">🐲</div>'+
     '<div class="big" style="color:var(--hp)">BOSS SLAIN</div>'+
     '<div class="sub">'+esc(r.title)+'</div>'+
@@ -1327,12 +1332,13 @@ function doQuest(id){
   var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction();
   if(wasFirst && r && state.counters.quests===1 && !state.firstQuestCelebrated){
     state.firstQuestCelebrated=true; persist();
-    setTimeout(function(){ if(!$('#overlay').classList.contains('show')) firstQuestScreen(); }, 650);
+    var mySeq=overlaySeq;   // snapshot: don't interrupt whatever's open now, and don't fire late if something NEW opened meanwhile
+    setTimeout(function(){ if(overlaySeq===mySeq && !$('#overlay').classList.contains('show')) firstQuestScreen(); }, 650);
   }
 }
 function firstQuestScreen(){
   SND.ach(); if(!reduceMotion()) confetti();
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--xp);font-size:56px">🎉</div>'+
     '<div class="big" style="color:var(--xp)">FIRST QUEST DONE!</div>'+
     '<div class="sub">That just earned you <b style="color:var(--xp)">XP</b> (fills your bar and levels you up) and <b style="color:var(--gold)">coins</b> (spend them on real rewards in the 🏪 Market).</div>'+
@@ -1432,10 +1438,13 @@ function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ ch
 /* the claim itself is instant (state-wise); this is just the shake-then-reveal */
 function chestAnim(r){
   if(reduceMotion()){ chestScreen(r); return; }
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; var mySeq=(o.dataset.seq=++overlaySeq);
   o.innerHTML='<div class="levelbox"><div class="chestshake" aria-hidden="true">🎁</div>'+
     '<div class="sub">The chest rattles…</div></div>';
-  setTimeout(function(){ if($('#overlay').classList.contains('show')) chestScreen(r); },1700);
+  /* only reveal if THIS rattle is still the overlay showing - a different
+     overlay opening in the meantime (achievement, level-up, first-quest...)
+     must never get overwritten by a stale reveal firing 1.7s late */
+  setTimeout(function(){ var live=$('#overlay'); if(live.classList.contains('show') && live.dataset.seq===String(mySeq)) chestScreen(r); },1700);
 }
 function saveJournal(){
   var mood=pendingMood||((state.journal[RPG.todayKey()]||{}).mood);
@@ -1707,7 +1716,7 @@ function doAscend(boonId){
 }
 function ascendScreen(r){
   SND.rankup(); confetti(true); setTimeout(function(){confetti(true);},500); shake();
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--gold);font-size:64px">♻️</div>'+
     '<div class="big" style="color:var(--gold)">ASCENDED</div>'+
     '<div class="rankname" style="color:var(--gold)">SEASON '+r.ascension+'</div>'+
@@ -1903,7 +1912,7 @@ function mendStreak(){
   var r=A.redeemStreak(state); persist(); render();
   if(!r||r.fail) return;
   SND.rankup(); confetti(true); sparks('🕯');
-  var o=$('#overlay'); o.className='show';
+  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
   o.innerHTML='<div class="levelbox"><div class="rankbig" style="font-size:64px">🕯</div>'+
     '<div class="big" style="color:var(--orange)">STREAK MENDED</div>'+
     '<div class="sub">The flame burns again - <b style="color:var(--orange)">'+r.streak+' days</b> and counting.</div>'+
