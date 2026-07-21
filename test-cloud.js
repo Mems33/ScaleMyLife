@@ -179,6 +179,28 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   var up = await Cloud.updatePassword('newpass99');
   ok(up.ok === true && log[log.length - 1].method === 'PUT' && log[log.length - 1].body.password === 'newpass99', 'new password is PUT to /auth/v1/user');
 
+  section('Sage Phase 2: chat via the sage-chat Edge Function');
+  fx.route('/functions/v1/sage-chat', 200, { reply: 'Hoo! Keep that streak alive.', remaining: 12 });
+  var sc = await Cloud.chatSage('how am I doing?', 'level 5, streak 3d');
+  ok(sc.ok === true && sc.reply === 'Hoo! Keep that streak alive.' && sc.remaining === 12, 'chat turn returns the reply + remaining quota');
+  var scReq = log[log.length - 1];
+  ok(scReq.method === 'POST' && /\/functions\/v1\/sage-chat$/.test(scReq.url), 'posts to the sage-chat function, not the REST API');
+  ok(scReq.headers.Authorization === 'Bearer ' + Cloud.session().access_token, 'carries the signed-in user\'s bearer token');
+  ok(scReq.body.message === 'how am I doing?' && scReq.body.brief === 'level 5, streak 3d', 'message + brief context sent as JSON, nothing else');
+  fx.route('/functions/v1/sage-chat', 401, {});
+  fx.route('grant_type=refresh_token', 200, { access_token: 'at-sage', refresh_token: 'rt-sage', user: SESS.user });
+  fx.route('/functions/v1/sage-chat', 200, { reply: 'Back with a fresh token.', remaining: 11 });
+  var scr = await Cloud.chatSage('again', '');
+  ok(scr.ok === true && scr.reply === 'Back with a fresh token.', 'an expired token refreshes once and retries the chat call');
+  fx.route('/functions/v1/sage-chat', 429, { error: 'Sage needs to rest - you have reached today\'s chat limit. Back tomorrow!' });
+  var scLimited = await Cloud.chatSage('one more', '');
+  ok(scLimited.ok === false && /reached today.s chat limit/.test(scLimited.error), 'daily rate limit surfaces the server message, not a generic failure');
+  await Cloud.signOut();
+  var logLenBefore = log.length;
+  var scOut = await Cloud.chatSage('hello?', '');
+  ok(scOut.ok === false && scOut.error === 'not signed in', 'signed-out chat attempt fails soft with no network call');
+  ok(log.length === logLenBefore, 'no request was made once signed out');
+
   section('Network failure resilience');
   Cloud.configure({ fetch: function () { return Promise.reject(new Error('offline')); } });
   st.setItem('sml.cloud.session.v1', JSON.stringify(SESS));

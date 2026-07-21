@@ -1169,6 +1169,43 @@ setTimeout(async function () {
   ok(w.state.settings.mascot === true && d.querySelector('#mascot').style.display !== 'none', 'mascot returns when toggled back on');
   w.closeModal();
 
+  console.log('\nSage Phase 2: real chat (signed-in only)');
+  w.toggleMascot(true);
+  ok(d.querySelector('.mchat-entry') === null, 'no "Ask me anything" entry while signed out');
+  w.toggleMascot(false);
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok', refresh_token: 'sage-rt', user: { id: 'sage-uid', email: 's@b.c' } }));
+  w.toggleMascot(true);
+  ok(d.querySelector('.mchat-entry') !== null, 'chat entry appears once signed in');
+  d.querySelector('.mchat-entry').click();
+  ok(d.querySelector('#mChatInput') !== null && d.querySelector('.mchat-input .btn') !== null, 'chat view shows an input and a send button');
+  ok(d.querySelector('#mBubble').textContent.indexOf('Ask Sage') >= 0, 'empty chat shows a prompt hint');
+  var sageCalls = [];
+  w.SMLCloud.configure({ fetch: function (url, opts) {
+    sageCalls.push({ url: url, body: opts && opts.body ? JSON.parse(opts.body) : null });
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Hoo! One step at a time.', remaining: 29 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'How am I doing today?';
+  w.sageSend();
+  ok(d.querySelector('.mchat-row.you') !== null && d.querySelector('.mchat-row.you').textContent === 'How am I doing today?', 'your message appears immediately');
+  ok(w.mascotChatBusy === true, 'busy while waiting on Sage\'s reply');
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.mascotChatBusy === false, 'no longer busy once the reply lands');
+  ok(d.querySelector('.mchat-row.sage') !== null && d.querySelector('.mchat-row.sage').textContent.indexOf('One step at a time') >= 0, 'Sage\'s reply renders in its own bubble');
+  ok(sageCalls.length === 1 && /\/functions\/v1\/sage-chat$/.test(sageCalls[0].url), 'the real chat call hits the sage-chat function');
+  ok(sageCalls[0].body.brief.indexOf(w.state.hero.name) >= 0 && sageCalls[0].body.brief.indexOf('streak') >= 0, 'a compact state summary rides along as context');
+  // an error from the function shows as Sage's own line, not a crash
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 429, ok: false, text: function () { return Promise.resolve(JSON.stringify({ error: 'Sage needs to rest - back tomorrow!' })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'again';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(d.querySelector('#mBubble').textContent.indexOf('needs to rest') >= 0, 'a rate-limit/error response shows as a friendly Sage line, not a broken UI');
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
   // Escape closes an open modal (focus-trap keydown handler)

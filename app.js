@@ -2500,8 +2500,10 @@ function createHero(){
 }
 /* ---------- Sage the guide (mascot) ----------
    Phase 1: an animated companion that speaks a scripted daily briefing built
-   from your save (RPG.briefing) - no network, no LLM. Phase 2 (real chat via a
-   Supabase Edge Function) plugs into this same panel later. */
+   from your save (RPG.briefing) - no network, no LLM.
+   Phase 2 (below): real chat via the sage-chat Supabase Edge Function, shown
+   only when cloud sync is on (needs a signed-in session to authorize the
+   call and rate-limit per user). The Anthropic key lives server-side only. */
 var MASCOT_AURA={happy:'',fired:'🔥',proud:'✨',worried:'💧',urgent:'❗'};
 function mascotOn(){ return state && state.settings.mascot!==false; }
 function ensureMascot(){
@@ -2518,18 +2520,72 @@ function ensureMascot(){
 }
 function mascotBriefingHtml(){
   var b=RPG.briefing(state);
+  var chatEntry=(typeof SMLCloud!=='undefined'&&SMLCloud.configured()&&cloudOn())
+    ?'<button class="mline mchat-entry" onclick="openSageChat()"><span>💬</span><span class="grow">Ask me anything</span><span class="mgo">▶</span></button>'
+    :'';
   return '<div class="mhead"><b>'+esc(b.greeting)+'</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
     '<div class="mlines">'+b.lines.map(function(l){
       return '<button class="mline" onclick="toggleMascot(false);go(\''+l.tab+'\')"><span>'+l.icon+'</span><span class="grow">'+esc(l.text)+'</span><span class="mgo">▶</span></button>';
-    }).join('')+'</div>'+
+    }).join('')+chatEntry+'</div>'+
     '<div class="mfoot">🔥 '+b.streak+' day'+(b.streak===1?'':'s')+' · Lv.'+b.level+' · <span class="hint" style="display:inline">tap a line to jump there</span></div>';
 }
 function toggleMascot(force){
   var host=ensureMascot(); if(!host) return;
   var bub=document.getElementById('mBubble'), btn=document.getElementById('mBtn');
   var show=typeof force==='boolean'?force:bub.hidden;
-  if(show){ bub.innerHTML=mascotBriefingHtml(); bub.hidden=false; btn.classList.add('talking'); setTimeout(function(){ btn.classList.remove('talking'); },900); }
+  if(show){ mascotView='brief'; bub.innerHTML=mascotBriefingHtml(); bub.hidden=false; btn.classList.add('talking'); setTimeout(function(){ btn.classList.remove('talking'); },900); }
   else bub.hidden=true;
+}
+
+/* ---------- Sage Phase 2: real chat via the sage-chat Edge Function ----------
+   In-memory only (mascotChatLog) - conversations are not saved to the state
+   or synced; each app open starts fresh. The Anthropic key never reaches the
+   client, only short replies do (see supabase/functions/sage-chat). */
+var mascotView='brief', mascotChatLog=[], mascotChatBusy=false;
+function sageBrief(){
+  var h=state.hero, today=RPG.todayKey();
+  var chest=A.chestStatus(state);
+  var bits=['name '+h.name,'level '+h.level,'streak '+h.streak+'d',
+    'HP '+h.hp+'/'+RPG.maxHpOf(state),'coins '+h.coins,
+    'dailies '+chest.done+'/'+chest.total+' today'];
+  if(state.boss&&!state.boss.doneOn) bits.push('weekly boss "'+state.boss.title+'" active');
+  if(state.hero.downed) bits.push('currently downed');
+  return bits.join(', ');
+}
+function openSageChat(){
+  mascotView='chat';
+  var host=ensureMascot(); if(!host) return;
+  var bub=document.getElementById('mBubble');
+  bub.innerHTML=mascotChatHtml(); bub.hidden=false;
+  var log=document.getElementById('mChatLog'); if(log) log.scrollTop=log.scrollHeight;
+  var inp=document.getElementById('mChatInput'); if(inp) inp.focus();
+}
+function mascotChatHtml(){
+  var rows=mascotChatLog.map(function(m){
+    return '<div class="mchat-row '+m.who+'">'+esc(m.text)+'</div>';
+  }).join('') || '<div class="hint" style="text-align:center;margin-top:10px">Ask Sage about your quests, habits, or how to catch up today.</div>';
+  return '<div class="mhead"><button class="btn ghost small" aria-label="Back" onclick="toggleMascot(true)">◀</button><b>🦉 Sage</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
+    '<div class="mchat-log" id="mChatLog">'+rows+(mascotChatBusy?'<div class="mchat-row sage typing">…</div>':'')+'</div>'+
+    '<div class="mchat-input"><input id="mChatInput" maxlength="500" placeholder="Ask Sage…" '+(mascotChatBusy?'disabled':'')+' onkeydown="if(event.key===\'Enter\')sageSend()">'+
+    '<button class="btn go small" '+(mascotChatBusy?'disabled':'')+' onclick="sageSend()">Send</button></div>';
+}
+function sageSend(){
+  var inp=document.getElementById('mChatInput'); if(!inp||mascotChatBusy) return;
+  var text=inp.value.trim(); if(!text) return;
+  mascotChatLog.push({who:'you',text:text});
+  mascotChatBusy=true;
+  var bub=document.getElementById('mBubble'); if(bub) bub.innerHTML=mascotChatHtml();
+  var log=document.getElementById('mChatLog'); if(log) log.scrollTop=log.scrollHeight;
+  SMLCloud.chatSage(text, sageBrief()).then(function(r){
+    mascotChatBusy=false;
+    if(r.ok) mascotChatLog.push({who:'sage',text:r.reply});
+    else mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
+    if(mascotView==='chat'){
+      var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
+      var l=document.getElementById('mChatLog'); if(l) l.scrollTop=l.scrollHeight;
+      var i=document.getElementById('mChatInput'); if(i) i.focus();
+    }
+  });
 }
 function mascotMoodSync(){
   var host=ensureMascot(); if(!host) return;
