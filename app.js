@@ -2512,11 +2512,20 @@ function ensureMascot(){
   if(!host){
     host=document.createElement('div'); host.id='mascot';
     host.innerHTML='<div class="mbubble" id="mBubble" role="region" aria-label="Sage’s daily briefing" hidden></div>'+
-      '<button class="mbtn" id="mBtn" aria-label="Talk to Sage, your guide" title="Sage - your guide" onclick="toggleMascot()"><span class="mface">🦉</span><span class="maura" aria-hidden="true"></span></button>';
+      '<button class="mbtn" id="mBtn" aria-label="Talk to Sage, your guide" title="Sage - your guide" onclick="toggleMascot()"><span class="mface">🦉</span><span class="maura" aria-hidden="true"></span><span class="mcue" id="mCue" aria-hidden="true" hidden>💬</span></button>';
     document.body.appendChild(host);
   }
   host.style.display='';
+  updateSageCue();
   return host;
+}
+/* the little 💬 badge that tells first-time users the owl is chattable - shown
+   only when cloud chat is available and they haven't opened the chat yet */
+function sageChatAvailable(){ return typeof SMLCloud!=='undefined' && SMLCloud.configured() && cloudOn(); }
+function updateSageCue(){
+  var cue=document.getElementById('mCue'); if(!cue) return;
+  var seen=false; try{ seen=localStorage.getItem('sml.sage.chatseen')==='1'; }catch(e){}
+  cue.hidden=!(sageChatAvailable() && !seen);
 }
 function mascotBriefingHtml(){
   var b=RPG.briefing(state);
@@ -2558,7 +2567,9 @@ function sageToday(state){
     .map(function(q){ return 'quest '+q.id+': '+String(q.title||'').replace(/[":;]/g,' '); });
   var hs=(state.habits||[]).filter(function(h){ return h.type==='good'; }).slice(-15)
     .map(function(h){ return 'habit '+h.id+': '+String(h.title||'').replace(/[":;]/g,' '); });
-  return qs.concat(hs).join('; ').slice(0,1200);
+  var gs=(state.goals||[]).filter(function(g){ return !g.doneOn; }).slice(-10)
+    .map(function(g){ return 'main-quest '+g.id+': '+String(g.title||'').replace(/[":;]/g,' '); });
+  return qs.concat(hs).concat(gs).join('; ').slice(0,1600);
 }
 var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm'};
 function sageApplyAction(type, params){
@@ -2578,7 +2589,8 @@ function sageApplyAction(type, params){
   if(type==='add_quest'){
     var t=String(params.title||'').trim(); if(!t) return false;
     var diff=['easy','normal','hard','epic'].indexOf(params.difficulty)>=0?params.difficulty:'normal';
-    A.addQuest(state,{title:t,diff:diff,skillId:null,due:params.due||null,recurring:false,days:null,main:null});
+    var mainId=(params.main_quest_id && (state.goals||[]).some(function(g){ return g.id===params.main_quest_id; }))?params.main_quest_id:null;
+    A.addQuest(state,{title:t,diff:diff,skillId:null,due:params.due||null,recurring:false,days:null,main:mainId});
     persist(); render(); return true;
   }
   if(type==='add_habit'){
@@ -2590,6 +2602,8 @@ function sageApplyAction(type, params){
 }
 function openSageChat(){
   mascotView='chat';
+  try{ localStorage.setItem('sml.sage.chatseen','1'); }catch(e){}
+  updateSageCue();
   var host=ensureMascot(); if(!host) return;
   var bub=document.getElementById('mBubble');
   bub.innerHTML=mascotChatHtml(); bub.hidden=false;
@@ -2640,8 +2654,11 @@ function sageHistory(){
       content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
     }
     if(!content) continue;
-    if(out.length && out[out.length-1].role===role) continue; // preserve alternation
-    out.push({role:role, content:content.slice(0,500)});
+    if(out.length && out[out.length-1].role===role){          // coalesce consecutive same-role (a turn can add several sage bubbles)
+      out[out.length-1].content=(out[out.length-1].content+'\n'+content).slice(0,1000);
+    } else {
+      out.push({role:role, content:content.slice(0,500)});
+    }
   }
   return out.slice(-20);
 }
@@ -2663,17 +2680,18 @@ function sageSend(){
   SMLCloud.chatSage(text, sageBrief(), sageToday(state), history).then(function(r){
     mascotChatBusy=false;
     if(r.ok){
-      var tier=r.action && SAGE_ACTION_TIERS[r.action.type];
-      if(tier==='auto'){
-        var applied=sageApplyAction(r.action.type, r.action.params);
-        var note=applied ? (r.reply || sageAutoNote(r.action.type, true))
-                         : ((r.reply?r.reply+'\n\n':'')+sageAutoNote(r.action.type, false));
-        mascotChatLog.push({who:'sage',text:note});
-      } else if(tier==='confirm'){
-        mascotChatLog.push({who:'sage',text:r.reply||'',pendingAction:{type:r.action.type,params:r.action.params}});
-      } else if(r.reply){
-        mascotChatLog.push({who:'sage',text:r.reply});
-      }
+      /* the model may return several actions in one turn - apply every auto
+         action, queue a confirm card per confirm action */
+      var actions=Array.isArray(r.actions)?r.actions:(r.action?[r.action]:[]);
+      var autoNotes=[], confirms=[];
+      actions.forEach(function(a){
+        var tier=SAGE_ACTION_TIERS[a.type];
+        if(tier==='auto') autoNotes.push(sageAutoNote(a.type, sageApplyAction(a.type, a.params)));
+        else if(tier==='confirm') confirms.push(a);
+      });
+      if(r.reply) mascotChatLog.push({who:'sage',text:r.reply});
+      if(autoNotes.length) mascotChatLog.push({who:'sage',text:autoNotes.join('\n')});
+      confirms.forEach(function(a){ mascotChatLog.push({who:'sage',text:'',pendingAction:{type:a.type,params:a.params}}); });
     } else {
       mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
     }
@@ -2689,6 +2707,7 @@ function mascotMoodSync(){
   var b=RPG.briefing(state);
   host.className='m-'+b.mood;
   var aura=host.querySelector('.maura'); if(aura) aura.textContent=MASCOT_AURA[b.mood]||'';
+  updateSageCue();
 }
 function mascotDailyGreet(){
   if(!mascotOn()) return;

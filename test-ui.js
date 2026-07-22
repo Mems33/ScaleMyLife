@@ -1232,7 +1232,7 @@ setTimeout(async function () {
   await new Promise(function (r) { setTimeout(r, 20); });
   ok(w.state.habits.find(function (h) { return h.id === hFixture.id; }).lastDoneOn === w.RPG.todayKey(), 'complete_habit actually checks off the habit');
   var sageRows1 = d.querySelectorAll('.mchat-row.sage');
-  ok(sageRows1[sageRows1.length - 1].textContent.indexOf('Nice work') >= 0, 'accompanying reply text still renders as a normal Sage bubble');
+  ok(Array.prototype.some.call(sageRows1, function (r) { return r.textContent.indexOf('Nice work') >= 0; }), 'accompanying reply text still renders as a normal Sage bubble');
 
   w.SMLCloud.configure({ fetch: function () {
     return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'log_mood', params: { mood: 'great' } }, remaining: 18 })); } });
@@ -1344,6 +1344,67 @@ setTimeout(async function () {
   var failRows = d.querySelectorAll('.mchat-row.sage');
   ok(failRows[failRows.length - 1].textContent.toLowerCase().indexOf("couldn't find") >= 0, 'an id that is not on the list yields a friendly could-not-find note, not silence');
 
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
+  console.log('\nSage Actions: multiple actions in one message');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok5', refresh_token: 'sage-rt5', user: { id: 'sage-uid5', email: 's@b.c' } }));
+  var multiQ = w.A.addQuest(w.state, { title: 'Multi test quest', diff: 'easy' });
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Both done!', actions: [{ type: 'complete_quest', params: { quest_id: multiQ.id } }, { type: 'log_mood', params: { mood: 'good' } }], remaining: 11 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'clear the multi quest and log that I feel good';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(w.state.quests.find(function (q) { return q.id === multiQ.id; }).doneOn === w.RPG.todayKey(), 'first action (complete_quest) applied from a multi-action turn');
+  ok(w.state.journal[w.RPG.todayKey()] && w.state.journal[w.RPG.todayKey()].mood === 'good', 'second action (log_mood) also applied from the same turn');
+
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
+  console.log('\nSage Actions: add a quest as a step of a main quest');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok6', refresh_token: 'sage-rt6', user: { id: 'sage-uid6', email: 's@b.c' } }));
+  var mainGoal = w.A.addGoal(w.state, { title: 'Test sync main quest' });
+  ok(w.sageToday(w.state).indexOf('main-quest ' + mainGoal.id) >= 0, 'the today payload lists the main quest with its id so Sage can attach steps');
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'add_quest', params: { title: 'test2', main_quest_id: mainGoal.id } }, remaining: 10 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'add a step test2 to the main quest';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(d.querySelector('.mchat-action') !== null, 'add_quest still shows a confirm card even when it is a step');
+  d.querySelector('.mchat-action .btn.go').click();
+  var stepQuest = w.state.quests[w.state.quests.length - 1];
+  ok(stepQuest.title === 'test2' && stepQuest.main === mainGoal.id, 'confirming links the new quest as a step of the main quest, not a loose side quest');
+  var looseGoal = w.A.addGoal(w.state, { title: 'Another main quest' });
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'add_quest', params: { title: 'loose one', main_quest_id: 'not-a-real-goal-id' } }, remaining: 9 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'add loose one';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  d.querySelector('.mchat-action .btn.go').click();
+  ok(w.state.quests[w.state.quests.length - 1].main === null, 'an unknown main_quest_id falls back to a standalone quest, never a bogus link');
+
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
+  console.log('\nSage: chat affordance cue on the owl');
+  w.localStorage.removeItem('sml.sage.chatseen');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok7', refresh_token: 'sage-rt7', user: { id: 'sage-uid7', email: 's@b.c' } }));
+  w.render();
+  ok(d.querySelector('#mCue') !== null && d.querySelector('#mCue').hidden === false, 'a chat cue shows on the owl once chat is available and unseen');
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  ok(d.querySelector('#mCue').hidden === true, 'opening the chat dismisses the cue');
+  ok(w.localStorage.getItem('sml.sage.chatseen') === '1', 'the cue stays dismissed on later visits');
   w.SMLCloud.configure({ fetch: null });
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.mascotChatLog = []; w.mascotChatBusy = false;

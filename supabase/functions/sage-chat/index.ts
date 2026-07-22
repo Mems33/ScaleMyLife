@@ -17,7 +17,7 @@ const ALLOWED_ORIGINS = new Set([
 const DAILY_LIMIT = 30;
 const MAX_MESSAGE_LEN = 500;
 const MAX_BRIEF_LEN = 800;
-const MAX_TODAY_LEN = 1200;
+const MAX_TODAY_LEN = 1600;
 const MAX_HISTORY = 20;
 const MODEL = "claude-haiku-4-5-20251001";
 
@@ -51,13 +51,14 @@ const TOOLS = [
   },
   {
     name: "add_quest",
-    description: "Propose a brand new quest for the user. This always requires the user's confirmation before anything is saved, so propose one whenever the user clearly asks you to create a quest for them.",
+    description: "Propose a brand new quest for the user. This always requires the user's confirmation before anything is saved, so propose one whenever the user clearly asks you to create a quest for them. To make it a step of an existing main quest, set main_quest_id.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string" },
         difficulty: { type: "string", enum: ["easy", "normal", "hard", "epic"] },
         due: { type: "string", description: "ISO date YYYY-MM-DD, optional" },
+        main_quest_id: { type: "string", description: "optional id of an existing main quest to attach this as a step, taken from the 'main-quest <id>: <title>' entries in the Today list" },
       },
       required: ["title"],
     },
@@ -129,9 +130,15 @@ Tool use rules (non-negotiable):
   user a confirm card with Yes/Cancel, which IS the confirmation step. Fill in
   a sensible title (plus difficulty for a quest, or weekly target for a habit)
   from what the user said.
+- A "step" of a main quest is a quest linked to it. When the user asks to add a
+  step under a main quest, call add_quest with main_quest_id set to that main
+  quest's id (the "main-quest <id>: <title>" entries in the Today list). Without
+  a main_quest_id the quest is a standalone side quest.
 - Call log_mood when the user tells you how they're feeling today in a way that
   reads as wanting it logged.
-- Call at most one tool per reply. If nothing the user said calls for an
+- When the user asks for several things in one message (e.g. "check off my
+  workout and log that I feel great"), call every tool that applies in the same
+  reply - one tool_use block per action. If nothing the user said calls for an
   action, just reply normally with no tool call.`;
 
 Deno.serve(async (req: Request) => {
@@ -232,13 +239,18 @@ Deno.serve(async (req: Request) => {
     const aiJson = await aiRes.json();
     const blocks: Array<Record<string, unknown>> = aiJson?.content || [];
     const textBlock = blocks.find((b) => b.type === "text") as { text?: string } | undefined;
-    const toolBlock = blocks.find((b) => b.type === "tool_use") as { name?: string; input?: unknown } | undefined;
     const reply = typeof textBlock?.text === "string" ? textBlock.text : null;
-    const action = toolBlock?.name ? { type: toolBlock.name, params: toolBlock.input || {} } : null;
-    if (!reply && !action) {
-      return new Response(JSON.stringify({ reply: "Hoo? I lost my train of thought - ask me again?", action: null, remaining: Math.max(0, DAILY_LIMIT - count) }), { headers: { ...cors, "Content-Type": "application/json" } });
+    // The model may call several tools in one reply (multiple tool_use blocks).
+    // Return them all as `actions`; `action` stays as the first for any client
+    // that only reads the single-action field.
+    const actions = blocks
+      .filter((b) => b.type === "tool_use" && typeof b.name === "string")
+      .map((b) => ({ type: b.name as string, params: (b as { input?: unknown }).input || {} }));
+    const action = actions[0] || null;
+    if (!reply && !actions.length) {
+      return new Response(JSON.stringify({ reply: "Hoo? I lost my train of thought - ask me again?", action: null, actions: [], remaining: Math.max(0, DAILY_LIMIT - count) }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
-    return new Response(JSON.stringify({ reply, action, remaining: Math.max(0, DAILY_LIMIT - count) }), { headers: { ...cors, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ reply, action, actions, remaining: Math.max(0, DAILY_LIMIT - count) }), { headers: { ...cors, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ error: "something went wrong" }), { status: 500, headers: { ...cors, "Content-Type": "application/json" } });
   }

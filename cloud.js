@@ -238,7 +238,8 @@
         return api.refresh().then(function (rf) { return rf.ok ? once() : r; });
       }).then(function (r) {
         if (!r.ok) return { ok: false, error: errMsg(r.j, 'Sage could not reply (' + r.status + ')') };
-        return { ok: true, reply: r.j.reply, action: r.j.action || null, remaining: r.j.remaining };
+        var actions = Array.isArray(r.j.actions) ? r.j.actions : (r.j.action ? [r.j.action] : []);
+        return { ok: true, reply: r.j.reply, action: r.j.action || null, actions: actions, remaining: r.j.remaining };
       });
     },
 

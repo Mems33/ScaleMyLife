@@ -193,6 +193,10 @@ var SESS = { access_token: 'at1', refresh_token: 'rt1', user: { id: 'uid-1', ema
   ok(scAction.ok === true && scAction.action && scAction.action.type === 'complete_quest' && scAction.action.params.quest_id === 'q1', 'a tool-call response surfaces action.type and action.params');
   var scActionReq = log[log.length - 1];
   ok(scActionReq.body.today === 'quest q1: Workout', 'the today payload rides along as a third field');
+  ok(Array.isArray(scAction.actions) && scAction.actions.length === 1 && scAction.actions[0].type === 'complete_quest', 'a single action is also surfaced in the actions array');
+  fx.route('/functions/v1/sage-chat', 200, { reply: 'Both done!', actions: [{ type: 'complete_quest', params: { quest_id: 'q1' } }, { type: 'log_mood', params: { mood: 'good' } }], remaining: 8 });
+  var scMulti = await Cloud.chatSage('clear q1 and log good', '', 'quest q1: Workout');
+  ok(scMulti.ok === true && scMulti.actions.length === 2 && scMulti.actions[1].type === 'log_mood', 'multiple actions in one reply are surfaced as an array');
   fx.route('/functions/v1/sage-chat', 200, { reply: 'Sounds good.', action: null, remaining: 10 });
   var scNoAction = await Cloud.chatSage('how am I doing?', '', '');
   ok(scNoAction.ok === true && scNoAction.action === null, 'a plain-text reply has action: null, not undefined');
