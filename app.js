@@ -2625,20 +2625,50 @@ function sageCancelAction(i){
   m.text=(m.text?m.text+'\n\n':'')+'Cancelled.';
   var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
 }
+/* Prior turns as Anthropic-style {role,content} for Sage's conversational
+   memory. Built from the in-memory chat log before the current message is
+   pushed. Skips empties, keeps user/assistant alternation, caps to recent
+   turns; a pending-action bubble (empty text) is described so history stays
+   coherent. */
+function sageHistory(){
+  var out=[];
+  for(var i=0;i<mascotChatLog.length;i++){
+    var m=mascotChatLog[i], role=(m.who==='you')?'user':'assistant';
+    var content=(m.text||'').trim();
+    if(!content && m.pendingAction){
+      var p=m.pendingAction;
+      content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
+    }
+    if(!content) continue;
+    if(out.length && out[out.length-1].role===role) continue; // preserve alternation
+    out.push({role:role, content:content.slice(0,500)});
+  }
+  return out.slice(-20);
+}
+function sageAutoNote(type, applied){
+  if(!applied) return "Hmm, I couldn't find that one on your list - what's the exact name?";
+  if(type==='complete_quest') return 'Done - marked that quest complete. ✓';
+  if(type==='complete_habit') return 'Nice - checked that habit off for today. ✓';
+  if(type==='log_mood') return 'Logged your mood for today. ✓';
+  return 'Done. ✓';
+}
 function sageSend(){
   var inp=document.getElementById('mChatInput'); if(!inp||mascotChatBusy) return;
   var text=inp.value.trim(); if(!text) return;
+  var history=sageHistory();   // prior turns, before this message joins the log
   mascotChatLog.push({who:'you',text:text});
   mascotChatBusy=true;
   var bub=document.getElementById('mBubble'); if(bub) bub.innerHTML=mascotChatHtml();
   var log=document.getElementById('mChatLog'); if(log) log.scrollTop=log.scrollHeight;
-  SMLCloud.chatSage(text, sageBrief(), sageToday(state)).then(function(r){
+  SMLCloud.chatSage(text, sageBrief(), sageToday(state), history).then(function(r){
     mascotChatBusy=false;
     if(r.ok){
       var tier=r.action && SAGE_ACTION_TIERS[r.action.type];
       if(tier==='auto'){
-        sageApplyAction(r.action.type, r.action.params);
-        if(r.reply) mascotChatLog.push({who:'sage',text:r.reply});
+        var applied=sageApplyAction(r.action.type, r.action.params);
+        var note=applied ? (r.reply || sageAutoNote(r.action.type, true))
+                         : ((r.reply?r.reply+'\n\n':'')+sageAutoNote(r.action.type, false));
+        mascotChatLog.push({who:'sage',text:note});
       } else if(tier==='confirm'){
         mascotChatLog.push({who:'sage',text:r.reply||'',pendingAction:{type:r.action.type,params:r.action.params}});
       } else if(r.reply){

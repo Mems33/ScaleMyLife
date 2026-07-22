@@ -18,6 +18,7 @@ const DAILY_LIMIT = 30;
 const MAX_MESSAGE_LEN = 500;
 const MAX_BRIEF_LEN = 800;
 const MAX_TODAY_LEN = 1200;
+const MAX_HISTORY = 20;
 const MODEL = "claude-haiku-4-5-20251001";
 
 const TOOLS = [
@@ -103,14 +104,33 @@ Voice rules (non-negotiable):
   a real professional for that, then bring it back to something concrete
   they can do in the app or their day).
 
+Acting on the user's list (non-negotiable):
+- The user's current quests and habits for today are given to you each turn in
+  the context block under "Today", each as "quest <id>: <title>" or
+  "habit <id>: <title>". That IS the list you can see - treat it as
+  authoritative and never say you cannot see their list.
+- Match the user's wording to that list flexibly: case-insensitive, partial and
+  fuzzy matches count (e.g. "workout" matches "Workout / walk 30 min"). If
+  exactly one item is a reasonable match, act on it using its id rather than
+  asking which one.
+- Prefer taking the action over asking a clarifying question. Only ask when you
+  genuinely cannot tell which item the user means or a required detail is
+  missing.
+- The conversation so far is included above - use it. If you asked something
+  last turn and the user answers briefly ("check it off", "yes", "1",
+  "create it", "looks good"), apply that answer in context. Do not start over
+  or ask the same thing again.
+
 Tool use rules (non-negotiable):
 - Only call complete_quest or complete_habit with an id that appears in the
-  Today list you were given this turn. Never invent an id.
-- Call add_quest or add_habit whenever the user clearly asks you to create
-  something new for them - these always require the user's own confirmation
-  before anything is saved, so proposing one is safe.
-- Call log_mood when the user tells you how they're feeling today in a way
-  that reads as wanting it logged.
+  Today list this turn. Never invent an id.
+- To create something new, CALL add_quest or add_habit - do not describe a
+  proposal in prose and ask "does this look good?". Calling the tool shows the
+  user a confirm card with Yes/Cancel, which IS the confirmation step. Fill in
+  a sensible title (plus difficulty for a quest, or weekly target for a habit)
+  from what the user said.
+- Call log_mood when the user tells you how they're feeling today in a way that
+  reads as wanting it logged.
 - Call at most one tool per reply. If nothing the user said calls for an
   action, just reply normally with no tool call.`;
 
@@ -142,7 +162,7 @@ Deno.serve(async (req: Request) => {
     }
     const userId = userData.user.id;
 
-    let body: { message?: string; brief?: string; today?: string };
+    let body: { message?: string; brief?: string; today?: string; history?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -171,6 +191,26 @@ Deno.serve(async (req: Request) => {
       todayIds ? `Today (ids you may act on): ${todayIds}` : "",
     ].filter(Boolean).join("\n");
     const userContent = context ? `[${context}]\n\n${message}` : message;
+
+    // Prior turns give Sage conversational memory across a multi-step request
+    // (e.g. it asks which quest, the user answers "the workout one"). Sanitize
+    // hard: only user/assistant roles, non-empty string content, enforce
+    // alternation, cap length. The client sends plain-text turns only (no
+    // tool_use blocks), so there is never an orphaned tool_use to satisfy.
+    const rawHistory = Array.isArray(body.history) ? body.history : [];
+    const history: Array<{ role: "user" | "assistant"; content: string }> = [];
+    for (const h of rawHistory) {
+      const role = h && (h.role === "user" || h.role === "assistant") ? h.role : null;
+      const content = h && typeof h.content === "string" ? h.content.trim().slice(0, MAX_MESSAGE_LEN) : "";
+      if (!role || !content) continue;
+      if (history.length && history[history.length - 1].role === role) continue; // keep alternation
+      history.push({ role, content });
+    }
+    const trimmed = history.slice(-MAX_HISTORY);
+    while (trimmed.length && trimmed[0].role !== "user") trimmed.shift(); // must start with a user turn
+    if (trimmed.length && trimmed[trimmed.length - 1].role === "user") trimmed.pop(); // this turn's message is the user turn we append
+    const messages = [...trimmed, { role: "user", content: userContent }];
+
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -183,7 +223,7 @@ Deno.serve(async (req: Request) => {
         max_tokens: 350,
         system: SYSTEM_PROMPT,
         tools: TOOLS,
-        messages: [{ role: "user", content: userContent }],
+        messages,
       }),
     });
     if (!aiRes.ok) {

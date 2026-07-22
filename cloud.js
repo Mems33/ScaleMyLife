@@ -223,13 +223,14 @@
     /* Sage Phase 2: one chat turn via the sage-chat Edge Function. The
        Anthropic key never touches the client - only a short text reply
        comes back. -> {ok, reply, remaining} or {ok:false, error} */
-    chatSage: function (message, brief, today) {
+    chatSage: function (message, brief, today, history) {
       function once() {
         var sess = getSession();
         if (!sess) return Promise.resolve({ status: 401, ok: false, j: {} });
         var h = authHeaders({ 'Authorization': 'Bearer ' + sess.access_token });
         return req(cfg.url + '/functions/v1/sage-chat', { method: 'POST', headers: h,
-          body: JSON.stringify({ message: message, brief: brief || '', today: today || '' }) });
+          body: JSON.stringify({ message: message, brief: brief || '', today: today || '',
+            history: Array.isArray(history) ? history : [] }) });
       }
       if (!api.configured() || !getSession()) return Promise.resolve({ ok: false, error: 'not signed in' });
       return once().then(function (r) {

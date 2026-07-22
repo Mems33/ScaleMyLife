@@ -1304,6 +1304,51 @@ setTimeout(async function () {
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
 
+  console.log('\nSage Actions: conversation memory + action feedback');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok4', refresh_token: 'sage-rt4', user: { id: 'sage-uid4', email: 's@b.c' } }));
+  var memCalls = [];
+  w.SMLCloud.configure({ fetch: function (url, opts) {
+    memCalls.push(opts && opts.body ? JSON.parse(opts.body) : null);
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Which one - the workout or the reading?', remaining: 14 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'mark my habit done';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  ok(Array.isArray(memCalls[0].history) && memCalls[0].history.length === 0, 'the first turn sends an empty history');
+  d.querySelector('#mChatInput').value = 'the workout one';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var mh = memCalls[1].history;
+  ok(Array.isArray(mh) && mh.length === 2, 'the second turn carries the two prior turns as history');
+  ok(mh[0].role === 'user' && mh[0].content === 'mark my habit done', 'history[0] is the earlier user message');
+  ok(mh[1].role === 'assistant' && mh[1].content.indexOf('workout or the reading') >= 0, 'history[1] is Sage\'s earlier reply');
+  ok(memCalls[1].message === 'the workout one', 'the current turn is the message, not duplicated into history');
+
+  var qMem = w.A.addQuest(w.state, { title: 'Memory feedback quest', diff: 'easy' });
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'complete_quest', params: { quest_id: qMem.id } }, remaining: 13 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'clear it';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var fbRows = d.querySelectorAll('.mchat-row.sage');
+  ok(fbRows[fbRows.length - 1].textContent.indexOf('✓') >= 0, 'an auto action with no reply still leaves a visible confirmation bubble');
+
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: null, action: { type: 'complete_quest', params: { quest_id: 'ghost-id-not-real' } }, remaining: 12 })); } });
+  } });
+  d.querySelector('#mChatInput').value = 'complete the ghost quest';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var failRows = d.querySelectorAll('.mchat-row.sage');
+  ok(failRows[failRows.length - 1].textContent.toLowerCase().indexOf("couldn't find") >= 0, 'an id that is not on the list yields a friendly could-not-find note, not silence');
+
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
   // Escape closes an open modal (focus-trap keydown handler)
