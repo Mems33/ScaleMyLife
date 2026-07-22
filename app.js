@@ -2552,6 +2552,42 @@ function sageBrief(){
   if(state.hero.downed) bits.push('currently downed');
   return bits.join(', ');
 }
+function sageToday(state){
+  var today=RPG.todayKey();
+  var qs=(state.quests||[]).filter(function(q){ return !q.doneOn || q.doneOn===today; }).slice(-15)
+    .map(function(q){ return 'quest '+q.id+': '+String(q.title||'').replace(/[":;]/g,' '); });
+  var hs=(state.habits||[]).filter(function(h){ return h.type==='good'; }).slice(-15)
+    .map(function(h){ return 'habit '+h.id+': '+String(h.title||'').replace(/[":;]/g,' '); });
+  return qs.concat(hs).join('; ').slice(0,1200);
+}
+var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm'};
+function sageApplyAction(type, params){
+  params=params||{};
+  if(type==='complete_quest'){
+    if(!state.quests.some(function(q){ return q.id===params.quest_id; })) return false;
+    doQuest(params.quest_id); return true;
+  }
+  if(type==='complete_habit'){
+    if(!state.habits.some(function(h){ return h.id===params.habit_id; })) return false;
+    doHabit(params.habit_id); return true;
+  }
+  if(type==='log_mood'){
+    if(!RPG.MOODS.some(function(m){ return m.key===params.mood; })) return false;
+    var r=A.logJournal(state, params.mood, (state.journal[RPG.todayKey()]||{}).note || ''); persist(); render(); fx(r); return true;
+  }
+  if(type==='add_quest'){
+    var t=String(params.title||'').trim(); if(!t) return false;
+    var diff=['easy','normal','hard','epic'].indexOf(params.difficulty)>=0?params.difficulty:'normal';
+    A.addQuest(state,{title:t,diff:diff,skillId:null,due:params.due||null,recurring:false,days:null,main:null});
+    persist(); render(); return true;
+  }
+  if(type==='add_habit'){
+    var t2=String(params.title||'').trim(); if(!t2) return false;
+    A.addHabit(state,{title:t2,type:'good',skillId:null,target:Number(params.target)||7});
+    persist(); render(); return true;
+  }
+  return false;
+}
 function openSageChat(){
   mascotView='chat';
   var host=ensureMascot(); if(!host) return;
@@ -2561,25 +2597,86 @@ function openSageChat(){
   var inp=document.getElementById('mChatInput'); if(inp) inp.focus();
 }
 function mascotChatHtml(){
-  var rows=mascotChatLog.map(function(m){
-    return '<div class="mchat-row '+m.who+'">'+esc(m.text)+'</div>';
+  var rows=mascotChatLog.map(function(m,i){
+    var body=m.text?esc(m.text):'';
+    if(m.pendingAction){
+      var p=m.pendingAction, label=(p.type==='add_quest'?'Add quest: "':'Add habit: "')+esc(String(p.params.title||''))+'"';
+      body+='<div class="mchat-action"><div>'+label+'</div>'+
+        '<button class="btn go small" onclick="sageConfirmAction('+i+')">Yes, add it</button>'+
+        '<button class="btn ghost small" onclick="sageCancelAction('+i+')">Cancel</button></div>';
+    }
+    return '<div class="mchat-row '+m.who+'">'+body+'</div>';
   }).join('') || '<div class="hint" style="text-align:center;margin-top:10px">Ask Sage about your quests, habits, or how to catch up today.</div>';
   return '<div class="mhead"><button class="btn ghost small" aria-label="Back" onclick="toggleMascot(true)">◀</button><b>🦉 Sage</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
     '<div class="mchat-log" id="mChatLog">'+rows+(mascotChatBusy?'<div class="mchat-row sage typing">…</div>':'')+'</div>'+
     '<div class="mchat-input"><input id="mChatInput" maxlength="500" placeholder="Ask Sage…" '+(mascotChatBusy?'disabled':'')+' onkeydown="if(event.key===\'Enter\')sageSend()">'+
     '<button class="btn go small" '+(mascotChatBusy?'disabled':'')+' onclick="sageSend()">Send</button></div>';
 }
+function sageConfirmAction(i){
+  var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
+  var applied=sageApplyAction(m.pendingAction.type, m.pendingAction.params);
+  m.pendingAction=null;
+  m.text=(m.text?m.text+'\n\n':'')+(applied?'Done!':'Could not add that.');
+  var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
+}
+function sageCancelAction(i){
+  var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
+  m.pendingAction=null;
+  m.text=(m.text?m.text+'\n\n':'')+'Cancelled.';
+  var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
+}
+/* Prior turns as Anthropic-style {role,content} for Sage's conversational
+   memory. Built from the in-memory chat log before the current message is
+   pushed. Skips empties, keeps user/assistant alternation, caps to recent
+   turns; a pending-action bubble (empty text) is described so history stays
+   coherent. */
+function sageHistory(){
+  var out=[];
+  for(var i=0;i<mascotChatLog.length;i++){
+    var m=mascotChatLog[i], role=(m.who==='you')?'user':'assistant';
+    var content=(m.text||'').trim();
+    if(!content && m.pendingAction){
+      var p=m.pendingAction;
+      content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
+    }
+    if(!content) continue;
+    if(out.length && out[out.length-1].role===role) continue; // preserve alternation
+    out.push({role:role, content:content.slice(0,500)});
+  }
+  return out.slice(-20);
+}
+function sageAutoNote(type, applied){
+  if(!applied) return "Hmm, I couldn't find that one on your list - what's the exact name?";
+  if(type==='complete_quest') return 'Done - marked that quest complete. ✓';
+  if(type==='complete_habit') return 'Nice - checked that habit off for today. ✓';
+  if(type==='log_mood') return 'Logged your mood for today. ✓';
+  return 'Done. ✓';
+}
 function sageSend(){
   var inp=document.getElementById('mChatInput'); if(!inp||mascotChatBusy) return;
   var text=inp.value.trim(); if(!text) return;
+  var history=sageHistory();   // prior turns, before this message joins the log
   mascotChatLog.push({who:'you',text:text});
   mascotChatBusy=true;
   var bub=document.getElementById('mBubble'); if(bub) bub.innerHTML=mascotChatHtml();
   var log=document.getElementById('mChatLog'); if(log) log.scrollTop=log.scrollHeight;
-  SMLCloud.chatSage(text, sageBrief()).then(function(r){
+  SMLCloud.chatSage(text, sageBrief(), sageToday(state), history).then(function(r){
     mascotChatBusy=false;
-    if(r.ok) mascotChatLog.push({who:'sage',text:r.reply});
-    else mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
+    if(r.ok){
+      var tier=r.action && SAGE_ACTION_TIERS[r.action.type];
+      if(tier==='auto'){
+        var applied=sageApplyAction(r.action.type, r.action.params);
+        var note=applied ? (r.reply || sageAutoNote(r.action.type, true))
+                         : ((r.reply?r.reply+'\n\n':'')+sageAutoNote(r.action.type, false));
+        mascotChatLog.push({who:'sage',text:note});
+      } else if(tier==='confirm'){
+        mascotChatLog.push({who:'sage',text:r.reply||'',pendingAction:{type:r.action.type,params:r.action.params}});
+      } else if(r.reply){
+        mascotChatLog.push({who:'sage',text:r.reply});
+      }
+    } else {
+      mascotChatLog.push({who:'sage',text:r.error||'Sage could not reply just now.'});
+    }
     if(mascotView==='chat'){
       var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
       var l=document.getElementById('mChatLog'); if(l) l.scrollTop=l.scrollHeight;
