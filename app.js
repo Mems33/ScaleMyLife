@@ -684,7 +684,7 @@ function renderQuests(){
     '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
       '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
       (dailies.map(questRow).join('')||emptyState('🔁','No dailies yet','Add a repeating task below - it resets every morning and feeds the daily chest.'))+
-      '<div class="form"><input id="dTitle" placeholder="New daily quest…">'+
+      '<div class="form"><input id="dTitle" placeholder="New daily quest… (try: stretch every weekday)" oninput="quickParse(\'d\')"><div class="hint" id="dHint"></div>'+
       '<div class="row"><select id="dDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="dSkill">'+skillOptions()+'</select></div>'+
       '<div class="daysrow"><span class="plabel">repeat on:</span>'+MON_ORDER.map(function(i){
@@ -695,7 +695,7 @@ function renderQuests(){
     '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span></h3>'+
       '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
       (sides.map(questRow).join('')||emptyState('📌','No side quests','Add a one-off task below. The ⬆ button upgrades one into a main quest.'))+
-      '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
+      '<div class="form"><input id="qTitle" placeholder="New side quest… (try: book dentist by friday hard)" oninput="quickParse(\'q\')"><div class="hint" id="qHint"></div>'+
       '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="qSkill">'+skillOptions()+'</select>'+
       '<input type="date" id="qDue" title="Due date (optional)"></div>'+
@@ -1936,14 +1936,37 @@ function promoteQ(id){
   var g=A.promoteQuest(state,id);
   if(g){ persist(); render(); toast('⬆️ <span class="c">Promoted to MAIN QUEST</span>'); SND.ach(); }
 }
+/* Plain-phrase quick add. As you type "Finish the essay by friday hard" the
+   difficulty, due date and repeat days fill themselves from RPG.parseTask;
+   you can still change any control before adding. The phrases are stripped
+   from the title on add. kind is 'q' (side quest) or 'd' (daily). */
+var quickParsed={q:'',d:''};   // the exact text the parser last saw per form; add only strips phrases from that text
+function quickParse(kind){
+  var inp=$(kind==='q'?'#qTitle':'#dTitle'); if(!inp) return;
+  var p=RPG.parseTask(inp.value, new Date()), bits=[];
+  quickParsed[kind]=inp.value;
+  var diffSel=$(kind==='q'?'#qDiff':'#dDiff');
+  if(p.diff && diffSel){ diffSel.value=p.diff; bits.push(p.diff); }
+  if(kind==='q'){ var due=$('#qDue'); if(p.due && due){ due.value=p.due; bits.push('due '+p.due); } }
+  else if(p.recurring){
+    pendingDays=Array.isArray(p.days)?p.days.slice():[];
+    var btns=document.querySelectorAll('.daysrow .dow');
+    for(var k=0;k<btns.length && k<MON_ORDER.length;k++) btns[k].classList.toggle('on', pendingDays.indexOf(MON_ORDER[k])>=0);
+    bits.push(pendingDays.length?'repeats on '+pendingDays.length+' days':'every day');
+  }
+  var hint=$(kind==='q'?'#qHint':'#dHint');
+  if(hint) hint.textContent=bits.length?('Understood: '+bits.join(', ')+(p.title&&p.title!==inp.value.trim()?' (title: '+p.title+')':'')):'';
+}
 function addQuest(){
-  var t=$('#qTitle').value.trim(); if(!t) return;
+  var raw=$('#qTitle').value.trim(); if(!raw) return;
+  var t=(quickParsed.q.trim()===raw)?(RPG.parseTask(raw, new Date()).title||raw):raw; quickParsed.q='';
   A.addQuest(state,{title:t,diff:$('#qDiff').value,skillId:$('#qSkill').value||null,
     due:$('#qDue').value||null,recurring:false,days:null,main:null});
   persist(); render();
 }
 function addDaily(){
-  var t=$('#dTitle').value.trim(); if(!t) return;
+  var raw=$('#dTitle').value.trim(); if(!raw) return;
+  var t=(quickParsed.d.trim()===raw)?(RPG.parseTask(raw, new Date()).title||raw):raw; quickParsed.d='';
   A.addQuest(state,{title:t,diff:$('#dDiff').value,skillId:$('#dSkill').value||null,
     due:null,recurring:true,days:pendingDays.slice(),main:null});
   pendingDays=[];
@@ -3335,7 +3358,7 @@ function sageToday(state){
     .map(function(g){ return 'main-quest '+g.id+': '+String(g.title||'').replace(/[":;]/g,' '); });
   return qs.concat(hs).concat(gs).join('; ').slice(0,1600);
 }
-var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm'};
+var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm',propose_steps:'confirm'};
 function sageApplyAction(type, params){
   params=params||{};
   if(type==='complete_quest'){
@@ -3377,7 +3400,16 @@ function openSageChat(){
 function mascotChatHtml(){
   var rows=mascotChatLog.map(function(m,i){
     var body=m.text?esc(m.text):'';
-    if(m.pendingAction){
+    if(m.pendingAction && m.pendingAction.type==='propose_steps'){
+      /* Sage proposed a plan: one checkbox per step, all on by default. Nothing
+         is saved until "Add selected"; unchecked steps are simply skipped. */
+      var ps=m.pendingAction, goal=(state.goals||[]).find(function(g){ return g.id===ps.params.main_quest_id; });
+      var steps=Array.isArray(ps.params.steps)?ps.params.steps:[];
+      body+='<div class="mchat-action" id="mact'+i+'"><div>Steps for "'+esc(goal?goal.title:'your main quest')+'"</div>'+
+        steps.map(function(st,k){ return '<label class="mstep"><input type="checkbox" class="mstepbox" data-k="'+k+'" checked> '+esc(String(st.title||''))+(st.difficulty?' <span class="hint">('+esc(String(st.difficulty))+')</span>':'')+'</label>'; }).join('')+
+        '<button class="btn go small" onclick="sageConfirmAction('+i+')">Add selected</button>'+
+        '<button class="btn ghost small" onclick="sageCancelAction('+i+')">Cancel</button></div>';
+    } else if(m.pendingAction){
       var p=m.pendingAction, label=(p.type==='add_quest'?'Add quest: "':'Add habit: "')+esc(String(p.params.title||''))+'"';
       body+='<div class="mchat-action"><div>'+label+'</div>'+
         '<button class="btn go small" onclick="sageConfirmAction('+i+')">Yes, add it</button>'+
@@ -3392,9 +3424,23 @@ function mascotChatHtml(){
 }
 function sageConfirmAction(i){
   var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
-  var applied=sageApplyAction(m.pendingAction.type, m.pendingAction.params);
+  var p=m.pendingAction, applied, note;
+  if(p.type==='propose_steps'){
+    /* read the checkboxes from the card before it re-renders; each checked
+       step becomes a quest linked to the main quest through the normal
+       add_quest path, so the same validation applies */
+    var card=document.getElementById('mact'+i), steps=Array.isArray(p.params.steps)?p.params.steps:[], added=0;
+    var boxes=card?card.querySelectorAll('.mstepbox'):[];
+    for(var k=0;k<steps.length;k++){
+      var box=boxes[k]; if(box && !box.checked) continue;
+      if(sageApplyAction('add_quest',{title:steps[k].title,difficulty:steps[k].difficulty,main_quest_id:p.params.main_quest_id})) added++;
+    }
+    applied=added>0; note=added>0?('Added '+added+' step'+(added===1?'':'s')+'.'):'Nothing selected.';
+  } else {
+    applied=sageApplyAction(p.type, p.params); note=applied?'Done!':'Could not add that.';
+  }
   m.pendingAction=null;
-  m.text=(m.text?m.text+'\n\n':'')+(applied?'Done!':'Could not add that.');
+  m.text=(m.text?m.text+'\n\n':'')+note;
   var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
 }
 function sageCancelAction(i){
@@ -3415,7 +3461,8 @@ function sageHistory(){
     var content=(m.text||'').trim();
     if(!content && m.pendingAction){
       var p=m.pendingAction;
-      content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
+      if(p.type==='propose_steps') content='Proposed steps: '+(Array.isArray(p.params.steps)?p.params.steps.map(function(s){ return String(s.title||''); }).join('; '):'');
+      else content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
     }
     if(!content) continue;
     if(out.length && out[out.length-1].role===role){          // coalesce consecutive same-role (a turn can add several sage bubbles)

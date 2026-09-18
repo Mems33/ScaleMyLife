@@ -1497,6 +1497,48 @@ setTimeout(async function () {
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
 
+  console.log('\nSage Actions: propose_steps checklist card');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok9', refresh_token: 'sage-rt9', user: { id: 'sage-uid9', email: 's@b.c' } }));
+  var stepsGoal = w.A.addGoal(w.state, { title: 'Ship the portfolio' });
+  var questsBeforeSteps = w.state.quests.length;
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Here is a plan.', action: { type: 'propose_steps', params: { main_quest_id: stepsGoal.id, steps: [{ title: 'Pick three projects', difficulty: 'easy' }, { title: 'Write the case studies', difficulty: 'hard' }, { title: 'Publish the site', difficulty: 'normal' }] } }, remaining: 12 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'break down my portfolio quest';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var stepBoxes = d.querySelectorAll('.mchat-action .mstepbox');
+  ok(stepBoxes.length === 3 && stepBoxes[0].checked, 'a propose_steps action renders one checked checkbox per step');
+  ok(w.state.quests.length === questsBeforeSteps, 'nothing is added until the user confirms');
+  stepBoxes[1].checked = false;
+  d.querySelector('.mchat-action .btn.go').click();
+  var linked = w.state.quests.filter(function (q) { return q.main === stepsGoal.id; });
+  ok(linked.length === 2 && linked[0].title === 'Pick three projects' && linked[1].title === 'Publish the site', 'Add selected creates only the checked steps, linked to the main quest');
+  ok(linked[0].diff === 'easy' && linked[1].diff === 'normal', 'each step keeps its proposed difficulty');
+  ok(d.querySelector('.mchat-action') === null, 'the checklist card resolves after adding');
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
+  console.log('\nQuick add: plain phrases fill the add forms');
+  w.go('quests');
+  var tmr = new Date(); tmr.setDate(tmr.getDate() + 1); var tmrKey = w.RPG.todayKey(tmr);
+  d.querySelector('#qTitle').value = 'Finish the essay by tomorrow hard';
+  w.quickParse('q');
+  ok(d.querySelector('#qDiff').value === 'hard' && d.querySelector('#qDue').value === tmrKey, 'typing a phrase pre-fills difficulty and due date');
+  ok(d.querySelector('#qHint').textContent.indexOf('hard') >= 0, 'a hint line says what was understood');
+  w.addQuest();
+  var parsedQ = w.state.quests[w.state.quests.length - 1];
+  ok(parsedQ.title === 'Finish the essay' && parsedQ.diff === 'hard' && parsedQ.due === tmrKey, 'adding strips the phrases from the title and keeps the parsed fields');
+  d.querySelector('#dTitle').value = 'Stretch every weekday';
+  w.quickParse('d');
+  ok(JSON.stringify(w.pendingDays) === JSON.stringify([1, 2, 3, 4, 5]), 'a repeat phrase selects the weekday buttons');
+  w.addDaily();
+  var parsedD = w.state.quests[w.state.quests.length - 1];
+  ok(parsedD.recurring === true && parsedD.title === 'Stretch' && JSON.stringify(parsedD.days) === JSON.stringify([1, 2, 3, 4, 5]), 'the daily is created with the parsed days and a clean title');
+
   console.log('\nSage Actions: conversation memory + action feedback');
   w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok4', refresh_token: 'sage-rt4', user: { id: 'sage-uid4', email: 's@b.c' } }));
   var memCalls = [];
