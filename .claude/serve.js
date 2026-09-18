@@ -27,7 +27,7 @@ var MIME = {
 http.createServer(function (req, res) {
   var url = decodeURIComponent((req.url || '/').split('?')[0]);
   var file = path.join(ROOT, url === '/' ? 'index.html' : url);
-  if (file.indexOf(ROOT) !== 0) { res.writeHead(403); return res.end(); }   // no path traversal
+  if (file !== ROOT && file.indexOf(ROOT + path.sep) !== 0) { res.writeHead(403); return res.end(); }   // no path traversal, boundary-aware (a sibling folder named ScaleMyLife-x must not pass)
   fs.stat(file, function (err, st) {
     if (err || !st.isFile()) {
       if (!path.extname(url)) file = path.join(ROOT, 'index.html');          // SPA fallback

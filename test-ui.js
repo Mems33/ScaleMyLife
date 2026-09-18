@@ -1384,7 +1384,9 @@ setTimeout(async function () {
   await new Promise(function (r) { setTimeout(r, 20); });
   ok(w.mascotChatBusy === false, 'no longer busy once the reply lands');
   ok(d.querySelector('.mchat-row.sage') !== null && d.querySelector('.mchat-row.sage').textContent.indexOf('One step at a time') >= 0, 'Sage\'s reply renders in its own bubble');
-  ok(sageCalls.length === 1 && /\/functions\/v1\/sage-chat$/.test(sageCalls[0].url), 'the real chat call hits the sage-chat function');
+  var sageOnly = sageCalls.filter(function (c) { return /\/functions\/v1\/sage-chat$/.test(c.url); });
+  ok(sageOnly.length === 1, 'the real chat call hits the sage-chat function');
+  sageCalls = sageOnly;   // later assertions read sageCalls[0]; sync traffic after a day change must not shift it
   ok(sageCalls[0].body.brief.indexOf(w.state.hero.name) >= 0 && sageCalls[0].body.brief.indexOf('streak') >= 0, 'a compact state summary rides along as context');
   // an error from the function shows as Sage's own line, not a crash
   w.SMLCloud.configure({ fetch: function () {
