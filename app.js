@@ -55,13 +55,16 @@ var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
 var pickedPaths=['general'];     // onboarding paths (you can be several things at once)
+/* The path cards live on step 2 of the wizard, so every toggle re-renders
+   that step. onboarding() with no argument means step 1 (the hero), which is
+   why the number is spelled out here. */
 function togglePath(id){
-  if(id==='general'){ pickedPaths=['general']; onboarding(); return; }   // Balanced stands alone
+  if(id==='general'){ pickedPaths=['general']; onboarding(2); return; }   // Balanced stands alone
   var at=pickedPaths.indexOf(id);
   if(at>=0) pickedPaths.splice(at,1); else pickedPaths.push(id);
   pickedPaths=pickedPaths.filter(function(p){return p!=='general';});
   if(!pickedPaths.length) pickedPaths=['general'];
-  onboarding();
+  onboarding(2);
 }
 
 var RANK_COLORS={E:'#9a94b8',D:'#5aa2ff',C:'#3ddc84',B:'#b07bff',A:'#ff9d47',S:'#f5c542',SS:'#ff5fa2'};
@@ -2528,7 +2531,7 @@ function handleRecoveryHash(){
       if(state){ afterCloudSignIn(); return; }
       SMLCloud.pull().then(function(r){   // fresh device: just take the cloud save
         if(r.ok && r.exists && r.data && r.data.hero){ state=RPG.migrate(r.data); RPG.save(state,localStorage); applyTheme(); render(); toast('☁️ <span class="p">Cloud save loaded</span>'); }
-        else tut(0);
+        else onboarding();   // no save anywhere: same first run as boot()
       });
     });
   });
@@ -2907,49 +2910,221 @@ function tut(i){
 }
 function tutSkip(){ if(state){ closeModal(); } else { onboarding(); } }
 
-/* ---------- onboarding ---------- */
-function onboarding(){
-  var prev=$('#obName'); var keep=prev?prev.value:'';
+/* ---------- onboarding: the six-step wizard ----------
+   boot() opens this when there is no save. Steps: 1 hero, 2 path, 3 day,
+   4 habits, 5 quests, 6 rewards, then a Ready screen whose Start button is
+   createHero(). Each tap re-renders the current step (onboarding(obStep)),
+   so every pick lives in the module-level `ob` object, not in the DOM: a
+   re-render that read its values back from the DOM would lose them.
+
+   Three picks are still owned by older variables because the controls that
+   write them are shared with the Character sheet: pickedAv (the avatar
+   picker and the hero builder), pickedTheme (previewTheme, also read by
+   applyTheme before a save exists) and pickedPaths (togglePath, which the
+   tests read directly). obSync() copies those three into `ob` before every
+   render and inside createHero, so createHero reads one object. If you add a
+   pick, add it to obFresh() as well or it will leak into the next hero after
+   a reset. */
+var OB_STEPS=6;
+var OB_MINUTES=[[15,'15 min'],[30,'30 min'],[60,'60 min or more']];
+var OB_STRUGGLES=[['phone','Phone'],['procrastination','Procrastination'],['sleep','Sleep'],['junk','Junk food'],['none','None']];
+/* the monster a struggle adds on step 4. The ids are stored on
+   state.settings.onboard.struggle and the Rewards screen matches on them, so
+   renaming an id here means renaming it there too. */
+var OB_MONSTERS={phone:'Doomscrolling',procrastination:'Putting off the hard task',sleep:'Late-night scrolling',junk:'Junk food binge'};
+function obFresh(){ return {name:'',avatar:null,paths:['general'],theme:null,minutes:30,struggle:'none',habitsOff:{},questsOff:{},rewardsOff:{},targets:{},custom:''}; }
+var ob=obFresh(), obStep=1, obSug=null;
+function obSync(){
+  ob.avatar=pickedAv||ob.avatar||'🧙';
+  ob.paths=(pickedPaths&&pickedPaths.length?pickedPaths:['general']).slice();
+  ob.theme=pickedTheme;
+}
+/* how many dailies start switched on for a time budget: 15 min two, 30 min
+   three, 60 min all of them. Infinity is deliberate: "all" must stay true
+   however many quests a blend of paths seeds. */
+function obBudget(min){ return min===15?2:(min===30?3:Infinity); }
+/* The suggestions ARE the board the picked paths would seed, read off a
+   throwaway state. Running the real seeder keeps steps 4 to 6 in step with
+   PATHS in core.js without a second copy of the presets. createHero runs the
+   same function over the real state, so the row order shown is the row order
+   kept: change the filter here and the two go out of sync. */
+function obLists(st){
+  var habits=[], quests=[], rewards=[], di=0;
+  st.habits.forEach(function(h){ if(h.type==='good') habits.push({id:h.id,title:h.title,target:h.target}); });
+  st.quests.forEach(function(q){ quests.push({id:q.id,title:q.title,recurring:!!q.recurring,di:q.recurring?di++:-1}); });
+  /* market items only, minus the protection items (Streak Shield): those are
+     not "rewards you picked", the Rewards screen shows them under Protection */
+  st.shop.forEach(function(s){ if(s.tab==='market'&&!s.special) rewards.push({id:s.id,title:s.title,price:s.price}); });
+  return {habits:habits,quests:quests,rewards:rewards};
+}
+function obSuggest(){ return obLists(RPG.seedPreset(RPG.newState('preview', ob.avatar||'🧙'), ob.paths)); }
+/* Is a suggested item switched on? ob.<kind>Off[title] true means the user
+   turned it off, false means turned it back on; absent means the default:
+   habits on, dailies inside the time budget on, the first three rewards on. */
+function obOn(kind,it,i){
+  var off=ob[kind+'Off'], t=it.title;
+  if(Object.prototype.hasOwnProperty.call(off,t)) return !off[t];
+  if(kind==='quests') return it.di<0 || it.di<obBudget(ob.minutes);
+  if(kind==='rewards') return i<3;
+  return true;
+}
+/* the toggles pass an index into obSug rather than the title, so no title
+   ever lands inside an onclick attribute (an apostrophe would break it) */
+function obToggle(kind,i){ var it=obSug&&obSug[kind]&&obSug[kind][i]; if(!it) return; ob[kind+'Off'][it.title]=obOn(kind,it,i); onboarding(obStep); }
+function obToggleMonster(){ var t=OB_MONSTERS[ob.struggle]; if(!t) return; ob.habitsOff[t]=!ob.habitsOff[t]; onboarding(obStep); }
+function obTarget(i,n){ var it=obSug&&obSug.habits[i]; if(!it) return; ob.targets[it.title]=n; onboarding(obStep); }
+function obPick(key,val){ ob[key]=val; onboarding(obStep); }
+function obNext(){
+  if(obStep===1){
+    if(!obNameCheck()){ var e=$('#obNameErr'); if(e) e.style.display=''; var i=$('#obName'); if(i) i.focus(); return; }
+    ob.name=$('#obName').value.trim();
+  }
+  if(obStep===5){ var c=$('#obCustom'); if(c) ob.custom=c.value; }
+  onboarding(obStep+1);
+}
+function obBack(){ onboarding(Math.max(1,obStep-1)); }
+function obSkip(){ onboarding(OB_STEPS+1); }   // straight to Ready; picks not yet made keep their defaults
+function obDots(step){
+  var h='';
+  for(var j=1;j<=OB_STEPS;j++) h+='<i class="'+(j<step?'done':(j===step?'on':''))+'"></i>';
+  return '<div class="tdots" role="img" aria-label="'+(step>OB_STEPS?'All steps done':'Step '+step+' of '+OB_STEPS)+'">'+h+'</div>';
+}
+function obChips(key,opts){
+  return '<div class="obchips" role="group">'+opts.map(function(o){ var on=ob[key]===o[0], v=typeof o[0]==='number'?o[0]:'\''+o[0]+'\'';
+    return '<button type="button" class="chip'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obPick(\''+key+'\','+v+')">'+o[1]+'</button>'; }).join('')+'</div>';
+}
+/* weekly target chips under a habit: 3x, 5x, daily, plus the preset's own
+   value when it is none of those (Meal prep starts at 2x), so what is shown
+   is always what the engine will use */
+function obTargets(i,it){
+  var cur=ob.targets[it.title]||it.target||7, vals=[3,5,7];
+  if(vals.indexOf(cur)<0) vals.push(cur);
+  vals.sort(function(a,b){ return a-b; });
+  return '<div class="obchips targets" role="group" aria-label="Times per week">'+vals.map(function(n){ var on=n===cur;
+    return '<button type="button" class="chip'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obTarget('+i+','+n+')">'+(n===7?'daily':n+'x')+'</button>'; }).join('')+'</div>';
+}
+function obRow(kind,i,it,on,meta){
+  return '<div class="obitem'+(on?' on':'')+'">'+
+    '<button type="button" class="obtog" aria-pressed="'+on+'" onclick="obToggle(\''+kind+'\','+i+')">'+
+      '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span>'+(meta?'<span class="obmeta">'+meta+'</span>':'')+'</button>'+
+    (kind==='habits'&&on?obTargets(i,it):'')+'</div>';
+}
+function obThemesHtml(){
+  return '<div class="obthemes">'+Object.keys(THEMES).map(function(k){ var t=THEMES[k];
+    return '<button type="button" class="obtheme'+((pickedTheme||'dungeon')===k?' on':'')+'" onclick="previewTheme(\''+k+'\')" aria-pressed="'+((pickedTheme||'dungeon')===k)+'">'+
+      '<span class="sw" style="background:'+t.bg+'"><i style="background:'+t.panel+'"></i><i style="background:'+t.accent+'"></i></span>'+esc(t.name)+'</button>';
+  }).join('')+'</div>';
+}
+function onboarding(step){
+  obStep=step||1; obSync();
   pickedAv=pickedAv||'🧙';
+  var s=obStep, title='', copy='', body='', nav='', mon=OB_MONSTERS[ob.struggle];
+  if(s===1){
+    title='Your hero'; copy='Name your character and pick a look.';
+    body='<input id="obName" placeholder="Hero name" maxlength="24" autocomplete="off" value="'+esc(ob.name)+'" oninput="obNameCheck()">'+
+      '<div class="hint" id="obNameErr" style="color:var(--danger);display:none">Give your hero a name to continue.</div>'+
+      '<div class="flabel">Avatar</div>'+avPickerHtml('onboarding')+
+      '<div class="flabel">Look</div>'+obThemesHtml();
+  } else if(s===2){
+    title='Your path'; copy='Pick ALL that fit, the board blends them.';
+    body='<div class="pathpick">'+RPG.PATHS.map(function(p){ var on=ob.paths.indexOf(p.id)>=0;
+      return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
+    }).join('')+'</div>';
+  } else if(s===3){
+    title='Your day'; copy='How much time, and what gets in the way.';
+    body='<div class="flabel">Time per day</div>'+obChips('minutes',OB_MINUTES)+
+      '<div class="flabel">Biggest struggle</div>'+obChips('struggle',OB_STRUGGLES);
+  } else if(s===4){
+    obSug=obSuggest();
+    title='Habits to start'; copy='Turn off any you do not want, set how often.';
+    body='<div class="oblist">'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i)); }).join('')+'</div>'+
+      (mon?'<div class="flabel">Monster to fight</div><div class="oblist"><div class="obitem'+(ob.habitsOff[mon]?'':' on')+'">'+
+        '<button type="button" class="obtog" aria-pressed="'+!ob.habitsOff[mon]+'" onclick="obToggleMonster()">'+
+        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(mon)+'</span><span class="obmeta">costs HP when you slip</span></button></div></div>':'');
+  } else if(s===5){
+    obSug=obSuggest();
+    title='First quests'; copy='Dailies that fit your time are on. Toggle any.';
+    body='<div class="oblist">'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),it.recurring?'daily':''); }).join('')+'</div>'+
+      '<div class="flabel">Your own (optional)</div>'+
+      '<input id="obCustom" placeholder="Add one of your own" maxlength="60" autocomplete="off" value="'+esc(ob.custom)+'" oninput="ob.custom=this.value">';
+  } else if(s===6){
+    obSug=obSuggest();
+    title='Rewards'; copy='What your coins will buy. Add more later.';
+    body='<div class="oblist">'+obSug.rewards.map(function(it,i){ var on=obOn('rewards',it,i);
+      return '<button type="button" class="obcard'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obToggle(\'rewards\','+i+')">'+
+        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span><span class="obprice">💰 '+it.price+'</span></button>'; }).join('')+'</div>';
+  } else {
+    title='Ready when you are';
+    body='<div class="obready"><div class="obav">'+avHtml(ob.avatar)+'</div><div class="obheroname">'+esc(ob.name||'Hero')+'</div></div>'+
+      '<div class="oblines">'+
+      '<div class="obline">'+svgIcon('coins')+'<span>Clear quests and keep habits to earn XP and coins</span></div>'+
+      '<div class="obline">'+svgIcon('flame')+'<span>Keep the streak, Sage will help</span></div>'+
+      '<div class="obline">'+svgIcon('gift')+'<span>Spend coins on the rewards you picked</span></div></div>';
+  }
+  if(s>OB_STEPS){
+    nav='<button class="btn go wide" id="obStart" onclick="createHero()">Start</button>'+
+      '<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button></div>';
+  } else {
+    nav='<button class="btn go wide" id="obNext" onclick="obNext()">Continue</button>'+
+      (s>1?'<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button>'+
+        (s>=3?'<button type="button" class="btn ghost" onclick="obSkip()">Skip</button>':'')+'</div>':'');
+  }
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box"><h2>🎮 SCALEMYLIFE<br><span style="font-size:10px;color:var(--muted)">CREATE YOUR HERO</span></h2>'+
-    '<div class="hint" style="margin-bottom:6px">Your real life is the game. Name your character:</div>'+
-    '<input id="obName" placeholder="Hero name (required)" maxlength="24" value="'+esc(keep)+'" oninput="obNameCheck()">'+
-    '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
-    '<div class="flabel">Pick an avatar</div>'+avPickerHtml('onboarding')+
-    '<div class="flabel">Who are you? Pick ALL that fit - a student can also be an athlete and a founder. Your starting quests, habits, life areas and rewards blend everything you pick.</div>'+
-    '<div class="pathpick">'+RPG.PATHS.map(function(p){
-      return '<button class="'+(pickedPaths.indexOf(p.id)>=0?'on':'')+'" aria-pressed="'+(pickedPaths.indexOf(p.id)>=0)+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
-    }).join('')+'</div>'+
-    '<div class="flabel">Pick a look - the page behind previews it live (change it any time later)</div>'+
-    '<div class="obthemes">'+Object.keys(THEMES).map(function(k){ var t=THEMES[k];
-      return '<button type="button" class="obtheme'+((pickedTheme||'dungeon')===k?' on':'')+'" onclick="previewTheme(\''+k+'\')" aria-pressed="'+((pickedTheme||'dungeon')===k)+'">'+
-        '<span class="sw" style="background:'+t.bg+'"><i style="background:'+t.panel+'"></i><i style="background:'+t.accent+'"></i></span>'+esc(t.name)+'</button>';
-    }).join('')+'</div>'+
-    '<button class="btn wide go" id="obStart" onclick="createHero()">▶ START ADVENTURE</button>'+
-    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your picks - edit everything. Full customization lives behind your avatar.</div></div>';
-  var inp=$('#obName'); if(inp && !inp.value) inp.focus();
-  obNameCheck();
+  m.innerHTML='<div class="box obwiz">'+obDots(s)+'<h2>'+title+'</h2>'+(copy?'<p class="obcopy">'+copy+'</p>':'')+body+nav+'</div>';
+  if(s===1){ var inp=$('#obName'); if(inp && !inp.value) inp.focus(); obNameCheck(); }
 }
 function previewTheme(k){
   if(!THEMES[k]) return;
-  pickedTheme=k; applyTheme();
+  pickedTheme=k; ob.theme=k; applyTheme();
   var btns=document.querySelectorAll('.modal .obthemes .obtheme'), keys=Object.keys(THEMES);
   for(var i=0;i<btns.length;i++){ var on=keys[i]===k; btns[i].className='obtheme'+(on?' on':''); btns[i].setAttribute('aria-pressed',on); }
 }
+/* Continue on step 1 waits for a non-blank name. Returns true when there is
+   no name field on screen (later steps), so callers can use it as a plain
+   "is the name fine" check. */
 function obNameCheck(){
-  var inp=$('#obName'), btn=$('#obStart'); if(!inp||!btn) return true;
-  var ok=inp.value.trim().length>0;
+  var inp=$('#obName'), btn=$('#obNext'); if(!inp||!btn) return true;
+  var ok=inp.value.trim().length>0; ob.name=inp.value;
   btn.disabled=!ok; btn.style.opacity=ok?'':'0.5'; btn.style.cursor=ok?'':'not-allowed';
+  if(ok){ var e=$('#obNameErr'); if(e) e.style.display='none'; }
   return ok;
 }
+/* Turns `ob` into the real save. The board is seeded exactly as before and
+   the picks are then applied through the engine's own actions (delete, edit,
+   add): editing the arrays here directly would skip the bookkeeping those
+   actions do. */
 function createHero(){
-  var raw=($('#obName')&&$('#obName').value||'').trim();
-  if(!raw){ var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); var i=$('#obName'); if(i) i.focus(); return; }
-  var n=raw;
-  state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPaths&&pickedPaths.length?pickedPaths:'general');
-  if(pickedTheme&&THEMES[pickedTheme]) state.settings.theme=pickedTheme;
-  pickedAv=null; pickedTheme=null;
+  obSync();
+  var inp=$('#obName');
+  var raw=((inp?inp.value:ob.name)||'').trim();
+  if(!raw){
+    /* the name lives on step 1: if we are elsewhere, go back there so the
+       error has an input to point at (inline error plus focus, as before) */
+    if(!inp){ onboarding(1); inp=$('#obName'); }
+    var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); if(inp) inp.focus(); return;
+  }
+  var n=raw, paths=ob.paths;
+  state=RPG.seedPreset(RPG.newState(n,ob.avatar||'🧙'), paths);
+  var L=obLists(state);
+  L.habits.forEach(function(it,i){
+    if(!obOn('habits',it,i)) A.deleteHabit(state,it.id);
+    else if(ob.targets[it.title]) A.editHabit(state,it.id,{target:ob.targets[it.title]});
+  });
+  L.quests.forEach(function(it,i){ if(!obOn('quests',it,i)) A.deleteQuest(state,it.id); });
+  L.rewards.forEach(function(it,i){ if(!obOn('rewards',it,i)) A.deleteShopItem(state,it.id); });
+  var mon=OB_MONSTERS[ob.struggle];
+  if(mon){
+    /* a path may already seed the same monster (Doomscrolling): keep that one
+       rather than adding a twin, and drop it if the user switched the row off */
+    var twins=state.habits.filter(function(h){ return h.type==='bad'&&h.title.toLowerCase()===mon.toLowerCase(); });
+    if(ob.habitsOff[mon]) twins.forEach(function(h){ A.deleteHabit(state,h.id); });
+    else if(!twins.length) A.addHabit(state,{title:mon,type:'bad'});
+  }
+  if(ob.custom&&ob.custom.trim()) A.addQuest(state,{title:ob.custom.trim(),diff:'normal'});
+  /* the Rewards screen reads this to suggest rewards; keep exactly this shape */
+  state.settings.onboard={paths:paths.slice(),struggle:ob.struggle,minutes:ob.minutes};
+  if(ob.theme&&THEMES[ob.theme]) state.settings.theme=ob.theme;
+  pickedAv=null; pickedTheme=null; pickedPaths=['general']; ob=obFresh(); obStep=1; obSug=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
   setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
@@ -3187,7 +3362,10 @@ function toggleMascotSetting(){
   if(state.settings.mascot!==false) mascotMoodSync();
   openSettings();
 }
-function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) tut(0); } }
+/* No save means a first run: the empty shell goes up behind the onboarding
+   wizard. The five "How it works" slides (tut) are no longer the front door;
+   they stay in Settings and, with no hero, still hand over to the wizard. */
+function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) onboarding(); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);
