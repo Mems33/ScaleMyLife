@@ -1348,3 +1348,126 @@ body.light .quick.qa button{background:#fff}
 .oblines{display:grid;gap:8px;margin:4px 0 6px}
 .obline{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);font-size:15px}
 .obline .i{color:var(--brand);width:20px;height:20px}
+/* Revamp 8: progress */
+/* ==========================================================================
+   The Progress screen (tab id stays 'stats'): hero card, life areas, three
+   rings, streak, compact tiles, SVG bar charts, and the older panels restyled.
+   Every rule here refines one declared earlier and wins on ORDER, not on
+   specificity, so the block has to stay at the end of the file. Move it above
+   the phone media query near line 698 and the phone sizes below stop winning.
+   ========================================================================== */
+.progress{display:grid;gap:14px}
+.proghead{display:flex;align-items:center;gap:12px;margin:2px 2px 0;flex-wrap:wrap}
+.proghead .hi{font:700 clamp(20px,4.6vw,26px)/1.15 var(--font-display);color:var(--text-1);letter-spacing:-.01em;flex:1 1 auto}
+.proghead .btn{display:inline-flex;align-items:center;gap:6px}
+
+/* --- hero card: the Hero sheet's top block, with the panel as its only frame --- */
+.panel.herocard .herotop{border:none;background:none;padding:0;margin:0;gap:12px}
+.herotop .heroid{align-items:flex-start}
+.herotop .heroid .grow{display:grid;gap:4px;justify-items:start}
+.herotop .herometa{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* the pixel font, and it stays at 14px or more: below that it turns to noise */
+.herotop .lvbig{font-family:var(--px);font-size:16px;line-height:1;color:var(--brand);letter-spacing:0;white-space:nowrap}
+.herotop .herometa .hint{margin:0;font-size:13px}
+.herotop .herotitle{margin-top:0}
+.herotop .heroxp{display:grid;gap:6px}
+.herotop .heroxp .bar{height:8px}
+.herotop .xpline{display:flex;justify-content:space-between;gap:10px;font:700 12px var(--mono);color:var(--text-2);font-variant-numeric:tabular-nums}
+.herotop .hpline .btn{display:inline-flex;align-items:center;gap:5px}
+
+/* --- life areas: inside the panel the cards drop to surface-2, so they read as its rows --- */
+.panel.lifeareas .skills{margin-top:0}
+.panel.lifeareas .skillcard{background:var(--surface-2)}
+
+/* --- this week: three rings, the number under each, one caption under that.
+   Three per row at every width; the numbers stay readable at 375px because
+   the ring shrinks to 72px there (see the phone block). --- */
+.rings{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:2px 0 14px}
+.wring{display:flex;flex-direction:column;align-items:center;text-align:center;gap:3px;min-width:0}
+.wring .pring{width:88px;height:88px;flex:none}
+.wring .wv{font:700 22px/1.1 var(--mono);color:var(--text-1);font-variant-numeric:tabular-nums;letter-spacing:-.02em;margin-top:6px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wring .wl{font:600 12px/1.2 var(--font-display);text-transform:uppercase;letter-spacing:.06em;color:var(--text-2)}
+.wring .wd{font-size:12px;line-height:1.25;color:var(--text-2)}
+.wring.up .wd{color:var(--ok)}
+/* the encouraging line: one highlighted row, one muted line of facts */
+.review{gap:6px;margin:0}
+.rv{align-items:center;padding:10px 12px;border-radius:var(--r-row)}
+.rv .k{min-width:0;display:inline-flex;color:var(--brand);flex:none}
+.rv.suggest{flex-wrap:nowrap}
+.rv.suggest .v{flex:1 1 auto;min-width:0;color:var(--text-1);font-weight:600;font-size:14px;line-height:1.35}
+.rv.facts{display:block;border:none;background:none;padding:0 2px;font-size:13px;color:var(--text-2);line-height:1.4}
+.rv.facts b{color:var(--text-1);font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+
+/* --- streak: two big mono numbers, then the consistency grid --- */
+.streaknums{display:flex;gap:22px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px}
+.sn{display:flex;align-items:baseline;gap:6px}
+.sn .i{width:24px;height:24px;color:var(--warn);align-self:center}
+.sn .v{font:700 34px/1 var(--mono);color:var(--text-1);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.sn.cur .v{color:var(--warn)}
+.sn .k{font-size:13px;color:var(--text-2)}
+.streakcard h3 .shieldon{display:inline-flex;align-items:center;gap:4px;font-family:var(--body);font-size:12px;color:var(--text-2);margin-left:auto}
+.heatfoot{display:flex;justify-content:space-between;align-items:center;gap:8px 14px;flex-wrap:wrap;margin-top:8px;font-size:13px;color:var(--text-2);line-height:1.35}
+.heatfoot .heatkey{margin:0;flex:none}
+.heatcap b{color:var(--text-1);font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* --- the compact tiles: small cards on the page, no panel around them --- */
+.statgrid{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin:0}
+.stat{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-row);padding:10px 12px;text-align:left}
+.stat .v{font-size:20px;color:var(--text-1)}
+.stat .v.g{color:var(--ok)} .stat .v.r{color:var(--danger)} .stat .v.b{color:var(--info)} .stat .v.w{color:var(--warn)}
+.stat .k{margin-top:5px}
+
+/* --- the 7-day charts: an SVG bar in each .col, the value above, the day below --- */
+.chartdefs{position:absolute;width:0;height:0;overflow:hidden}
+.chart{height:120px;gap:6px;padding:4px 0 0}
+.chart .col{gap:4px}
+.chart .cbar{display:block;flex:1 1 0;min-height:0;width:100%;max-width:38px}
+.chart .cbar rect.nil{fill:var(--line)}
+.chart .cl{font-size:11px;color:var(--text-2)}
+/* the same height whether or not there is a value, so every bar shares one scale */
+.chart .cl.v{min-height:14px;color:var(--text-1);font-weight:700}
+.chartcap{text-align:center;font-size:12px;color:var(--text-2);margin-top:6px}
+.chartcap b{color:var(--text-1);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.sleepchart{margin-top:14px}
+.xpchart .moodstrip{margin:10px 0 0}
+
+/* --- the older panels, on the row component --- */
+/* a subtitle next to a panel title, for words; .cnt stays for numbers */
+.panel h3 .sub{font:400 13px var(--body);color:var(--text-2)}
+.focuslegend{margin-bottom:10px}
+.frow .ftrack{border-radius:var(--r-control)}
+.insight{border-radius:var(--r-row);background:var(--surface-2);border-color:var(--border)}
+.trophy{border-radius:var(--r-row);background:var(--surface-2)}
+.trophy .tt{font-size:14px}
+.brow{border-radius:var(--r-row)}
+.ach{border-radius:var(--r-row)}
+.ach .n{font-size:14px}
+.ach .d{font-size:12px;color:var(--text-2)}
+/* Today's log card restyled .logrow (44px, centred); the adventure log wants
+   its old baseline rows back, so it gets them under its own wrapper */
+.advlog .logrow{min-height:40px;align-items:baseline;padding:6px 2px;gap:10px;font-size:14px}
+.advlog .logrow:last-child{border-bottom:none}
+.advlog .logrow .tm{color:var(--text-3);font-size:11px;min-width:44px;flex:none}
+.advlog .logday{margin:14px 0 6px}
+.advlog .logday:first-child{margin-top:0}
+
+/* Daylight: the tokens follow the theme; these are the raw-colour rules above
+   that need the warm bed and the darker ink. */
+body.light .herotop .bar{background:#e8e1d0}
+body.light .rv.facts{background:none}
+body.light .stat{background:var(--panel)}
+body.light .insight,body.light .trophy{background:var(--panel2)}
+body.light .sn .i,body.light .sn.cur .v,body.light .stat .v.w{color:#b25a12}
+body.light .wring.up .wd{color:#0f7a48}
+
+@media(max-width:640px){
+  .wring .pring{width:72px;height:72px}
+  .wring .wv{font-size:20px;margin-top:4px}
+  .wring .wd{font-size:11px}
+  .sn .v{font-size:30px}
+  .streaknums{gap:18px}
+  .statgrid{grid-template-columns:repeat(2,1fr)}
+  .chart{height:110px}
+  .herotop .lvbig{font-size:14px}
+  .proghead .btn.small{min-height:36px}
+}

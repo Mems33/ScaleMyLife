@@ -279,12 +279,34 @@ setTimeout(async function () {
   console.log('\nStats tab (v2)');
   w.go('stats');
   var sv = d.querySelector('#view').textContent;
-  ok(sv.indexOf('Week in review') >= 0, 'week review renders');
+  ok(sv.indexOf('This week') >= 0, 'the This week panel renders (was "Week in review")');
   ok(d.querySelectorAll('.chart:not(.sleepchart) .col').length === 7, '7-day XP chart renders');
   ok(d.querySelectorAll('.chart.sleepchart .col').length === 7, '7-day sleep chart renders below mood');
   ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'all achievements shown');
   ok(d.querySelectorAll('.ach.unlocked').length >= 1, 'at least one achievement unlocked (first_blood)');
   ok(sv.indexOf('Adventure log') >= 0 && sv.indexOf('Focus session') >= 0, 'log includes focus session');
+
+  console.log('\nProgress dashboard (revamp 8)');
+  var heroCard = d.querySelector('#view .panel.herocard');
+  ok(heroCard !== null && heroCard.querySelector('.herotitle[onclick*="openTitlePicker"]') !== null, 'the hero card renders on Progress with the title picker');
+  ok(heroCard !== null && heroCard.querySelector('[onclick*="openCharacter"]') !== null, 'the hero card offers Customize');
+  ok(heroCard !== null && heroCard.querySelector('.lvbig') !== null && heroCard.querySelector('.rank[role="button"]') !== null, 'big level number and rank chip on the card');
+  ok(heroCard !== null && heroCard.querySelector('.ranknext[onclick]') !== null && heroCard.textContent.indexOf('HP') >= 0, 'rank progress button and the HP line come with it');
+  var srow = d.querySelector('#view #skillsRow');
+  ok(heroCard !== null && srow !== null && heroCard.nextElementSibling !== null && heroCard.nextElementSibling.contains(srow), 'life areas sit right after the hero card');
+  ok(d.querySelector('#skillsSlot') === null, 'the slot placeholder is gone once the row moved in');
+  ok(d.querySelectorAll('#view .panel.thisweek svg.pring').length === 3, 'This week draws three rings');
+  ok(d.querySelector('#view .panel.thisweek .review .rv.suggest') !== null, 'the encouraging line sits under the rings');
+  var xpCols = d.querySelectorAll('.chart:not(.sleepchart) .col');
+  ok(xpCols.length === 7 && [].every.call(xpCols, function (c) { return c.querySelector('svg rect') !== null; }), 'each of the 7 XP columns draws an SVG bar');
+  var slCols = d.querySelectorAll('.chart.sleepchart .col');
+  ok(slCols.length === 7 && [].every.call(slCols, function (c) { return c.querySelector('svg rect') !== null; }), 'each of the 7 sleep columns draws an SVG bar');
+  var snum = d.querySelector('#view .panel.streakcard .sn.cur .v');
+  ok(snum !== null && snum.textContent.trim() === String(w.state.hero.streak), 'the streak panel shows the current streak number');
+  ok(d.querySelector('#view .panel.streakcard .heatmap') !== null, 'the consistency grid lives in the streak panel');
+  ok(d.querySelector('#view .statgrid .stat .v') !== null, 'the compact tiles render under the streak panel');
+  ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'the achievements grid still lists every achievement');
+  ok(sv.indexOf('Share my week') >= 0, 'Share my week stays in the header row');
 
   console.log('\nSound toggle (v2)');
   w.openSettings();
