@@ -96,7 +96,8 @@ setTimeout(async function () {
   var good = w.state.habits.filter(function (h) { return h.type === 'good'; })[1];
   w.doHabit(good.id);
   ok(good.streak === 1, 'good habit checked, streak 1');
-  ok(d.querySelector('#view').textContent.indexOf('✓ today') >= 0, 'UI marks habit done today');
+  // the ✓ is a sprite icon now, so assert on the done row itself
+  ok(d.querySelector('#view .item.done') !== null && d.querySelector('#view').textContent.indexOf('today') >= 0, 'UI marks habit done today');
   var bad = w.state.habits.find(function (h) { return h.type === 'bad'; });
   var hpB = w.state.hero.hp;
   w.slip(bad.id);
@@ -310,8 +311,9 @@ setTimeout(async function () {
   w.saveCharacter();
   w.avTab = 'heroes';
   ok(w.state.hero.name === 'Mehmet' && w.state.hero.title === 'Essay Slayer' && w.state.hero.avatar === '🚀', 'name, title, custom emoji saved');
-  ok(d.querySelector('#hud').textContent.indexOf('Essay Slayer') >= 0, 'title shown in HUD');
+  // the worn title moved from the header into the Hero sheet (openCharacter)
   w.openCharacter();
+  ok(d.querySelector('#modal').textContent.indexOf('Essay Slayer') >= 0, 'title shown in the Hero sheet');
   w.setTheme('synthwave');
   ok(w.state.settings.theme === 'synthwave', 'theme persisted');
   ok(d.documentElement.style.getPropertyValue('--gold') === '#ff5fa2', 'theme CSS variables applied');
@@ -460,7 +462,9 @@ setTimeout(async function () {
   ok(d.querySelector('#chTitle').value === 'Dragonheart', 'tapping a chip fills the title');
   w.saveCharacter();
   ok(w.state.hero.title === 'Dragonheart', 'earned title equipped');
-  ok(d.querySelector('#hud').textContent.indexOf('Dragonheart') >= 0, 'title shows in HUD');
+  w.openCharacter();
+  ok(d.querySelector('#modal').textContent.indexOf('Dragonheart') >= 0, 'title shows in the Hero sheet');
+  w.closeModal();
 
   console.log('\nPWA wiring');
   ok(d.querySelector('link[rel=manifest]') !== null, 'manifest linked');
@@ -502,7 +506,8 @@ setTimeout(async function () {
   ok(w.pendingDays.length === 0, 'pending days reset after add');
   w.render();
   ok(d.querySelector('#view').textContent.indexOf('not today') >= 0, 'off-day daily shows "not today"');
-  ok(d.querySelector('.chip.sched') !== null, 'schedule chip rendered on the row');
+  // the schedule chip became part of the row's meta sentence ("Normal, Mon Thu")
+  ok(d.querySelector('#view').textContent.indexOf(w.DOW[wdOther]) >= 0, 'schedule named on the row');
 
   console.log('\nInsights & weekly review (v3)');
   w.go('stats');
@@ -719,7 +724,10 @@ setTimeout(async function () {
   w.go('quests');
   ok(d.querySelector('#view').textContent.indexOf('invested') >= 0, 'goal card shows invested deep-work time');
   w.go('today');
-  ok(d.querySelector('#hud .glance') !== null, 'HUD shows the today-at-a-glance line');
+  // today's gains moved out of the header and into the Hero sheet
+  w.openCharacter();
+  ok(d.querySelector('#modal .glance') !== null, 'Hero sheet shows the today-at-a-glance line');
+  w.closeModal();
 
   console.log('\nDaylight theme (v7)');
   w.setTheme('daylight');

@@ -3,7 +3,36 @@
   --ink:#e8e4ff; --muted:#8f88b8; --gold:#f5c542; --hp:#ff5470;
   --xp:#3ddc84; --skill:#8f7bff; --good:#3ddc84; --blue:#5aa2ff; --purple:#b07bff; --orange:#ff9d47;
   --px:"Press Start 2P",monospace; --body:"Karla",system-ui,sans-serif; --mono:"IBM Plex Mono",monospace;
+
+  /* ---------- design tokens (2026 revamp, phase 1) ----------
+     These are ALIASES, not new colours. applyTheme() in app.js rewrites --bg,
+     --panel, --panel2, --line, --gold, --ink and --muted as inline styles on
+     <html> for each of the six themes; because every token below points at one
+     of those seven, a theme switch repaints the whole token layer for free.
+     If you replace an alias with a literal colour here, that rule stops
+     following the theme and will look wrong on Daylight. */
+  --surface-0:var(--bg);            /* page */
+  --surface-1:var(--panel);         /* cards, panels, the header */
+  --surface-2:var(--panel2);        /* rows and controls sitting on a card */
+  --border:var(--line);
+  --border-strong:color-mix(in srgb,var(--line) 60%,var(--ink));
+  --text-1:var(--ink);              /* titles and values */
+  --text-2:var(--muted);            /* meta lines, labels */
+  --text-3:color-mix(in srgb,var(--muted) 70%,transparent);  /* placeholders, hints */
+  --brand:var(--gold);              /* progress, currency, the primary action */
+  --brand-soft:color-mix(in srgb,var(--gold) 14%,transparent);
+  --brand-ink:#1a1200;              /* text ON a brand-filled surface (see body.light) */
+  --ok:#3ddc84;   --ok-soft:color-mix(in srgb,#3ddc84 14%,transparent);
+  --danger:#ff5470; --danger-soft:color-mix(in srgb,#ff5470 14%,transparent);
+  --info:#5aa2ff;  --info-soft:color-mix(in srgb,#5aa2ff 14%,transparent);
+  --warn:#ff9d47;  --warn-soft:color-mix(in srgb,#ff9d47 14%,transparent);
+  --font-display:"Outfit",var(--body);   /* headings; the pixel font is the wordmark only */
+  --r-control:10px; --r-row:14px; --r-card:18px; --r-pill:999px;
 }
+/* Daylight's accent is a dark amber, so text on a brand fill has to be white
+   there and near-black everywhere else. Nothing else about the token layer
+   changes per theme. */
+body.light{--brand-ink:#fff}
 *{box-sizing:border-box;margin:0;padding:0}
 html{scrollbar-color:var(--line) var(--bg)}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;overflow-x:hidden;
@@ -26,15 +55,28 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .logo .gear{position:absolute;right:0;top:50%;transform:translateY(-50%);background:none;border:none;font-size:20px;opacity:.6}
 .logo .gear:hover{opacity:1;transform:translateY(-50%) rotate(30deg)}
 
-/* ---------- HUD ---------- */
-.hud{background:var(--panel);border:2px solid var(--line);border-radius:10px;padding:14px 16px;
-  box-shadow:0 0 0 2px var(--bg),0 0 0 4px color-mix(in srgb,var(--line) 70%,var(--skill)),0 14px 40px rgba(0,0,0,.45);
-  display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center;position:relative}
-.hud .avatar{width:72px;height:72px;border:2px solid var(--gold);border-radius:8px;background:var(--panel2);
-  display:flex;align-items:center;justify-content:center;font-size:40px;box-shadow:inset 0 0 0 3px var(--bg);cursor:pointer;transition:transform .15s}
+/* ---------- HUD: the compact header ----------
+   At most two slim rows on a phone (identity + pills, then the bars) and one
+   line from 860px up. Everything the old hero card carried and this header no
+   longer shows (title picker, rank progress, today's gains) lives in the Hero
+   sheet that openCharacter() opens from the avatar. If you add anything here,
+   add it to the Hero sheet instead: the point of the header is that Today's
+   first real card is on screen without scrolling. */
+.hud{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-card);padding:12px 14px;
+  box-shadow:inset 0 1px 0 var(--hair),var(--elev1);
+  display:grid;gap:10px;align-items:center;position:relative}
+/* .hdrow, not .hrow: .hrow is the friend profile's head-to-head table row and
+   it is declared later in this file, so it would win. */
+.hdrow{display:flex;align-items:center;gap:10px;min-width:0}
+.hud .avatar{width:44px;height:44px;border:2px solid var(--brand);border-radius:12px;background:var(--surface-2);flex:none;
+  display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer;transition:transform .16s var(--spring)}
 .hud .avatar:hover{transform:scale(1.06)}
-.hud .who{min-width:0}
-.hud .name{font-family:var(--px);font-size:13px;letter-spacing:1px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hud .who{min-width:0;flex:1}
+.hud .name{font:700 17px/1.25 var(--font-display);display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.hud .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hud .side{display:flex;align-items:center;gap:8px;margin-left:auto;flex:none}
+.hud .wound{display:inline-flex;align-items:center;gap:5px;font:700 12px var(--mono);color:var(--danger);
+  border:1px solid color-mix(in srgb,var(--hp) 45%,var(--line));background:var(--danger-soft);border-radius:var(--r-pill);padding:4px 9px;white-space:nowrap}
 /* wearable title: a glowing badge, not a shy quote */
 .herotitle{display:inline-block;margin-top:4px;padding:2px 10px;border-radius:12px;font-size:11.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer;
   color:var(--gold);border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);
@@ -45,9 +87,10 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .herotitle.empty{color:var(--muted);border-style:dashed;border-color:var(--line);background:none;text-shadow:none;animation:none;text-transform:none;letter-spacing:.3px;font-weight:700}
 @keyframes titleglow{0%,100%{box-shadow:0 0 6px color-mix(in srgb,var(--gold) 25%,transparent)}50%{box-shadow:0 0 16px color-mix(in srgb,var(--gold) 45%,transparent)}}
 @media (prefers-reduced-motion: reduce){.herotitle{animation:none}}
-.rank{font-family:var(--px);font-size:9px;background:var(--panel2);border:1px solid;padding:4px 7px;border-radius:4px}
-.bars{margin-top:10px;display:grid;gap:7px;max-width:560px}
-.bar{position:relative;height:22px;background:#0d0b18;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.rank{font:700 11px/1 var(--font-display);letter-spacing:.04em;text-transform:uppercase;background:var(--surface-2);
+  border:1px solid;padding:5px 9px;border-radius:var(--r-pill);white-space:nowrap}
+.bars{display:grid;gap:6px;min-width:0}
+.bar{position:relative;height:6px;background:#0d0b18;border:1px solid var(--line);border-radius:var(--r-pill);overflow:hidden}
 .bar>i{position:absolute;inset:0;width:0%;transition:width .5s cubic-bezier(.2,.8,.3,1)}
 .bar.xp>i{background:linear-gradient(90deg,#22a566,var(--xp));box-shadow:0 0 10px rgba(61,220,132,.5)}
 .bar.hp>i{background:linear-gradient(90deg,#c22e4d,var(--hp))}
@@ -56,16 +99,26 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .bar b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 12px var(--mono);color:#fff;text-shadow:0 1px 2px #000;letter-spacing:.5px;z-index:2}
 .bar.xp>i::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);animation:shimmer 2.6s infinite;transform:translateX(-100%)}
 @keyframes shimmer{60%{transform:translateX(100%)}100%{transform:translateX(100%)}}
-.hud .side{display:flex;flex-direction:column;gap:7px;align-items:flex-end;font-family:var(--mono)}
-.coin{color:var(--gold);font-weight:700;font-size:18px;display:flex;gap:6px;align-items:center}
+/* header pills. .coin keeps its name because flyCoins() finds #coinCounter and
+   replays .coin.pop on it, and .flame because the shield glyph rides inside it. */
+.coin,.flame{display:inline-flex;align-items:center;gap:6px;font:700 13px var(--mono);font-variant-numeric:tabular-nums;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-pill);padding:6px 10px;white-space:nowrap}
+.coin{color:var(--brand);border-color:color-mix(in srgb,var(--gold) 32%,var(--line))}
 .coin.pop{animation:coinpop .35s}
 @keyframes coinpop{40%{transform:scale(1.35);text-shadow:0 0 14px var(--gold)}}
-.flame{color:var(--orange);font-weight:700;font-size:14px}
-.lvl{font-family:var(--px);font-size:10px;color:var(--muted)}
-.nextrank{font-size:10px;color:var(--muted)}
-/* skill bars keep the small size */
-.skillcard .bar,.goal .bar{height:9px}
-.skillcard .bar{height:7px}
+.flame{color:var(--warn)}
+.lvl{font-family:var(--px);font-size:14px;color:var(--text-1);white-space:nowrap}
+.nextrank{font-size:12px;color:var(--text-2)}
+/* the XP bar carries its numbers inside; HP is a 4px hairline, faint at full
+   health and red as it drops, so damage is the only thing that draws the eye */
+.hud .bar.xp{height:18px}
+.hud .bar.hp{height:4px;border-width:0;background:color-mix(in srgb,var(--line) 70%,transparent)}
+.hud .bar.hp>i{box-shadow:none}
+.hud .bar.hp.full{opacity:.35}
+.hud .bar.xp b{font-size:11.5px}
+/* skill and goal bars keep the small size */
+.skillcard .bar,.goal .bar{height:8px}
+.skillcard .bar{height:6px}
 
 /* weekly boss */
 .boss{border:1px solid var(--hp);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:12px;
@@ -92,7 +145,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* today tab */
 .todayhead{display:flex;align-items:baseline;gap:12px;margin:2px 2px 12px;flex-wrap:wrap}
-.todayhead .hi{font-family:var(--px);font-size:13px;color:var(--gold)}
+.todayhead .hi{font:700 clamp(20px,4.6vw,26px)/1.15 var(--font-display);color:var(--text-1);letter-spacing:-.01em}
 .todayhead .dt{font-family:var(--mono);font-size:12px;color:var(--muted)}
 .woundbar{border:1px solid var(--hp);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:center;
   background:color-mix(in srgb,var(--hp) 8%,transparent);font-size:14px}
@@ -126,23 +179,31 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* ---------- skills ---------- */
 .skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:20px}
-.skillcard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;position:relative}
-.skillcard .t{display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:6px}
-.skillcard .t small{color:var(--skill);font-family:var(--mono);font-weight:700}
+.skillcard{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-row);padding:11px 12px;position:relative}
+/* padding-right keeps the level clear of the ✕ remove button, which is pinned
+   to this corner and is permanently visible on touch. Without it the two draw
+   on top of each other and "Lv.1" reads as a broken glyph. */
+.skillcard .t{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13.5px;font-weight:700;margin-bottom:8px;padding-right:22px}
+/* the level rides in the mono font on purpose: "Lv." in the pixel font renders
+   as a broken glyph at this size. Do not hand this back to var(--px). */
+.skillcard .t small{color:var(--skill);font:700 12px var(--mono);font-variant-numeric:tabular-nums;letter-spacing:0}
 .skillcard .bar{height:7px}
 .skillcard .bar>i{background:linear-gradient(90deg,#6a54e6,var(--skill))}
-.skillcard .del{position:absolute;top:4px;right:6px;background:none;border:none;color:var(--muted);font-size:11px;display:none}
+.skillcard .del{position:absolute;top:6px;right:6px;background:none;border:none;color:var(--text-2);font-size:11px;display:none}
 .skillcard:hover .del{display:block}
 .addskill{border:1px dashed var(--line);background:none;color:var(--muted);border-radius:8px;font-size:13px}
 .addskill:hover{color:var(--ink);border-color:var(--skill)}
 
 /* ---------- tabs ---------- */
-.tabs{display:flex;gap:6px;margin:18px 0 14px;flex-wrap:wrap;align-items:stretch}
-.tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);
-  font-family:var(--px);padding:11px 12px;border-radius:8px;letter-spacing:.5px;position:relative}
-.tabs button{font-size:9.5px;padding:12px 13px;flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:7px}
-.tabs .ti{font-size:13px;line-height:1}
-.tabs .tl{letter-spacing:.5px}
+.tabs{display:flex;gap:6px;margin:16px 0 14px;flex-wrap:wrap;align-items:stretch}
+/* sized to look right with the current seven buttons and with the five the
+   navigation phase leaves behind: the label shrinks, the icon never does */
+.tabs button{background:var(--surface-1);border:1px solid var(--border);color:var(--text-2);
+  font:600 12px var(--font-display);letter-spacing:.06em;text-transform:uppercase;
+  padding:11px 10px;border-radius:12px;min-height:44px;position:relative;
+  flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.tabs .ti{display:inline-flex;align-items:center;justify-content:center;font-size:15px;line-height:1}
+.tabs .tl{letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis}
 .tabs button.pri{color:var(--ink);border-color:color-mix(in srgb,var(--gold) 40%,var(--line));background:color-mix(in srgb,var(--gold) 5%,var(--panel))}
 .tabs button.on{color:var(--ink);border-color:var(--gold);background:var(--panel2);box-shadow:0 0 12px color-mix(in srgb,var(--gold) 20%,transparent)}
 /* Today is home base: always visually distinct */
@@ -154,38 +215,45 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* ---------- panels & items ---------- */
 .grid{display:grid;grid-template-columns:1fr;gap:14px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
-.panel h3{font-family:var(--px);font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px;text-transform:uppercase;flex-wrap:wrap}
-.panel h3 .cnt{color:var(--gold)}
+.panel{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-card);padding:16px}
+.panel h3{font:700 18px/1.3 var(--font-display);color:var(--text-1);letter-spacing:-.01em;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel h3 .cnt{color:var(--brand);font-family:var(--mono);font-variant-numeric:tabular-nums}
 .panel h3 .right{margin-left:auto}
-.empty{color:var(--muted);font-size:14px;padding:8px 2px;font-style:italic}
-.item{display:flex;align-items:center;gap:11px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);margin-bottom:8px;transition:transform .15s;animation:slidein .25s}
-@keyframes slidein{from{opacity:0;transform:translateY(6px)}}
+.empty{color:var(--text-2);font-size:14px;padding:8px 2px}
+@keyframes slidein{from{opacity:0;transform:translateY(6px)}}   /* used by Sage's bubble */
+.item{display:flex;align-items:center;gap:11px;min-height:56px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);margin-bottom:8px;transition:transform .15s}
 .item:hover{transform:translateX(2px)}
 .item.done{opacity:.45}
 .item .grow{flex:1;min-width:0}
-.item .title{font-weight:600;font-size:15px}
-.item .meta{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.chip{font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px;border:1px solid}
-.chip.easy{color:var(--good);border-color:var(--good)}
-.chip.normal{color:var(--blue);border-color:var(--blue)}
-.chip.hard{color:var(--purple);border-color:var(--purple)}
-.chip.epic{color:var(--gold);border-color:var(--gold)}
-.chip.skill{color:var(--skill);border-color:transparent;background:color-mix(in srgb,var(--skill) 12%,transparent)}
-.chip.due{color:var(--orange);border-color:var(--orange)}
-.chip.late{color:var(--hp);border-color:var(--hp)}
-.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:7px;padding:8px 13px;font-weight:700;font-size:13px;transition:all .15s;white-space:nowrap}
-.btn:hover{border-color:var(--gold)}
-.btn:active{transform:scale(.92)}
+.item .title{font-weight:600;font-size:15px;line-height:1.3}
+/* one meta SENTENCE per row, not a stack of chips. At most one state chip
+   (Due today / Late / Step n of N) is allowed to sit next to it. */
+.item .meta{font-size:13px;color:var(--text-2);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 9px;border-radius:var(--r-pill);border:1px solid transparent;white-space:nowrap}
+.chip.easy{color:var(--ok);background:var(--ok-soft)}
+.chip.normal{color:var(--info);background:var(--info-soft)}
+.chip.hard{color:var(--purple);background:color-mix(in srgb,var(--purple) 14%,transparent)}
+.chip.epic{color:var(--brand);background:var(--brand-soft)}
+.chip.skill{color:var(--skill);background:color-mix(in srgb,var(--skill) 12%,transparent)}
+.chip.due{color:var(--warn);background:var(--warn-soft)}
+.chip.late{color:var(--danger);background:var(--danger-soft)}
+/* 44px is the touch target, not a suggestion: every control here is tapped on a
+   phone. .small drops to 36px and is for secondary controls inside dense rows. */
+.btn{border:1px solid var(--border);background:var(--surface-1);color:var(--text-1);border-radius:var(--r-control);
+  min-height:44px;padding:11px 16px;font-weight:700;font-size:14px;transition:all .15s;white-space:nowrap;
+  display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--brand)}
+.btn:active{transform:scale(.97)}
 .btn.go{background:linear-gradient(180deg,#2fbf72,#219a59);border-color:#2fbf72;color:#04160c}
 .btn.go:hover{filter:brightness(1.12)}
-.btn.buy{background:linear-gradient(180deg,var(--gold),color-mix(in srgb,var(--gold) 70%,#000));border-color:var(--gold);color:#231a00}
+.btn.buy{background:none;border-color:var(--brand);color:var(--brand)}
+.btn.buy:hover{background:var(--brand-soft)}
 .btn.buy:disabled{filter:grayscale(1);opacity:.4;cursor:not-allowed}
 .btn.slip{background:linear-gradient(180deg,#e0435f,#b32a44);border-color:#e0435f;color:#fff}
-.btn.ghost{background:none;color:var(--muted);border-color:transparent;padding:8px 6px}
-.btn.ghost:hover{color:var(--hp)}
-.btn.wide{width:100%;padding:11px}
-.btn.small{padding:5px 9px;font-size:12px}
+.btn.ghost{background:none;color:var(--text-2);border-color:transparent;padding:8px;min-width:44px}
+.btn.ghost:hover{color:var(--danger)}
+.btn.wide{width:100%}
+.btn.small{min-height:36px;padding:7px 12px;font-size:13px}
 .form{display:grid;gap:8px;margin-top:10px;padding-top:12px;border-top:1px dashed var(--line)}
 .form .row{display:flex;gap:8px}
 .form label{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
@@ -235,7 +303,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 /* focus */
 .focusbox{text-align:center;padding:22px 14px}
 .focusbox.break{border-color:var(--orange);box-shadow:0 0 26px color-mix(in srgb,var(--orange) 18%,transparent)}
-.phase{font-family:var(--px);font-size:11px;letter-spacing:2px;margin-bottom:10px}
+.phase{font:700 13px var(--font-display);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px}
 .phase.work{color:var(--xp)} .phase.brk{color:var(--orange)}
 .focusring{margin:0 auto 6px;width:190px;height:190px;position:relative;display:flex;align-items:center;justify-content:center}
 .focusring svg{position:absolute;inset:0;transform:rotate(-90deg)}
@@ -246,7 +314,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .sesh b{color:var(--gold)}
 .sesh .g{color:var(--xp)}
 .durchips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0}
-.durchips button{font-family:var(--px);font-size:9px;padding:12px 13px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:8px}
+.durchips button{font:600 13px var(--font-display);letter-spacing:.03em;min-height:44px;padding:12px 15px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);border-radius:var(--r-control)}
 .durchips button.on{color:var(--ink);border-color:var(--xp);box-shadow:0 0 12px rgba(61,220,132,.2)}
 .payline{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:6px}
 .payline b{color:var(--gold)}
@@ -285,7 +353,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .rc-sub{text-align:center;color:#8f88b8;font-style:italic;margin-bottom:14px}
 .rc-offer{border:1px solid #2e2950;border-radius:12px;padding:14px;margin-top:10px;background:#1b1830;text-align:center}
 .rc-offer.founder{border-color:#f5c542;background:linear-gradient(180deg,rgba(245,197,66,.10),rgba(245,197,66,.02));box-shadow:0 0 18px rgba(245,197,66,.18)}
-.rc-t{font-family:var(--px);font-size:12px;color:#f5c542;letter-spacing:1px}
+.rc-t{font:700 16px var(--font-display);color:#f5c542;letter-spacing:.02em}
 .rc-offer:not(.founder) .rc-t{color:#e8e4ff}
 .rc-price{font-size:19px;font-weight:800;margin:6px 0 4px}
 .rc-body{font-size:13px;color:#8f88b8;max-width:420px;margin:0 auto}
@@ -340,7 +408,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .ach.unlocked{border-color:var(--gold);box-shadow:0 0 10px color-mix(in srgb,var(--gold) 12%,transparent)}
 
 /* log */
-.logday{font-family:var(--px);font-size:9px;color:var(--muted);margin:14px 0 8px;letter-spacing:1px}
+.logday{font:700 13px var(--font-display);color:var(--text-2);margin:16px 0 8px;letter-spacing:.06em;text-transform:uppercase}
 .logrow{display:flex;gap:10px;padding:7px 4px;border-bottom:1px solid color-mix(in srgb,var(--line) 70%,transparent);font-size:14px;align-items:baseline}
 .logrow .tm{font-family:var(--mono);color:#5c5684;font-size:11px;min-width:44px}
 .delta{font-family:var(--mono);font-size:12px;font-weight:700;margin-left:auto;white-space:nowrap;text-align:right}
@@ -348,10 +416,13 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* toasts + fx */
 #toasts{position:fixed;top:calc(18px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:8px;pointer-events:none;align-items:center}
-.toast{background:var(--panel);border:1px solid var(--gold);border-radius:8px;padding:10px 18px;font-family:var(--mono);font-weight:700;font-size:14px;
-  box-shadow:0 8px 30px rgba(0,0,0,.5);animation:pop .25s cubic-bezier(.2,1.6,.4,1),fadeout .4s 2.4s forwards;display:flex;gap:12px}
-.toast.dmg{border-color:var(--hp)}
-.toast.ach{border-color:var(--purple);box-shadow:0 0 18px rgba(176,123,255,.3)}
+/* a 3px semantic edge carries the meaning (gold earn, red damage, purple
+   achievement, blue undo) so the toast body can stay quiet */
+.toast{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--brand);border-radius:12px;
+  padding:11px 16px;font-family:var(--mono);font-weight:700;font-size:14px;
+  box-shadow:var(--elev2);animation:pop .25s cubic-bezier(.2,1.6,.4,1),fadeout .4s 2.4s forwards;display:flex;gap:12px}
+.toast.dmg{border-left-color:var(--danger)}
+.toast.ach{border-left-color:var(--purple)}
 @keyframes pop{from{transform:scale(.6);opacity:0}}
 @keyframes fadeout{to{opacity:0;transform:translateY(-8px)}}
 #overlay{position:fixed;inset:0;background:rgba(6,4,16,.87);z-index:80;display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
@@ -373,8 +444,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 /* modal */
 .modal{position:fixed;inset:0;background:rgba(6,4,16,.8);z-index:70;display:none;align-items:center;justify-content:center;padding:16px}
 .modal.show{display:flex}
-.modal .box{background:var(--panel);border:2px solid var(--line);border-radius:12px;padding:22px;max-width:460px;width:100%;box-shadow:0 0 0 3px var(--bg),0 0 0 5px color-mix(in srgb,var(--line) 70%,var(--skill));max-height:92vh;overflow-y:auto}
-.modal h2{font-family:var(--px);font-size:13px;margin-bottom:16px;color:var(--gold);line-height:1.7}
+.modal .box{background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-card);padding:20px;max-width:460px;width:100%;box-shadow:inset 0 1px 0 var(--hair),var(--elev2);max-height:92vh;overflow-y:auto}
+.modal h2{font:700 20px/1.3 var(--font-display);letter-spacing:-.01em;margin-bottom:16px;color:var(--brand)}
 .avpick{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0 6px}
 .avpick button{font-size:22px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
 .avpick button.on{border-color:var(--gold);box-shadow:0 0 8px color-mix(in srgb,var(--gold) 30%,transparent)}
@@ -389,7 +460,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* ---------- v3: prestige, loot, insights, scheduling ---------- */
 /* HUD season marker + potion buff pill */
-.season{font-family:var(--px);font-size:8px;color:var(--gold);border:1px solid var(--gold);border-radius:4px;padding:3px 6px;background:color-mix(in srgb,var(--gold) 10%,transparent)}
+.season{font:700 11px var(--mono);color:var(--brand);border:1px solid color-mix(in srgb,var(--gold) 55%,transparent);border-radius:var(--r-pill);padding:3px 8px;background:var(--brand-soft);white-space:nowrap}
 .buffpill{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--skill);border:1px solid color-mix(in srgb,var(--skill) 50%,var(--line));border-radius:12px;padding:2px 9px;background:color-mix(in srgb,var(--skill) 12%,transparent)}
 .hud .avatar.framed{animation:framepulse 2.6s infinite}
 @keyframes framepulse{50%{filter:brightness(1.12)}}
@@ -482,13 +553,12 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
 /* glass surfaces - translucent + machined "double-bezel" highlight, but NO backdrop-blur
    on these large scrolling panels (blur on scrolling content tanks mobile GPU) */
 .panel{background-color:color-mix(in srgb,var(--panel) 92%,transparent);
-  border-radius:14px;border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
+  border-radius:var(--r-card);border-color:color-mix(in srgb,var(--line) 82%,#fff 5%);
   box-shadow:0 1px 0 color-mix(in srgb,#fff 7%,transparent) inset, 0 12px 32px -14px rgba(0,0,0,.55);
   transition:transform .18s cubic-bezier(.32,.72,0,1),box-shadow .2s cubic-bezier(.32,.72,0,1),border-color .2s}
 .panel:hover{border-color:color-mix(in srgb,var(--gold) 20%,var(--line));
   box-shadow:0 1px 0 color-mix(in srgb,#fff 10%,transparent) inset, 0 18px 44px -16px rgba(0,0,0,.62)}
 .hud{background-color:color-mix(in srgb,var(--panel) 92%,transparent)}
-.item{border-radius:10px}
 
 /* button sheen sweep (transform-only) + coloured glow on hover */
 .btn{position:relative;overflow:hidden}
@@ -541,15 +611,15 @@ body::before{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none
 .tourtip{position:absolute;left:16px;right:16px;max-width:430px;margin:0 auto;background:var(--panel);border:1px solid var(--gold);
   border-radius:12px;padding:14px 16px;box-shadow:0 14px 44px rgba(0,0,0,.6);animation:pop .25s cubic-bezier(.2,1.6,.4,1)}
 .tourtip.above{transform:translateY(-100%)}
-.tourtip .tt{font-family:var(--px);font-size:11px;color:var(--gold);margin-bottom:8px;letter-spacing:.5px;line-height:1.5}
+.tourtip .tt{font:700 17px/1.3 var(--font-display);color:var(--brand);margin-bottom:8px;letter-spacing:-.01em}
 .tourtip .tb{font-size:14px;line-height:1.55;color:var(--ink);margin-bottom:12px}
 .tourtip .tnav{display:flex;gap:8px;align-items:center}
 .tourtip .tprog{font-family:var(--mono);font-size:11px;color:var(--muted);margin-right:auto}
 
 /* ---------- v7: cloud sync, undo, glance, reminders, Daylight theme ---------- */
 /* undo toast is interactive (the toast layer itself is pointer-events:none) */
-.toast.undo{pointer-events:auto;border-color:var(--blue);display:flex;align-items:center;gap:12px}
-.toast.undo button{background:var(--panel2);border:1px solid var(--blue);color:var(--blue);border-radius:7px;padding:5px 12px;font-weight:700;font-size:12px}
+.toast.undo{pointer-events:auto;border-left-color:var(--info);display:flex;align-items:center;gap:12px}
+.toast.undo button{background:var(--surface-1);border:1px solid var(--info);color:var(--info);border-radius:8px;padding:7px 13px;font-weight:700;font-size:12px}
 .toast.undo button:hover{background:var(--blue);color:#08131f}
 
 /* cloud nudge on Today */
@@ -652,21 +722,24 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .wrap{padding:calc(8px + env(safe-area-inset-top)) 10px calc(96px + env(safe-area-inset-bottom))}
   .logo{margin:8px 0 12px}
   .logo .gear{padding:6px;margin:-6px}   /* larger tap target for the settings gear */
-  .hud{grid-template-columns:auto 1fr;gap:12px;padding:12px}
-  .hud .avatar{width:56px;height:56px;font-size:30px}
-  .hud .name{font-size:11px}
-  .hud .side{grid-column:1/-1;flex-direction:row;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 12px}
-  .bars{max-width:none}
-  .bar{height:20px}
+  .hud{gap:9px;padding:10px 12px}
+  .hud .avatar{width:40px;height:40px;font-size:22px;border-radius:11px}
+  .hud .name{font-size:15px;gap:6px}
+  .hud .side{gap:6px}
+  .hud .bar.xp{height:16px}
+  .lvl{font-size:13px}
+  .coin,.flame{font-size:12px;padding:5px 9px}
   /* bottom navigation, app-style */
   .tabs{position:fixed;left:0;right:0;bottom:0;z-index:50;margin:0;
     padding:6px 6px calc(6px + env(safe-area-inset-bottom));
     background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(10px);
     border-top:1px solid var(--line);gap:3px}
-  .tabs button{flex:1 1 0;min-width:0;flex-direction:column;gap:4px;padding:8px 2px;border:none;background:none;border-radius:8px}
+  .tabs button{flex:1 1 0;min-width:0;flex-direction:column;gap:3px;padding:7px 2px;border:none;background:none;border-radius:10px;min-height:52px}
   .tabs button.pri{background:none}
   .tabs .ti{font-size:19px}
-  .tabs .tl{font-size:6.5px}
+  /* 9px keeps all seven labels on one line at 375px; the five-tab bar can breathe */
+  .tabs .tl{font-size:9px;letter-spacing:.03em;max-width:100%}
+  .tabs .i{width:20px;height:20px}
   .tabs button.on{background:var(--panel2);border:1px solid var(--gold);box-shadow:none}
   .tabs button .dot{top:2px;right:8px}
   .item{flex-wrap:wrap}
@@ -680,8 +753,9 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .boss .btn.ghost{flex:0 0 auto}
   .ag{flex-wrap:wrap}
   .ag .grow{flex:1 1 60%}
-  .btn{padding:10px 14px;min-height:40px}
-  .btn.ghost{padding:10px 10px;min-height:40px;min-width:40px}
+  .btn{padding:11px 15px;min-height:44px}
+  .btn.small{min-height:36px;padding:7px 12px}
+  .btn.ghost{padding:10px;min-height:44px;min-width:44px}
   /* hover-reveal controls have no hover on touch: keep them tappable */
   .skillcard .del{display:flex;align-items:center;justify-content:center;top:2px;right:2px;min-width:28px;min-height:28px;font-size:13px}
   .goal .t{flex-direction:column;align-items:flex-start}
@@ -696,7 +770,7 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .rankbig{font-size:60px}
   .statgrid{grid-template-columns:repeat(3,1fr)}
   .achgrid{grid-template-columns:1fr 1fr}
-  .todayhead .hi{font-size:11px}
+  .panel h3{font-size:17px}
   .pathpick{grid-template-columns:1fr}
   .rv{flex-wrap:wrap;gap:2px 10px}
   .rv .k{min-width:0}
@@ -744,7 +818,7 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
 .rankrow{display:flex;align-items:center;gap:11px;padding:9px 12px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)}
 .rankrow:last-child{border-bottom:none}
 .rankrow.cur{background:color-mix(in srgb,var(--gold) 12%,transparent)}
-.rankrow .rk{font-family:var(--px);font-size:12px;font-weight:700;border:1.5px solid;border-radius:5px;padding:4px 8px;min-width:38px;text-align:center}
+.rankrow .rk{font:700 14px var(--font-display);letter-spacing:.04em;border:1.5px solid;border-radius:8px;padding:5px 8px;min-width:38px;text-align:center}
 .rankrow .grow{flex:1;min-width:0;font-size:14px}
 .rankrow .rl{font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
 .avpick.scroll{max-height:132px;overflow-y:auto;flex-wrap:wrap}
@@ -820,7 +894,7 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 /* springy tactile press across every tappable control */
 .btn,.quick button,.chip,.mline,.dow,.durchips button,.themes button,.moods button,.titlechips button,.spantoggle button{
   transition:transform .18s var(--spring),border-color .16s var(--ease),background .16s var(--ease),color .16s var(--ease),box-shadow .18s var(--ease),filter .16s var(--ease)}
-.btn:active,.quick button:active,.mline:active,.dow:active,.durchips button:active,.moods button:active,.themes button:active,.titlechips button:active{transform:scale(.96)}
+.btn:active,.quick button:active,.mline:active,.dow:active,.durchips button:active,.moods button:active,.themes button:active,.titlechips button:active{transform:scale(.97)}
 .btn.wide:active,.btn.go.wide:active{transform:scale(.985)}
 .btn.go:active{filter:brightness(1.05)}
 
@@ -836,12 +910,14 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 /* Calm in-tab updates: items no longer re-animate on every action.
    The satisfying entrance now plays once, on tab change, as a block cascade. */
 .item{animation:none}
-#view.view-nav>*{animation:cascade .42s var(--ease) both}
-#view.view-nav>*:nth-child(2){animation-delay:.05s}
-#view.view-nav>*:nth-child(3){animation-delay:.1s}
-#view.view-nav>*:nth-child(4){animation-delay:.15s}
-#view.view-nav>*:nth-child(n+5){animation-delay:.19s}
-@keyframes cascade{from{opacity:0;transform:translateY(10px)}}
+/* 140ms and 6px: the tab change should feel instant and still settle. Longer
+   than this and every navigation costs the user a beat. */
+#view.view-nav>*{animation:cascade .14s var(--ease) both}
+#view.view-nav>*:nth-child(2){animation-delay:.03s}
+#view.view-nav>*:nth-child(3){animation-delay:.06s}
+#view.view-nav>*:nth-child(4){animation-delay:.09s}
+#view.view-nav>*:nth-child(n+5){animation-delay:.11s}
+@keyframes cascade{from{opacity:0;transform:translateY(6px)}}
 
 /* refined selection + desktop scrollbars */
 ::selection{background:color-mix(in srgb,var(--gold) 32%,transparent);color:var(--ink)}
@@ -935,8 +1011,8 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
    v24: Market storefront cards + illustrated empty states
    ========================================================================== */
 .shopgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:4px}
-.scard{position:relative;display:flex;flex-direction:column;gap:6px;padding:14px 12px 12px;border:1px solid var(--line);
-  border-radius:12px;background:var(--panel2);text-align:center;box-shadow:inset 0 1px 0 var(--hair)}
+.scard{position:relative;display:flex;flex-direction:column;gap:6px;padding:14px 12px 12px;border:1px solid var(--border);
+  border-radius:var(--r-card);background:var(--surface-2);text-align:center;box-shadow:inset 0 1px 0 var(--hair)}
 .scard .sicon{font-size:34px;line-height:1;margin-top:2px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.35))}
 .scard .stitle{font-weight:700;font-size:13.5px;line-height:1.3;min-height:2.6em;display:flex;align-items:center;justify-content:center}
 .scard .sfx{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
@@ -953,13 +1029,13 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
   .scard{transition:transform .2s var(--ease),border-color .18s var(--ease),box-shadow .22s var(--ease)}
   .scard:not(.locked):hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--gold) 40%,var(--line));box-shadow:var(--elev1)}
 }
-@media (pointer:coarse){ .scard .del{opacity:.6} }
+@media (pointer:coarse){ .scard .del{opacity:.6} .skillcard .del{opacity:.5} }
 
-.ebox{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:22px 14px;
-  border:1px dashed color-mix(in srgb,var(--line) 85%,var(--muted));border-radius:12px;margin:4px 0 10px}
+.ebox{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:24px 16px;
+  border:1px dashed color-mix(in srgb,var(--line) 85%,var(--muted));border-radius:var(--r-card);margin:4px 0 10px}
 .ebox .eicon{font-size:38px;line-height:1;opacity:.85;filter:grayscale(.15);animation:mbob 3.4s ease-in-out infinite}
-.ebox .etitle{font-weight:800;font-size:14.5px;margin-top:4px}
-.ebox .ehint{font-size:13px;color:var(--muted);max-width:340px;line-height:1.5}
+.ebox .etitle{font:700 17px var(--font-display);margin-top:6px}
+.ebox .ehint{font-size:13px;color:var(--text-2);max-width:340px;line-height:1.5}
 .ebox .btn{margin-top:8px}
 @media (prefers-reduced-motion: reduce){ .ebox .eicon{animation:none} }
 
@@ -1013,3 +1089,74 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
 .errlog{max-height:220px;overflow-y:auto;margin:8px 0;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
 .errrow{font:500 11.5px/1.5 var(--mono,monospace);color:var(--muted);border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:4px 0;word-break:break-word}
 .errrow .et{color:var(--gold);margin-right:6px}
+
+/* ==========================================================================
+   v30: revamp phase 1 - icons, the bottom sheet, skills gating, header layout.
+   Everything here is layout or presentation only. No behaviour changed.
+   ========================================================================== */
+
+/* Lucide sprite icons. They inherit the text colour through currentColor, so an
+   icon always matches the label next to it. .sm is for inline meta text. */
+.i{width:18px;height:18px;flex:none}
+.i.sm{width:14px;height:14px}
+
+/* Icon-only ghost controls (edit, delete) step back until the row is hovered or
+   the button is focused. Touch devices have no hover, so the rule is scoped to
+   pointer devices: on a phone these stay fully visible. */
+@media (hover:hover){
+  .item .btn.ghost,.step .btn.ghost{opacity:.55;transition:opacity .16s var(--ease),color .16s var(--ease)}
+  .item:hover .btn.ghost,.step:hover .btn.ghost,.item .btn.ghost:focus-visible,.step .btn.ghost:focus-visible{opacity:1}
+}
+
+/* Life areas live on Progress. render() puts .show-skills on #wrap for the
+   stats tab only; renderSkills() still writes into #skillsRow on every render,
+   which is what the tests count, so this is purely a display rule. */
+#wrap:not(.show-skills) #skillsRow{display:none}
+
+/* The header is one line from 860px up: identity on the left, bars on the right. */
+@media(min-width:860px){
+  .hud{grid-template-columns:minmax(0,1fr) minmax(230px,34%);gap:20px}
+  .hud .bars{align-self:center}
+}
+
+/* Dialogs are bottom sheets on a phone (thumb reach) and centred cards above it.
+   Same markup either way: only the .modal/.box positioning changes. */
+@media(max-width:640px){
+  .modal{align-items:flex-end;padding:0}
+  .modal .box{max-width:none;border-radius:22px 22px 0 0;border-bottom:none;
+    padding:18px 16px calc(20px + env(safe-area-inset-bottom));max-height:88vh;
+    animation:sheetIn .22s var(--ease)}
+  @keyframes sheetIn{from{transform:translateY(22px);opacity:.6}}
+}
+
+/* Hero sheet header (openCharacter): the identity block the compact header
+   hands off to. .herotitle is reused as-is, so the title keeps its one look. */
+.herotop{display:grid;gap:10px;padding:14px;margin-bottom:16px;
+  border:1px solid var(--border);border-radius:var(--r-card);background:var(--surface-2)}
+.herotop .heroid{display:flex;align-items:center;gap:12px}
+.herotop .heroav{width:56px;height:56px;flex:none;border:2px solid var(--brand);border-radius:16px;background:var(--surface-1);
+  display:flex;align-items:center;justify-content:center;font-size:30px}
+.herotop .heroav .svgav{width:78%;height:78%}
+.herotop .grow{flex:1;min-width:0}
+.herotop .heroname{font:700 20px/1.2 var(--font-display);letter-spacing:-.01em}
+.herotop .hpline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font:700 13px var(--mono);font-variant-numeric:tabular-nums}
+.herotop .hpline .btn{font-family:var(--body)}   /* buttons inherit, and mono is for numbers */
+.herotop .glance{margin:0}
+
+/* Daylight: the token layer follows the theme, but a few places still need a
+   warmer bed than the shared dark values give them. */
+body.light .hud .bar.hp{background:#e8e1d0}
+body.light .coin,body.light .flame{background:#fff}
+body.light .toast{background:var(--panel)}
+body.light .tabs button{background:var(--panel)}
+/* Chips carry their meaning as a soft tint now. The dark-theme text colours are
+   pastels, and a pastel on a near-white tint fails 4.5:1, so Daylight gets a
+   darker ink for the same tint. Change a chip colour above and change it here. */
+body.light .chip.easy{color:#0f7a48}
+body.light .chip.normal{color:#1a5fb4}
+body.light .chip.hard{color:#6437c9}
+body.light .chip.epic{color:#8a5a06}
+body.light .chip.skill{color:#5a45c9}
+body.light .chip.due{color:#9a5205}
+body.light .flame,body.light .streakN{color:#b25a12}
+body.light .wound{color:#c0264a}
