@@ -10,6 +10,10 @@ var overlaySeq=0;
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=null;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
 var focusDraft={label:'',skill:'',goal:''}; // focus form draft - selecting music/mode must never wipe typed text
+/* Set by the Focus button on a quest row, read once by renderFocus and then
+   cleared. It is a handoff, not state: leave it set and every later visit to
+   Focus would silently re-link the same quest. */
+var focusPreselect=null;
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var boardView='global';          // Stats leaderboard: 'global' | 'friends'
@@ -403,14 +407,33 @@ function renderSkills(){
    different size and hue on every platform, which is exactly what a navigation
    bar cannot afford. Emoji stay everywhere they carry meaning (life areas,
    rewards, avatars, monsters, Sage). A name with no matching <symbol> in
-   index.html draws nothing, so keep the two in sync. */
-var TABS=[['today','home','TODAY','pri home'],['quests','scroll-text','QUESTS','pri'],['habits','sprout','HABITS','pri'],['focus','timer','FOCUS','sec'],['market','gift','MARKET','sec'],['journal','book-open','JOURNAL','sec'],['stats','bar-chart-3','STATS','sec']];
+   index.html draws nothing, so keep the two in sync.
+
+   Five destinations, no more. Focus and Journal kept their views and their
+   go() ids but left the bar: seven buttons on a 375px phone gave every label
+   about 50px, which is why the labels were down at 9px. Focus is reached from
+   a quest row or from Today, Journal from Today. The ids here are what go()
+   receives, so 'market' and 'stats' stay as written even though the labels
+   read Rewards and Progress. Renaming an id silently breaks every saved
+   onclick string in the app. */
+var TABS=[['today','home','TODAY','pri home'],['quests','scroll-text','QUESTS','pri'],['habits','sprout','HABITS','pri'],['market','gift','REWARDS','sec'],['stats','bar-chart-3','PROGRESS','sec']];
 function renderTabs(){
   var chest=A.chestStatus(state);
   $('#tabs').innerHTML = TABS.map(function(t){
-    var dot=((t[0]==='quests'||t[0]==='today')&&chest.eligible)||(t[0]==='focus'&&state.activeFocus)?'<span class="dot"></span>':'';
+    /* A running focus session used to light the Focus tab. That tab is gone,
+       and #focuspill already follows the user across every screen, so the
+       chest is the only thing left worth a dot. */
+    var dot=(t[0]==='quests'||t[0]==='today')&&chest.eligible?'<span class="dot"></span>':'';
     return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+svgIcon(t[1])+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
   }).join('');
+}
+/* Focus and Journal are off the tab bar, so each one carries its own way back.
+   Without this row the only exit on a phone PWA is the browser gesture, which
+   an installed app does not have. go('today') and not history.back(): the app
+   never pushes history entries. */
+function viewBackHead(title){
+  return '<div class="vhead"><button class="btn ghost back" title="Back to Today" aria-label="Back to Today" onclick="go(\'today\')">'+svgIcon('chevron-left')+'</button>'+
+    '<h2>'+esc(title)+'</h2></div>';
 }
 function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; navAnim=true; render(); }
 
@@ -501,9 +524,14 @@ function questRow(q){
   var action = done ? '<span style="color:var(--good);font-weight:700">'+svgIcon('check')+'</span>'
     : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
     : '<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>';
+  /* Focus lost its tab, so the way in is from the work itself: anything you
+     could clear right now can be focused right now. A dormant daily or a
+     finished quest gets no button, because there is nothing to work on. */
+  var canFocus = !done && (!q.recurring || activeToday);
   return '<div class="item'+(done?' done':'')+(q.recurring&&!activeToday?' dormant':'')+'"><div class="grow"><div class="title">'+esc(q.title)+'</div>'+
     '<div class="meta" title="'+d.label+': '+d.xp+' XP, '+d.coins+' coins">'+bits.join(', ')+chip+'</div></div>'+
     action+
+    (canFocus?'<button class="btn ghost" title="Focus on this quest" aria-label="Focus on this quest" onclick="focusOnQuest(\''+q.id+'\')">'+svgIcon('timer','sm')+'</button>':'')+
     (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" aria-label="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">'+svgIcon('arrow-up-right','sm')+'</button>':'')+
     '<button class="btn ghost" title="Edit" aria-label="Edit quest" onclick="editQuestModal(\''+q.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
     '<button class="btn ghost" title="Delete" aria-label="Delete quest" onclick="delQuest(\''+q.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
@@ -856,8 +884,25 @@ function sessionStats(f){
     '<span>banked so far <b id="seshPay">'+xp+'xp / '+coins+'💰</b></span>'+
     '<span>cycles <b>'+f.cycles+'</b></span></div>';
 }
+/* The Focus button on a quest row. It cannot touch the form directly, because
+   the form does not exist yet: go() re-renders the whole view. So it parks the
+   id and lets renderFocus pick it up. */
+function focusOnQuest(id){ focusPreselect=id; go('focus'); }
 function renderFocus(){
   var f=state.activeFocus;
+  /* Turn the parked id into the value focusTaskSelect() already reads. Doing it
+     here, before the markup is built, is the only moment the option list and
+     the selection are guaranteed to agree. A quest that was deleted in between
+     leaves the select on "no link", which is the honest result. */
+  if(focusPreselect){
+    var pre=state.quests.find(function(q){return q.id===focusPreselect;});
+    if(pre) focusDraft.goal='q:'+pre.id;
+    focusPreselect=null;
+  }
+  /* Every branch below writes #view from scratch, so the back row is prefixed
+     to each one rather than injected afterwards. Drop it from a branch and that
+     state of the timer becomes a dead end. */
+  var head=viewBackHead('Focus');
   if(f){
     var paused=!!f.pausedAt;
     var refNow=f.pausedAt||Date.now();
@@ -865,7 +910,7 @@ function renderFocus(){
     var left=f.phaseEnd-refNow, pct=RPG.clamp(1-left/phaseTotal,0,1);
     if(f.awaitingBreak){
       // work phase finished - wait for the user to start the break (the alarm already rang)
-      $('#view').innerHTML='<div class="panel focusbox break">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox break">'+
         '<div class="phase brk" style="color:var(--orange)">🔔 TIME FOR A BREAK</div>'+
         '<div class="focusring brk" style="width:150px;height:150px"><div class="bellwrap">🔔</div></div>'+
         '<div class="doing">Nice work. Take '+f.brk+' minutes - the break timer starts when you’re ready.</div>'+
@@ -876,7 +921,7 @@ function renderFocus(){
         '<button class="btn" onclick="skipToWork()">Skip break, keep working</button>'+
         '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     } else if(f.phase==='work'){
-      $('#view').innerHTML='<div class="panel focusbox'+(paused?' paused':'')+'">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox'+(paused?' paused':'')+'">'+
         '<div class="phase work">'+(paused?'⏸ PAUSED':'🎯 WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):''))+'</div>'+
         '<div class="focusring">'+ringSvg(pct,'work')+'<div class="time" id="countdown">'+fmtTime(left)+'</div></div>'+
         (f.label?'<div class="doing">Fighting: <b>'+esc(f.label)+'</b></div>':'')+
@@ -888,7 +933,7 @@ function renderFocus(){
                :'<button class="btn" onclick="pauseFocusUI()">⏸ Pause</button>')+
         '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     } else {
-      $('#view').innerHTML='<div class="panel focusbox break'+(paused?' paused':'')+'">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox break'+(paused?' paused':'')+'">'+
         '<div class="phase brk">'+(paused?'⏸ PAUSED':'🏕 BREAK - REST AT THE CAMPFIRE')+'</div>'+
         '<div class="campfire"><span class="tent">⛺</span><span class="fire">🔥</span><span class="moon">🌙</span>'+
         '<span class="z">💤</span><span class="z z2">💤</span><span class="sp">✨</span><span class="sp sp2">✨</span><span class="sp sp3">✨</span></div>'+
@@ -902,7 +947,7 @@ function renderFocus(){
     }
   } else {
     var modes=[[25,5,'25 / 5'],[50,10,'50 / 10'],[90,15,'90 / 15'],[50,0,'FREE RUN']];
-    $('#view').innerHTML='<div class="panel focusbox">'+
+    $('#view').innerHTML=head+'<div class="panel focusbox">'+
       '<h3 style="justify-content:center">⏳ Focus - get paid for deep work</h3>'+
       '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP + 0.6 💰 - you collect when you hit stop, whether that is after 20 minutes or 3 hours. Breaks heal +3 ❤️. <b>You need to focus at least 5 minutes before any XP or coins are earned.</b></div>'+
       '<div class="durchips">'+modes.map(function(m){
@@ -927,17 +972,25 @@ function renderFocus(){
   }
 }
 /* one select covering main AND side quests ('g:'/'q:' prefixed) - linking is
-   always optional, you can just work on whatever */
+   always optional, you can just work on whatever. Today's dailies are listed
+   too: the Focus button on a quest row appears on them, and a preselect with
+   no matching option would land the user on an empty select. The engine banks
+   focus minutes on any quest id, recurring or not, so nothing else changes.
+   The optgroup labels are under test (#fTask optgroup[label*="Main"]): keep
+   the three groups and their wording. */
 function focusTaskSelect(){
   var goals=state.goals.filter(function(g){return !g.doneOn;});
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
-  if(!goals.length && !sides.length) return '';
+  var dailies=state.quests.filter(function(q){return q.recurring && q.doneOn!==RPG.todayKey() && RPG.questActiveOn(q,new Date());});
+  if(!goals.length && !sides.length && !dailies.length) return '';
   return '<select id="fTask" title="Bank this deep work on a quest (optional)" onchange="focusDraft.goal=this.value">'+
     '<option value="">- link a quest (optional) -</option>'+
     (goals.length?'<optgroup label="🏆 Main quests">'+goals.map(function(g){
       return '<option value="g:'+g.id+'"'+(focusDraft.goal==='g:'+g.id?' selected':'')+'>🏆 '+esc(g.title)+'</option>';}).join('')+'</optgroup>':'')+
     (sides.length?'<optgroup label="📌 Side quests">'+sides.map(function(q){
       return '<option value="q:'+q.id+'"'+(focusDraft.goal==='q:'+q.id?' selected':'')+'>📌 '+esc(q.title)+'</option>';}).join('')+'</optgroup>':'')+
+    (dailies.length?'<optgroup label="🔁 Dailies">'+dailies.map(function(q){
+      return '<option value="q:'+q.id+'"'+(focusDraft.goal==='q:'+q.id?' selected':'')+'>🔁 '+esc(q.title)+'</option>';}).join('')+'</optgroup>':'')+
     '</select>';
 }
 function startFocus(){
@@ -1078,7 +1131,7 @@ function renderJournal(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
   var hrs=pendingHours!=null?String(pendingHours):((sl||{}).hours!=null?String(sl.hours):'');
   var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
-  $('#view').innerHTML='<div class="grid two">'+
+  $('#view').innerHTML=viewBackHead('Journal')+'<div class="grid two">'+
     '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
     '<div class="flabel">Mood</div>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
@@ -1349,13 +1402,31 @@ function render(){
   seenDay = state.lastSeenDay;
   persist();
   applyLegend();
+  /* Park #skillsRow back in the shell BEFORE the view is rebuilt. On Progress
+     it lives inside #view (see below), and the view render replaces #view's
+     innerHTML wholesale, which would destroy the element for good. Moving it
+     home first costs nothing and there is no paint in between, so the user
+     never sees it flicker. */
+  var wrapEl=$('#wrap'), skillsEl=$('#skillsRow'), tabsEl=$('#tabs');
+  if(wrapEl && skillsEl && tabsEl && skillsEl.parentNode!==wrapEl) wrapEl.insertBefore(skillsEl, tabsEl);
   renderHUD(); renderSkills(); renderTabs();
   /* Life areas belong to Progress. renderSkills() keeps filling #skillsRow on
      every render so it is ready the instant the class flips; this class is the
      only thing that shows it. Remove it and six cards land back on top of
      Today, which is the first screen the revamp was trying to clear. */
-  var wrapEl=$('#wrap'); if(wrapEl) wrapEl.classList.toggle('show-skills', tab==='stats');
+  if(wrapEl) wrapEl.classList.toggle('show-skills', tab==='stats');
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
+  /* On Progress the life areas become content, not chrome. Left in the shell
+     they sit between the header and the tab bar and push the bar down the
+     screen, which on a phone is the one row that must not move. renderSkills()
+     writes into the element by id, so it keeps working wherever it lands. */
+  if(tab==='stats' && skillsEl){
+    var viewEl=$('#view'), firstPanel=viewEl?viewEl.querySelector('.panel'):null;
+    if(viewEl){
+      if(firstPanel && firstPanel.parentNode===viewEl && firstPanel.nextSibling) viewEl.insertBefore(skillsEl, firstPanel.nextSibling);
+      else viewEl.appendChild(skillsEl);
+    }
+  }
   if(typeof mascotMoodSync==='function') mascotMoodSync();
   if(typeof syncMusicPlayer==='function') syncMusicPlayer();
   if(typeof syncFocusPill==='function') syncFocusPill();
@@ -2394,20 +2465,23 @@ function saveEditHabit(id){
 }
 
 /* ---------- interactive spotlight tour ---------- */
+/* Seven steps, one line each. The old ten-step version narrated features; this
+   one only shows where things are, because the app teaches the rest in place.
+   Two rules hold it together. Every `sel` must match something that is on
+   screen once `tab` has rendered, or the tooltip floats in the middle of the
+   viewport pointing at nothing (a test walks the list and checks each one).
+   And nothing here targets #skillsRow any more: that element moves between the
+   shell and #view depending on the tab, so it is the one selector that cannot
+   be trusted to sit still. */
 var tourStep=0;
 var TOUR=[
-  {tab:'today', sel:'#hud', title:'Your hero', body:'Your rank, level, experience (XP), health points (HP), coins and streak live here. Tap your avatar any time to rename or re-theme.'},
-  /* Life areas render on Progress only now (see the show-skills class in
-     render), so the tour has to switch tabs to point at something visible. */
-  {tab:'stats', sel:'#skillsRow', title:'Life areas', body:'Each of these areas levels up and gives mastery bonuses on its own actions. Connect quests, habits and focus sessions to these areas.'},
-  {tab:'today', sel:'.tabs', title:'Getting around', body:'Today is home base. Quests, Habits, Focus, Market, Journal and Stats each live in their own tab.'},
-  {tab:'today', sel:'.quick', title:'Quick Add', body:'Log your mood and sleep, and start a focus run, right from here. Keeping the streak alive multiplies all your XP.'},
-  {tab:'quests', sel:'.boss', title:'The weekly boss', body:'Name THE task of your week and slay it before the week ends for a big reward.'},
-  {tab:'quests', sel:'.panel', title:'Quests', body:'Main quests are big goals broken into steps. Daily quests reset each morning and fill the chest. Side quests are one-off tasks with an optional due date. The ✎ button edits anything you added.'},
-  {tab:'focus', sel:'.focusbox', title:'Focus = paid deep work', body:'Pomodoro cycles that pay you for every worked minute. Tag a life area so it shows up in your Stats breakdown.'},
-  {tab:'market', sel:'.shoptabs', title:'Spend what you earned', body:'Turn coins into real rewards, guilt-free. Prices climb if you binge the same treat in one day.'},
-  {tab:'stats', sel:'.review', title:'See your patterns', body:'Your week in review, a focus-by-area breakdown, and insights on what actually moves your mood.'},
-  {tab:'stats', sel:'#mascot', title:'Sage, your guide', body:'The owl in the corner. Tap Sage any time for a daily briefing: what is urgent, what is left today, and where to go next.'}
+  {tab:'today', sel:'#hud', title:'Your hero', body:'Your hero, level, XP, coins and streak live here'},
+  {tab:'today', sel:'#tabs', title:'Getting around', body:'Five places: Today, Quests, Habits, Rewards, Progress'},
+  {tab:'today', sel:'#view .panel', title:'Today', body:'Today shows what to do now'},
+  {tab:'quests', sel:'#view .panel', title:'Quests', body:'Big goals with steps, side quests and dailies'},
+  {tab:'market', sel:'#view .panel', title:'Rewards', body:'Earn coins by doing real things, spend them here'},
+  {tab:'stats', sel:'.review,#view .panel', title:'Progress', body:'Your week, streak and life areas'},
+  {tab:'stats', sel:'#mascot', title:'Sage', body:'Ask Sage when you are stuck'}
 ];
 function startTour(){ closeModal(); tourStep=0; showTourStep(); }
 function showTourStep(){

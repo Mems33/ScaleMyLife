@@ -329,10 +329,63 @@ setTimeout(async function () {
   ok(d.querySelector('.logo').textContent.indexOf('\u2694') < 0, 'swords removed from title');
   ok(d.querySelector('.logo .gear') !== null, 'settings gear lives in header');
   ok(d.querySelector('#hud .gear') === null, 'gear no longer overlaps HUD level display');
-  ok(d.querySelectorAll('.tabs button').length === 7, 'seven tabs incl. TODAY');
+  ok(d.querySelectorAll('.tabs button').length === 5, 'five tabs: Focus and Journal left the bar');
   ok(d.querySelectorAll('.tabs button.pri').length === 3, 'today/quests/habits marked primary by color');
   ok(d.querySelector('.tabs button.big') === null, 'no size-based tab tiers anymore');
   ok(d.querySelector('.tabs button').textContent.indexOf('TODAY') >= 0, 'TODAY is the first tab');
+  var tabLabels = [].map.call(d.querySelectorAll('.tabs .tl'), function (e) { return e.textContent.trim(); });
+  ok(tabLabels.join('|') === 'TODAY|QUESTS|HABITS|REWARDS|PROGRESS', 'tab order: Today, Quests, Habits, Rewards, Progress (' + tabLabels.join(',') + ')');
+  var tabIds = [].map.call(d.querySelectorAll('.tabs button'), function (e) {
+    return (e.getAttribute('onclick') || '').replace(/^go\('|'\)$/g, '');
+  });
+  ok(tabIds.join('|') === 'today|quests|habits|market|stats', 'go() ids keep the engine names market and stats (' + tabIds.join(',') + ')');
+  ok(d.querySelector('.tabs button.home') !== null, 'Today keeps the home treatment');
+
+  console.log('\nFocus & Journal off the bar (v56)');
+  w.go('focus');
+  ok(d.querySelector('#view .vhead .btn.back') !== null, 'Focus renders a back control');
+  ok(d.querySelector('#view .vhead .btn.back').getAttribute('aria-label') === 'Back to Today', 'back control is labelled for screen readers');
+  ok(d.querySelector('#view .vhead h2').textContent.indexOf('Focus') >= 0, 'Focus names itself in the header row');
+  ok(d.querySelector('.tabs button.on') === null, 'no tab is highlighted while Focus is open');
+  d.querySelector('#view .vhead .btn.back').click();
+  ok(w.tab === 'today', 'the back control returns to Today');
+  w.go('journal');
+  ok(d.querySelector('#view .vhead .btn.back') !== null && d.querySelector('#view .vhead h2').textContent.indexOf('Journal') >= 0, 'Journal renders the same back row');
+  ok(d.querySelector('.tabs button.on') === null, 'no tab is highlighted while Journal is open');
+  ok(d.querySelector('#jNote') !== null, 'the journal form still renders under its header');
+  w.go('today');
+
+  console.log('\nFocus control on a quest row (v56)');
+  var fq = w.A.addQuest(w.state, { title: 'Quest worth focusing on', diff: 'normal' });
+  w.go('quests');
+  var frow = [].filter.call(d.querySelectorAll('#view .item'), function (it) {
+    return it.textContent.indexOf('Quest worth focusing on') >= 0;
+  })[0];
+  ok(!!frow, 'the quest row renders');
+  var fbtn = frow && frow.querySelector('.btn.ghost[aria-label="Focus on this quest"]');
+  ok(!!fbtn, 'the row carries a Focus control');
+  fbtn.click();
+  ok(w.tab === 'focus', 'the Focus control opens the Focus view');
+  ok(w.focusPreselect === null, 'the handoff variable is cleared once it is read');
+  var fsel = d.querySelector('#fTask');
+  ok(fsel !== null && fsel.value === 'q:' + fq.id, 'the quest is preselected in the link select');
+  ok(d.querySelector('#fTask option[value="q:' + fq.id + '"][selected]') !== null, 'the preselected option is marked selected in the markup');
+  ok(d.querySelector('#fTask optgroup[label*="Main"]') !== null, 'the optgroup structure survives the preselect');
+  w.focusDraft = { label: '', skill: '', goal: '' };
+  // straight through the engine, not delQuest(): that one parks an undo toast
+  // the later undo tests would pick up first
+  w.A.deleteQuest(w.state, fq.id);
+  w.go('today');
+
+  console.log('\nLife areas move into Progress (v56)');
+  w.go('stats');
+  ok(d.querySelector('#view #skillsRow') !== null, 'on Progress the life areas render inside the content');
+  ok(d.querySelectorAll('#view #skillsRow .skillcard').length >= 5, 'the skill cards come with it');
+  ok(d.querySelector('#wrap > #skillsRow') === null, 'and no longer sit between the header and the tab bar');
+  w.go('today');
+  ok(d.querySelector('#view #skillsRow') === null, 'on Today the life areas are back out of the content');
+  ok(d.querySelector('#wrap > #skillsRow') !== null, 'parked in the shell, where the CSS hides them');
+  ok(d.querySelectorAll('.skillcard').length >= 5, 'renderSkills keeps filling it wherever it lives');
 
   console.log('\nHabit dots & records');
   w.go('habits');
@@ -655,7 +708,7 @@ setTimeout(async function () {
   ok(d.querySelector('.focusbars') !== null && d.querySelector('.fseg') !== null, 'stacked focus bars render');
   ok(d.querySelector('.focuslegend') !== null, 'focus legend shows life areas');
 
-  console.log('\nInteractive tour (v6)');
+  console.log('\nInteractive tour (v6, rewritten v56)');
   w.go('today');
   w.startTour();
   w.positionTour(d.querySelector('#hud')); // force synchronous positioning for the test
@@ -665,6 +718,21 @@ setTimeout(async function () {
   ok(w.tourStep === 1, 'tour advances a step');
   w.endTour();
   ok(d.querySelector('#tour.show') === null, 'tour closes cleanly');
+  ok(w.TOUR.length === 7, 'tour is seven steps (' + w.TOUR.length + ')');
+  ok(w.TOUR.every(function (s) { return s.sel.indexOf('#skillsRow') < 0; }), 'no step targets #skillsRow, which moves between the shell and the view');
+  ok(w.TOUR.every(function (s) { return s.body.indexOf('—') < 0 && s.body.indexOf('.') < 0; }), 'every step is one line, no em dashes');
+  // the point of a spotlight is that it lands on something: walk the list the
+  // way showTourStep() does and check each target resolves after its own go()
+  w.state.settings.mascot = true;
+  var tourMisses = w.TOUR.filter(function (s) {
+    w.go(s.tab);
+    w.mascotMoodSync();
+    var hit = null;
+    s.sel.split(',').some(function (sel) { hit = d.querySelector(sel.trim()); return !!hit; });
+    return !hit;
+  }).map(function (s) { return s.tab + ' ' + s.sel; });
+  ok(tourMisses.length === 0, 'every tour step finds its target after its own go()' + (tourMisses.length ? ' -> ' + tourMisses.join(' | ') : ''));
+  w.go('today');
 
   console.log('\nCloud sync UI (v7)');
   ok(typeof w.SMLCloud === 'object', 'cloud client loads in the page');

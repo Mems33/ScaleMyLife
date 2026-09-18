@@ -196,8 +196,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 
 /* ---------- tabs ---------- */
 .tabs{display:flex;gap:6px;margin:16px 0 14px;flex-wrap:wrap;align-items:stretch}
-/* sized to look right with the current seven buttons and with the five the
-   navigation phase leaves behind: the label shrinks, the icon never does */
+/* sized for five buttons: each one takes an equal share of the row, the label
+   shrinks before the icon does, and the icon never shrinks at all */
 .tabs button{background:var(--surface-1);border:1px solid var(--border);color:var(--text-2);
   font:600 12px var(--font-display);letter-spacing:.06em;text-transform:uppercase;
   padding:11px 10px;border-radius:12px;min-height:44px;position:relative;
@@ -212,6 +212,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .tabs button.home.on{background:linear-gradient(180deg,color-mix(in srgb,var(--gold) 26%,var(--panel2)),var(--panel2));box-shadow:0 0 14px color-mix(in srgb,var(--gold) 32%,transparent)}
 .tabs button .dot{position:absolute;top:5px;right:6px;width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold);animation:pulse 1.2s infinite}
 @keyframes pulse{50%{transform:scale(1.5);opacity:.5}}
+
+/* Header row for the two views that are not in the tab bar (Focus, Journal).
+   The chevron is the only way back on a phone, so it keeps a full 44px target
+   even though the icon inside is 18px. Ghost buttons turn red on hover because
+   most of them delete something; this one navigates, so it turns brand. */
+.vhead{display:flex;align-items:center;gap:6px;margin:0 0 14px}
+.vhead h2{font:600 20px/1.2 var(--font-display);color:var(--text-1);margin:0;letter-spacing:-.01em}
+.vhead .btn.back{min-height:44px;padding:8px;color:var(--text-1)}
+.vhead .btn.back:hover{color:var(--brand)}
 
 /* ---------- panels & items ---------- */
 .grid{display:grid;grid-template-columns:1fr;gap:14px}
@@ -708,8 +717,10 @@ details.jmonth .jrow{padding:7px 12px;border-top:1px solid color-mix(in srgb,var
   .tabs button{flex:1 1 0;min-width:0;flex-direction:column;gap:3px;padding:7px 2px;border:none;background:none;border-radius:10px;min-height:52px}
   .tabs button.pri{background:none}
   .tabs .ti{font-size:19px}
-  /* 9px keeps all seven labels on one line at 375px; the five-tab bar can breathe */
-  .tabs .tl{font-size:9px;letter-spacing:.03em;max-width:100%}
+  /* Five tabs, so each label gets roughly 70px at 375px wide. 10px fits the
+     longest one (PROGRESS) on a single line with room to spare. Add a sixth
+     destination and this drops back to 9px, which is why it is not there. */
+  .tabs .tl{font-size:10px;letter-spacing:.02em;max-width:100%}
   .tabs .i{width:20px;height:20px}
   .tabs button.on{background:var(--panel2);border:1px solid var(--gold);box-shadow:none}
   .tabs button .dot{top:2px;right:8px}
@@ -1079,10 +1090,16 @@ body.light{--elev1:0 1px 2px rgba(96,74,26,.08), 0 10px 24px -16px rgba(96,74,26
   .item:hover .btn.ghost,.step:hover .btn.ghost,.item .btn.ghost:focus-visible,.step .btn.ghost:focus-visible{opacity:1}
 }
 
-/* Life areas live on Progress. render() puts .show-skills on #wrap for the
-   stats tab only; renderSkills() still writes into #skillsRow on every render,
-   which is what the tests count, so this is purely a display rule. */
+/* Life areas live on Progress, and on Progress render() physically moves
+   #skillsRow into #view so it reads as content instead of sitting between the
+   header and the tab bar. On every other tab the element is parked back in the
+   shell, where this rule hides it. Both are needed: the move decides where it
+   reads, this decides whether it shows. renderSkills() still writes into it on
+   every render wherever it lives, which is what the tests count. */
 #wrap:not(.show-skills) #skillsRow{display:none}
+/* inside #view it is one more block in the Progress stack, not the row that
+   used to hang under the header, so it takes the panel rhythm */
+#view #skillsRow{margin-top:14px}
 
 /* The header is one line from 860px up: identity on the left, bars on the right. */
 @media(min-width:860px){
