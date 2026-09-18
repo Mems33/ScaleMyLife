@@ -556,11 +556,14 @@ function chestChip(){
    12 o'clock (the rotate), which the Focus ring does not need because it
    counts down. No id on the foreground circle on purpose: checkFocus() finds
    the Focus ring by #ringFg, and a second element with that id would make the
-   countdown redraw the wrong circle. */
-function miniRing(pct,size,stroke){
-  var w=3.5, r=(size-w)/2, c=size/2, C=2*Math.PI*r;
+   countdown redraw the wrong circle. `w` is the stroke width (3.5 at chip size,
+   6 on the Progress rings) and `cls` an extra class on the svg; the Progress
+   test counts its three rings by that class, so it goes on the svg itself. */
+function miniRing(pct,size,stroke,w,cls){
+  w=w||3.5;
+  var r=(size-w)/2, c=size/2, C=2*Math.PI*r;
   pct=Math.max(0,Math.min(1,pct||0));
-  return '<svg class="ring" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" aria-hidden="true" focusable="false">'+
+  return '<svg class="ring'+(cls?' '+cls:'')+'" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" aria-hidden="true" focusable="false">'+
     '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="'+w+'"/>'+
     '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="'+stroke+'" stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-pct))+'" transform="rotate(-90 '+c+' '+c+')"/></svg>';
 }
@@ -1331,17 +1334,22 @@ function saveDailyLog(){
   persist(); render(); fx(r); if(r2&&r2.hp) fx({hp:r2.hp}); afterAction();
 }
 
+/* ---------- Progress (tab id 'stats') ----------
+   Every panel below is a plain function returning HTML, and renderStats()
+   stacks them. The class names inside (.insight, .frow, .fseg, .heatmap,
+   .hc.lN, .trophy, .brow, .review, .rv.suggest, .chart .col, .stat .v,
+   .achgrid .ach) are what the tests query; rename one and a test goes red. */
 function insightsPanel(){
   var iv=RPG.insights(state);
   var body;
   if(!iv.enough){
-    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and ScaleMyLife starts showing what actually moves your mood - sleep, focus, slips.</div>';
+    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and Insights starts showing what moves it: sleep, focus, slips.</div>';
   } else if(!iv.findings.length){
-    body='<div class="empty">No strong patterns yet across your good and low days. Keep logging - the signal sharpens with more data.</div>';
+    body='<div class="empty">No strong pattern yet across your good and low days. Keep logging, the signal sharpens with more data.</div>';
   } else {
     body=iv.findings.map(function(f){ return '<div class="insight"><span class="ic">'+f.icon+'</span><span>'+esc(f.text)+'</span></div>'; }).join('');
   }
-  return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights - what moves your mood</h3>'+body+'</div>';
+  return '<div class="panel"><h3>Insights <span class="sub">what moves your mood</span></h3>'+body+'</div>';
 }
 function focusPanel(){
   var month=focusSpan===30;
@@ -1349,7 +1357,7 @@ function focusPanel(){
   var toggle='<span class="spantoggle right"><button class="'+(month?'':'on')+'" onclick="focusSpan=7;render()">Week</button><button class="'+(month?'on':'')+'" onclick="focusSpan=30;render()">Month</button></span>';
   var body;
   if(!f.totalMin){
-    body='<div class="empty">No focus sessions in this window. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown - what you actually worked on - appears here.</div>';
+    body='<div class="empty">No focus sessions in this window. Start a run from Today, tag it with a life area, and what you worked on shows up here day by day.</div>';
   } else {
     var legend='<div class="focuslegend">'+f.skills.map(function(id){
       return '<span><i style="background:'+skillColorById(id)+'"></i>'+skillLabelById(id)+'</span>';
@@ -1365,27 +1373,44 @@ function focusPanel(){
       return '<div class="frow'+(month?' slim':'')+'"><span class="fdl">'+lbl+'</span><div class="ftrack">'+segs+'</div>'+
         '<span class="ftt">'+(total?fmtHm(total):'')+'</span></div>';
     }).join('');
-    body='<div class="hint" style="margin-bottom:8px">Total this '+(month?'month':'week')+': <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
+    body=legend+'<div class="focusbars">'+rows+'</div>';
   }
-  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area - what you worked on'+toggle+'</h3>'+body+'</div>';
+  /* "this week" / "this month" is asserted by a test in month mode */
+  var total=f.totalMin?'<span class="cnt">'+fmtHm(f.totalMin)+' this '+(month?'month':'week')+'</span>':'';
+  return '<div class="panel"><h3>Focus by life area'+total+toggle+'</h3>'+body+'</div>';
 }
-/* GitHub-style consistency heatmap: 12 weeks of daily XP */
+/* GitHub-style consistency grid: 12 weeks of days, one square each, lit by XP.
+   Returns the grid, its key and a one-line caption; streakPanel() puts the
+   streak numbers above it. The grid always draws (an empty wall is the promise
+   of a full one), only the caption changes. */
 function heatmapPanel(){
   var h=RPG.heatmap(state,12);
-  if(!h.total) return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks</h3><div class="empty">Every day you earn XP lights a square. Come back in a few days and watch the wall fill up.</div></div>';
   var cells=h.cells.map(function(c){
     return '<i class="hc l'+c.level+(c.future?' fut':'')+'" title="'+c.day+(c.future?'':' · '+c.xp+' XP')+'"></i>';
   }).join('');
-  return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks '+
-    '<span class="cnt">'+h.activeDays+' active days · '+h.total+' XP</span></h3>'+
-    '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
-    '<div class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></div></div>';
+  var cap=h.total
+    ?'<b>'+h.activeDays+'</b> active day'+(h.activeDays===1?'':'s')+' in the last 12 weeks, <b>'+h.total+'</b> XP'
+    :'Every day you earn XP lights a square. Come back in a few days and watch the wall fill.';
+  return '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
+    '<div class="heatfoot"><span class="heatcap">'+cap+'</span>'+
+    '<span class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></span></div>';
+}
+/* Streak: the running streak and the best one as big mono numbers, then the
+   consistency grid. "best streak" (lower case) is asserted by a test. */
+function streakPanel(){
+  var h=state.hero, best=Math.max(h.bestStreak||0,h.streak||0);
+  var shield=(h.shields||0)>0?'<span class="cnt shieldon" title="Used automatically the first day you miss, so the streak survives">'+svgIcon('shield','sm')+' shield held</span>':'';
+  return '<div class="panel streakcard"><h3>Streak'+shield+'</h3>'+
+    '<div class="streaknums">'+
+      '<div class="sn cur">'+svgIcon('flame')+'<b class="v">'+h.streak+'</b><span class="k">day'+(h.streak===1?'':'s')+' running</span></div>'+
+      '<div class="sn"><b class="v">'+best+'</b><span class="k">best streak</span></div>'+
+    '</div>'+heatmapPanel()+'</div>';
 }
 /* trophy shelf: every weekly boss slain */
 function trophyShelf(){
   var t=RPG.bossTrophies(state);
   if(!t.length) return '';
-  return '<div class="panel" style="margin-top:14px"><h3>🐲 Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
+  return '<div class="panel"><h3>Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
     '<div class="trophies">'+t.map(function(x){
       return '<div class="trophy"><span class="ti">🏆</span><div><div class="tt">'+esc(x.title)+'</div><div class="td">'+x.day+'</div></div></div>';
     }).join('')+'</div></div>';
@@ -1416,7 +1441,7 @@ function leaderboardPanel(){
   if(typeof SMLCloud==='undefined'||!SMLCloud.configured()) return '';
   var friends=boardView==='friends';
   var toggle='<span class="spantoggle right"><button class="'+(friends?'':'on')+'" onclick="boardView=\'global\';render()">Global</button><button class="'+(friends?'on':'')+'" onclick="boardView=\'friends\';render()">Friends</button></span>';
-  var head='<div class="panel" style="margin-top:14px"><h3>🏆 Leaderboard <span class="cnt">weekly XP</span>'+toggle+'</h3>';
+  var head='<div class="panel"><h3>Leaderboard <span class="cnt">weekly XP</span>'+toggle+'</h3>';
   if(!cloudOn()) return head+'<div class="empty">Sign in (⚙️ → Cloud sync) and join to race other heroes on weekly XP.</div></div>';
   if(friends){
     if(!state.settings.friends) return head+'<div class="empty">Enable friends in ⚙️ Settings, share your code, and race your friends here.</div><button class="btn wide" onclick="openSettings()">🤝 Enable friends</button></div>';
@@ -1444,13 +1469,18 @@ function leaderboardPanel(){
   },0);
   return head+'<div id="boardBody">'+boardSkeleton(6)+'</div></div>';
 }
+/* The encouraging line under the three rings: the engine's suggestion for next
+   week, then the week's two facts in one muted line. .review and .rv.suggest
+   are queried by a test and by the tour. */
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
-  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'}):'-';
+  var best=rev.bestDay&&rev.bestXp>0?new Date(rev.bestDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'}):null;
+  var facts=[];
+  if(best) facts.push('Best day '+best+', <b>'+rev.bestXp+' XP</b>');
+  if(rev.worstMonster) facts.push('Toughest monster '+esc(rev.worstMonster)+', <b>'+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</b>');
   return '<div class="review">'+
-    '<div class="rv"><span class="k">🏅 Best day</span><span class="v">'+best+' · '+rev.bestXp+' XP</span></div>'+
-    (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
-    '<div class="rv suggest"><span class="k">🎯 Next week</span><span class="v">'+esc(rev.suggestion)+'</span></div></div>';
+    '<div class="rv suggest"><span class="k">'+svgIcon('target')+'</span><span class="v">'+esc(rev.suggestion)+'</span></div>'+
+    (facts.length?'<div class="rv facts">'+facts.join(' · ')+'</div>':'')+'</div>';
 }
 /* full journal history, grouped by month, filtered in place */
 function journalArchive(){
@@ -1480,28 +1510,107 @@ function filterJournal(q){
   document.querySelectorAll('details.jmonth').forEach(function(dt){ if(q) dt.open=true; });
 }
 
+/* ---------- the 7-day charts (XP, sleep) ----------
+   One bar per day. The value sits above the bar and the weekday letter below,
+   both plain HTML; the bar is an SVG rect. The svg has no viewBox, so the
+   rect's percentage units follow the svg's own size and the corner radius
+   stays 4px whatever the column height. The rect runs 10% past the bottom
+   edge on purpose: the svg clips it, which leaves only the top corners
+   rounded. Fills point at the gradients in chartDefs(), which has to sit in the
+   same panel. A test counts the .col elements (7) and expects an svg in each,
+   so keep both, and keep the sleep chart on .chart.sleepchart. */
+function dayLetter(d){ return ['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()]; }
+function chartCol(v,pct,lbl,grad){
+  var h=v>0?Math.max(4,Math.round(pct*100)):0;
+  return '<div class="col"><div class="cl v">'+(v||'')+'</div>'+
+    '<svg class="cbar" aria-hidden="true" focusable="false">'+
+    (h?'<rect x="0" y="'+(100-h)+'%" width="100%" height="'+(h+10)+'%" rx="4" fill="url(#'+grad+')"/>'
+      :'<rect class="nil" x="0" y="97%" width="100%" height="10%" rx="2"/>')+
+    '</svg><div class="cl">'+lbl+'</div></div>';
+}
+/* The two vertical gradients the bars use: brand for XP, info blue for sleep.
+   Stops take their colour through CSS variables, so the six themes recolour
+   the bars for free. A 0x0 svg, not display:none: browsers ignore gradients
+   defined inside a hidden svg. */
+function chartDefs(){
+  function g(id,c){ return '<linearGradient id="'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:'+c+'"/><stop offset="1" style="stop-color:'+c+';stop-opacity:.35"/></linearGradient>'; }
+  return '<svg class="chartdefs" width="0" height="0" aria-hidden="true" focusable="false"><defs>'+g('pgXp','var(--brand)')+g('pgSleep','var(--info)')+'</defs></svg>';
+}
 /* third chart row: sleep hours per day, weekly total + long-run average */
 function sleepChartHtml(w){
   var slMax=9, slWeek=0, logged=false;
   w.days.forEach(function(d){ var s=state.sleep[d]; if(s&&s.hours>slMax) slMax=s.hours; });
   var cols=w.days.map(function(d){
     var s=state.sleep[d], v=s?s.hours:0; slWeek+=v; if(v) logged=true;
-    var lbl=['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()];
-    return '<div class="col"><div class="cl" style="color:var(--blue)">'+(v||'')+'</div><div class="colbar sleep" style="height:'+Math.max(2,Math.round(v/slMax*100))+'%"></div><div class="cl">'+lbl+'</div></div>';
+    return chartCol(v,v/slMax,dayLetter(d),'pgSleep');
   }).join('');
   var all=Object.keys(state.sleep).map(function(k){ return state.sleep[k].hours; });
   var avg=all.length?Math.round(all.reduce(function(a,b){return a+b;},0)/all.length*10)/10:0;
-  if(!logged) return '<div class="hint" style="text-align:center;margin-top:6px">🌙 Log sleep in the Journal and your sleep chart appears here.</div>';
-  return '<div class="chart sleepchart" style="margin-top:10px">'+cols+'</div>'+
-    '<div class="hint" style="text-align:center;margin-top:2px">sleep hours, last 7 days · <b style="color:var(--blue)">'+(Math.round(slWeek*10)/10)+'h</b> this week'+(all.length?' · '+avg+'h long-run average':'')+'</div>';
+  if(!logged) return '<div class="chartcap">Log sleep on Today and your sleep chart appears here.</div>';
+  return '<div class="chart sleepchart">'+cols+'</div>'+
+    '<div class="chartcap">Sleep, last 7 days · <b>'+(Math.round(slWeek*10)/10)+'h</b> this week'+(all.length?' · <b>'+avg+'h</b> long-run average':'')+'</div>';
 }
+/* ---------- This week: three rings ----------
+   XP against last week, habits kept against what the targets asked for, focus
+   minutes against a weekly target. Each is a plain number the user can act
+   on, which is why the rings do not share a scale. */
+/* Minutes that fill the Focus ring: five hour-long blocks a week. A display
+   target only, nothing in the engine reads it and the payout is the same
+   either way. */
+var FOCUS_WEEK_TARGET=300;
+/* XP earned in the seven days before the current seven. weekStats() only
+   covers the current window, so this walks state.log the same way it does. */
+function lastWeekXp(){
+  var keys={};
+  for(var i=13;i>=7;i--){ var d=new Date(); d.setDate(d.getDate()-i); keys[RPG.todayKey(d)]=true; }
+  var xp=0; state.log.forEach(function(e){ if(keys[e.day]) xp+=e.xp||0; });
+  return xp;
+}
+/* Good habits kept in the last seven days against their targets. A daily habit
+   can be checked seven times, a 3x-a-week one three; checks past the target do
+   not count, so the ring tops out at 100%. Reads each habit's own history, not
+   the log, so a deleted habit stops counting on both sides. */
+function habitsKeptWeek(){
+  var keys={};
+  for(var i=6;i>=0;i--){ var d=new Date(); d.setDate(d.getDate()-i); keys[RPG.todayKey(d)]=true; }
+  var kept=0, possible=0;
+  state.habits.forEach(function(h){
+    if(h.type!=='good') return;
+    var target=Math.max(1,Math.min(7,h.target||7)), seen={}, hits=0;
+    (h.history||[]).forEach(function(k){ if(keys[k]&&!seen[k]){ seen[k]=true; hits++; } });
+    possible+=target; kept+=Math.min(target,hits);
+  });
+  return {kept:kept, possible:possible, pct:possible?kept/possible:0};
+}
+function ringCard(pct,stroke,num,label,cap,cls){
+  return '<div class="wring'+(cls?' '+cls:'')+'">'+miniRing(pct,88,stroke,6,'pring')+
+    '<b class="wv">'+num+'</b><span class="wl">'+label+'</span><span class="wd">'+cap+'</span></div>';
+}
+function weekRings(w){
+  var xpNow=w.tot.xp, xpPrev=lastWeekXp(), diff=xpNow-xpPrev;
+  var xpPct=xpPrev>0?Math.min(1,xpNow/xpPrev):(xpNow>0?1:0);
+  var xpCap=xpPrev>0
+    ?(diff===0?'same as last week':(diff>0?'+':'-')+Math.abs(diff)+' vs last week')
+    :(xpNow>0?'first week on the board':'nothing earned yet');
+  var hk=habitsKeptWeek();
+  var fm=w.tot.focusMin;
+  return '<div class="rings">'+
+    ringCard(xpPct,'var(--brand)',String(xpNow),'XP',xpCap,diff>0&&xpPrev>0?'up':'')+
+    ringCard(hk.pct,'var(--ok)',Math.round(hk.pct*100)+'%','habits kept',hk.possible?hk.kept+' of '+hk.possible+' checks':'no good habits yet')+
+    ringCard(Math.min(1,fm/FOCUS_WEEK_TARGET),'var(--info)',fmtHm(fm),'focus',fm?'of a '+(FOCUS_WEEK_TARGET%60?fmtHm(FOCUS_WEEK_TARGET):(FOCUS_WEEK_TARGET/60)+'h')+' week':'no focus runs yet')+
+    '</div>';
+}
+/* The Progress screen, top to bottom: header row, hero card, life areas (the
+   slot render() fills with #skillsRow), This week, Streak, the compact stat
+   tiles, the 7-day charts, then the panels that were already here. Every
+   .panel is a sibling inside .progress, which is a grid with the gap between
+   them, so no panel carries its own margin. */
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
   var chart=w.days.map(function(d){
-    var v=w.per[d].xp, h=Math.round(v/maxXp*100);
-    var lbl=['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()];
-    return '<div class="col"><div class="cl" style="color:var(--xp)">'+(v||'')+'</div><div class="colbar" style="height:'+Math.max(2,h)+'%"></div><div class="cl">'+lbl+'</div></div>';
+    var v=w.per[d].xp;
+    return chartCol(v,v/maxXp,dayLetter(d),'pgXp');
   }).join('');
   var achHtml=RPG.ACHIEVEMENTS.map(function(a){
     var got=state.achievements.find(function(u){return u.id===a.id;});
@@ -1524,36 +1633,42 @@ function renderStats(){
         return '<div class="logrow"><span class="tm">'+tm+'</span><span>'+e.icon+'</span>'+
           '<span>'+esc(e.text)+'</span><span class="delta">'+dd.join(' ')+'</span></div>';
       }).join('');
-  }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
-
-  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review'+
-    '<button class="btn small right" onclick="shareRecap()" title="Create a shareable image of your week">📸 Share my week</button></h3>'+
-    reviewBox()+
-    '<div class="statgrid">'+
-    '<div class="stat"><div class="v g">'+w.tot.xp+'</div><div class="k">XP earned</div></div>'+
-    '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">💰 earned</div></div>'+
-    '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">💰 spent</div></div>'+
+  }).join('')||'<div class="empty">Nothing logged yet. Clear a quest and it lands here.</div>';
+  /* the tiles that are not already a ring or a streak number above them;
+     "defeats" and "comebacks" appear once there has been a defeat (a test
+     looks for both words) */
+  var tiles='<div class="statgrid">'+
+    '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">coins earned</div></div>'+
+    '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">coins spent</div></div>'+
     '<div class="stat"><div class="v b">'+w.tot.quests+'</div><div class="k">quests cleared</div></div>'+
-    '<div class="stat"><div class="v g">'+w.tot.habits+'</div><div class="k">habits kept</div></div>'+
     '<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>'+
-    '<div class="stat"><div class="v b">'+Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60)+'</div><div class="k">focus time</div></div>'+
-    '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.hero.bestStreak||0)+'d</div><div class="k">best streak</div></div>'+
     ((state.counters.deaths||0)>0?'<div class="stat"><div class="v r">'+state.counters.deaths+'</div><div class="k">defeats</div></div>'+
-      '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.counters.comebacks||0)+'</div><div class="k">🔥 comebacks</div></div>':'')+
-    '</div>'+
+      '<div class="stat"><div class="v w">'+(state.counters.comebacks||0)+'</div><div class="k">comebacks</div></div>':'')+
+    '</div>';
+
+  $('#view').innerHTML='<div class="progress">'+
+    '<div class="proghead"><span class="hi">Progress</span>'+
+      '<button class="btn small" onclick="shareRecap()" title="Create a shareable image of your week">'+svgIcon('arrow-up-right','sm')+' Share my week</button></div>'+
+    '<div class="panel herocard">'+heroSheetTop('card')+'</div>'+
+    /* render() swaps #skillsRow into this slot right after the view is built */
+    '<div class="panel lifeareas"><h3>Life areas <span class="cnt">'+state.skills.length+'</span></h3><div id="skillsSlot"></div></div>'+
+    '<div class="panel thisweek"><h3>This week <span class="cnt">last 7 days</span></h3>'+weekRings(w)+reviewBox()+'</div>'+
+    streakPanel()+
+    tiles+
+    '<div class="panel xpchart"><h3>XP over 7 days <span class="cnt">'+w.tot.xp+' XP</span></h3>'+
+    chartDefs()+
     '<div class="chart">'+chart+'</div>'+
-    '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
-    '<div class="hint" style="text-align:center">mood, last 7 days</div>'+
+    '<div class="chartcap">Mood, last 7 days</div>'+
     sleepChartHtml(w)+'</div>'+
     focusPanel()+
-    heatmapPanel()+
     insightsPanel()+
     trophyShelf()+
     leaderboardPanel()+
-    '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
+    '<div class="panel"><h3>Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
-    '<div class="panel" style="margin-top:14px"><h3>📜 Adventure log</h3>'+logHtml+'</div>';
+    '<div class="panel"><h3>Adventure log</h3><div class="advlog">'+logHtml+'</div></div>'+
+    '</div>';
 }
 
 var seenDay = null;
@@ -1578,14 +1693,15 @@ function render(){
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
   /* On Progress the life areas become content, not chrome. Left in the shell
      they sit between the header and the tab bar and push the bar down the
-     screen, which on a phone is the one row that must not move. renderSkills()
+     screen, which on a phone is the one row that must not move. renderStats()
+     leaves an empty #skillsSlot inside its Life areas panel and the element
+     takes that spot, so the screen order is decided in one place (there). No
+     slot means the row goes to the end rather than nowhere. renderSkills()
      writes into the element by id, so it keeps working wherever it lands. */
   if(tab==='stats' && skillsEl){
-    var viewEl=$('#view'), firstPanel=viewEl?viewEl.querySelector('.panel'):null;
-    if(viewEl){
-      if(firstPanel && firstPanel.parentNode===viewEl && firstPanel.nextSibling) viewEl.insertBefore(skillsEl, firstPanel.nextSibling);
-      else viewEl.appendChild(skillsEl);
-    }
+    var viewEl=$('#view'), slot=viewEl?viewEl.querySelector('#skillsSlot'):null;
+    if(slot) slot.parentNode.replaceChild(skillsEl, slot);
+    else if(viewEl) viewEl.appendChild(skillsEl);
   }
   if(typeof mascotMoodSync==='function') mascotMoodSync();
   if(typeof syncMusicPlayer==='function') syncMusicPlayer();
@@ -1919,28 +2035,45 @@ function avPickerHtml(from){
       :'<div class="avpick scroll">'+AVATARS.map(function(a){
           return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';'+from+'()">'+a+'</button>';}).join('')+'</div>');
 }
-/* The top of the Hero sheet. This is where everything the compact header stopped
-   showing now lives: the worn title (and the picker behind it), how far the next
-   rank is, HP with the defeat explainer, and what today has paid so far. If you
-   ever want one of these back in the header, weigh it against the first card on
-   Today being visible without scrolling on a phone. */
-function heroSheetTop(){
+/* The top of the Hero sheet, and since Revamp 8 the hero card on Progress too.
+   This is where everything the compact header stopped showing now lives: the
+   worn title (and the picker behind it), the level in pixel type, the rank
+   chip, XP to the next level, how far the next rank is, HP with the defeat
+   explainer, and what today has paid so far. If you ever want one of these
+   back in the header, weigh it against the first card on Today being visible
+   without scrolling on a phone.
+   `where` is 'sheet' (the default, inside openCharacter) or 'card' (Progress).
+   The only difference is the Customize button: the sheet IS the customize
+   screen, so there it would just reopen itself. */
+function heroSheetTop(where){
+  var card=where==='card';
   var h=state.hero, r=RPG.rankFor(h.level), nr=RPG.nextRank(h.level), maxHp=RPG.maxHpOf(state);
   var col=RANK_COLORS[r.code]||'var(--gold)';
-  return '<div class="herotop">'+
+  var need=RPG.xpForLevel(h.level), left=Math.max(0,need-h.xp);
+  var asc=(h.ascension||0)>0?' · Season '+h.ascension:'';
+  return '<div class="herotop'+(card?' card':'')+'">'+
     '<div class="heroid"><div class="heroav">'+avHtml(h.avatar)+'</div>'+
       '<div class="grow"><div class="heroname">'+esc(h.name)+'</div>'+
-      '<div class="hint">Lv.'+h.level+' · <b style="color:'+col+'">Rank '+r.code+', '+esc(r.name)+'</b></div></div></div>'+
-    (h.title
-      ?'<div><span class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</span></div>'
-      :'<div><span class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</span></div>')+
+      /* the pixel font is allowed here because the number is 14px or larger;
+         the same chip as the header, so it opens the same ranks sheet */
+      '<div class="herometa"><span class="lvbig">LV.'+h.level+'</span>'+
+        '<span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="Rank '+r.code+', '+esc(r.name)+' - see all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+'</span>'+
+        '<span class="hint">'+esc(r.name)+asc+'</span></div>'+
+      (h.title
+        ?'<div><span class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</span></div>'
+        :'<div><span class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</span></div>')+
+      '</div></div>'+
+    '<div class="heroxp"><div class="bar xp" title="XP '+h.xp+' of '+need+'"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i></div>'+
+      '<div class="xpline"><span>'+h.xp+' / '+need+' XP</span><span>'+left+' to Lv.'+(h.level+1)+'</span></div></div>'+
     /* the rank progress line is a button: the ranks sheet explains what the
        next rank is, and at max rank the same tap starts the ascension flow */
     (nr
       ?'<button class="btn ghost small ranknext" aria-label="Next rank '+nr.code+' at level '+nr.min+'. See all ranks" onclick="openRanks()">▲ Rank '+nr.code+' at Lv.'+nr.min+' '+svgIcon('chevron-right','sm')+'</button>'
       :'<button class="btn ghost small ranknext" aria-label="Max rank reached. Ascend into a new season" onclick="openAscend()">✦ Max rank. Ascend into a new season '+svgIcon('chevron-right','sm')+'</button>')+
     '<div class="hpline"><span>❤️ HP '+h.hp+' / '+maxHp+'</span>'+
-      '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button></div>'+
+      '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button>'+
+      (card?'<button class="btn small" onclick="openCharacter()" title="Name, title, avatar, theme">'+svgIcon('pencil','sm')+' Customize</button>':'')+
+    '</div>'+
     todayGlance()+
     '</div>';
 }
