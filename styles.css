@@ -1274,3 +1274,59 @@ body.light .quick.qa button{background:#fff}
   .panel.now h3 .chestring{margin-left:auto}
   .logrow{flex-wrap:nowrap}
 }
+
+/* Revamp 5: onboarding wizard */
+/* The wizard is an ordinary .modal .box (bottom sheet on a phone, centred
+   card above 640px), so it inherits the sheet rules above. Everything here is
+   scoped to .obwiz and cannot leak into other dialogs. The step dots reuse
+   .tdots (a test looks for that class); .done marks the steps already passed. */
+.modal .box.obwiz{max-width:480px}
+.obwiz .tdots{justify-content:flex-start;margin:0 0 14px}
+.obwiz .tdots i.done{background:var(--brand);opacity:.45;box-shadow:none}
+.modal .obwiz h2{font:700 26px/1.15 var(--font-display);letter-spacing:-.02em;color:var(--text-1);margin:0 0 4px}
+.obwiz .obcopy{font-size:15px;line-height:1.4;color:var(--text-2);margin:0 0 14px}
+.obwiz .flabel{margin-top:14px}
+.obwiz #obName,.obwiz #obCustom{font-size:17px;min-height:48px;padding:10px 14px;border-radius:var(--r-control)}
+/* chip rows: 44px tappable options, the picked one in the brand tint. These
+   are creation-flow chips, not the 11px meta chips on list rows, hence the
+   .obchips scope on every rule. */
+.obchips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 6px}
+.obchips .chip{font:600 14px/1 var(--body);min-height:44px;padding:10px 14px;border-radius:var(--r-control);
+  background:var(--surface-2);border:1px solid var(--border);color:var(--text-1);white-space:nowrap;cursor:pointer}
+.obchips .chip:hover{border-color:var(--brand)}
+.obchips .chip.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand)}
+/* suggestion rows: a 56px toggle row whose check box fills in brand when on */
+.oblist{display:grid;gap:8px;margin:4px 0 6px}
+.obitem,.obcard{border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);
+  transition:border-color .16s var(--ease),background .16s var(--ease)}
+.obitem.on,.obcard.on{border-color:color-mix(in srgb,var(--brand) 55%,var(--border));background:color-mix(in srgb,var(--brand) 6%,var(--surface-2))}
+.obitem{display:flex;flex-direction:column}
+.obtog,.obcard{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:8px 14px 8px 12px;
+  background:none;border:none;color:var(--text-1);text-align:left;font-family:inherit;cursor:pointer}
+.obbox{flex:none;width:24px;height:24px;border-radius:7px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;
+  color:var(--brand-ink);transition:background .16s var(--ease),border-color .16s var(--ease)}
+.obbox .i{width:15px;height:15px;opacity:0;transition:opacity .16s var(--ease)}
+.obitem.on .obbox,.obcard.on .obbox{background:var(--brand);border-color:var(--brand)}
+.obitem.on .obbox .i,.obcard.on .obbox .i{opacity:1}
+.obname{flex:1;min-width:0;font:600 15px/1.3 var(--body)}
+.obmeta{font-size:12px;color:var(--text-2);white-space:nowrap}
+.obprice{font:700 14px var(--mono);font-variant-numeric:tabular-nums;color:var(--brand);white-space:nowrap}
+/* weekly target chips sit under the habit title, indented past the check box */
+.obitem .obchips.targets{margin:0 12px 10px 48px;gap:6px}
+.obitem .obchips.targets .chip{min-height:44px;padding:10px 12px;font-size:13px}
+/* navigation: Continue is the one primary action, Back and Skip stay quiet.
+   The generic .btn.ghost turns red on hover because it is the delete button
+   elsewhere; here it turns brand. */
+.obwiz .btn.go.wide{margin-top:14px;min-height:48px;font-size:16px}
+.obnav{display:flex;justify-content:space-between;gap:8px;margin-top:6px}
+.obnav .btn.ghost{display:inline-flex;align-items:center;gap:4px;color:var(--text-2)}
+.obnav .btn.ghost:hover,.obnav .btn.ghost:focus-visible{color:var(--brand)}
+/* Ready screen */
+.obready{display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0 12px}
+.obready .obav{width:76px;height:76px;border:2px solid var(--brand);border-radius:22px;background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;font-size:40px;line-height:1}
+.obready .obav .svgav{width:80%;height:80%}
+.obready .obheroname{font:700 22px/1.2 var(--font-display)}
+.oblines{display:grid;gap:8px;margin:4px 0 6px}
+.obline{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);font-size:15px}
+.obline .i{color:var(--brand);width:20px;height:20px}

@@ -40,15 +40,33 @@ setTimeout(async function () {
 
   console.log('\nBoot & onboarding');
   ok(errors.length === 0, 'no JS errors on load' + (errors.length ? ' -> ' + errors[0] : ''));
-  ok(!!d.querySelector('#modal.show'), 'tutorial modal shows on first run');
-  ok(d.querySelector('.tdots') !== null, 'tutorial step dots visible');
-  ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'skip button offered');
+  ok(!!d.querySelector('#modal.show'), 'onboarding wizard shows on first run');
+  ok(d.querySelector('.tdots') !== null, 'wizard step dots visible');
+  ok(d.querySelector('#obName') !== null && d.querySelector('.avpick') !== null && d.querySelector('.obthemes') !== null, 'step 1 asks for a name, an avatar and a look');
+  ok(d.querySelector('#obNext') !== null && d.querySelector('#obNext').disabled === true, 'Continue waits for a name');
+  // the five educational slides still exist (Settings "How it works") and, with no hero, hand over to the wizard
+  w.tut(0);
+  ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'slides offer Skip');
   w.tut(1); w.tut(2); w.tut(3); w.tut(4);
-  ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last step leads to hero creation');
+  ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last slide leads to hero creation');
   w.tutSkip();
-  ok(d.querySelector('#obName') !== null, 'skip lands on character creation');
-  d.querySelector('#obName').value = 'Alp';
-  w.createHero();
+  ok(d.querySelector('#obName') !== null && w.obStep === 1, 'skip lands on step 1 of the wizard');
+  d.querySelector('#obName').value = 'Alp'; w.obNameCheck();
+  ok(d.querySelector('#obNext').disabled === false, 'a name enables Continue');
+  w.obNext();
+  ok(d.querySelector('.pathpick') !== null && w.obStep === 2, 'step 2 is the path picker');
+  w.obNext();
+  ok(d.querySelectorAll('.obchips .chip').length === 8 && d.querySelectorAll('.obchips .chip.on').length === 2, 'step 3 offers time and struggle chips, 30 min and None preselected');
+  w.obNext();
+  ok(d.querySelectorAll('.obitem').length === 4 && d.querySelectorAll('.obitem.on').length === 4, 'step 4 lists the four Balanced habits, all on');
+  ok(d.querySelector('.obchips.targets') !== null, 'a habit row carries its weekly target chips');
+  w.obNext();
+  ok(d.querySelectorAll('.obitem').length === 2 && d.querySelectorAll('.obitem.on').length === 2 && d.querySelector('#obCustom') !== null, 'step 5 lists the two Balanced dailies plus a field of your own');
+  w.obNext();
+  ok(d.querySelectorAll('.obcard').length === 3 && d.querySelectorAll('.obcard.on').length === 3, 'step 6 lists the three Balanced rewards, on by default');
+  w.obNext();
+  ok(d.querySelector('#obStart') !== null && d.querySelector('#modal').textContent.indexOf('Alp') >= 0, 'Ready screen shows the hero and a Start button');
+  d.querySelector('#obStart').click();
   ok(w.state && w.state.hero.name === 'Alp', 'hero created');
   ok(d.querySelector('#hud').textContent.indexOf('Alp') >= 0, 'HUD shows hero name');
   ok(d.querySelector('#hud').textContent.indexOf('LV.1') >= 0, 'HUD shows level 1');
@@ -603,9 +621,9 @@ setTimeout(async function () {
   w.state.hero.level = 3; w.render();
   ok(!d.querySelector('#wrap').classList.contains('legend'), 'dropping below S exits Legend mode');
 
-  console.log('\nOnboarding paths (v3) - now multi-select');
-  w.onboarding();
-  ok(d.querySelector('.pathpick') !== null, 'path picker rendered in onboarding');
+  console.log('\nOnboarding paths (v3) - now multi-select, on step 2 of the wizard');
+  w.onboarding(2);
+  ok(d.querySelector('.pathpick') !== null, 'path picker rendered on step 2');
   ok(d.querySelector('#modal').textContent.indexOf('Student') >= 0, 'named paths listed');
   ok(d.querySelector('#modal').textContent.indexOf('Pick ALL that fit') >= 0, 'copy invites picking several identities');
   w.togglePath('student'); w.togglePath('founder');
@@ -616,15 +634,91 @@ setTimeout(async function () {
   ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'deselecting everything falls back to Balanced');
   w.togglePath('athlete'); w.togglePath('general');
   ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'choosing Balanced clears other picks');
-  // theme picker with live preview
-  ok(d.querySelector('.obthemes') !== null, 'onboarding offers a theme picker');
+  // theme picker with live preview, on step 1
+  w.onboarding(1);
+  ok(d.querySelector('.obthemes') !== null, 'step 1 offers a theme picker');
   var stashState = w.state; w.state = null;   // real onboarding has no save yet
   w.previewTheme('ocean');
-  ok(w.pickedTheme === 'ocean', 'clicking a theme stores the pick');
+  ok(w.pickedTheme === 'ocean' && w.ob.theme === 'ocean', 'clicking a theme stores the pick');
   ok(d.documentElement.style.getPropertyValue('--gold').trim() === '#59c2ff', 'preview repaints the page live (ocean accent applied)');
   w.state = stashState; w.pickedTheme = null; w.applyTheme();
   ok(d.documentElement.style.getPropertyValue('--gold').trim() !== '#59c2ff', 'an existing hero’s saved theme always beats the preview');
   w.closeModal();
+
+  console.log('\nOnboarding wizard (revamp 5): the picks become the board');
+  (function () {
+    var keep = w.state; w.state = null; w.renderHUDShell(); w.onboarding();
+    ok(w.obStep === 1 && d.querySelector('#obName') !== null, 'wizard opens on step 1');
+    d.querySelector('#obName').value = 'Wiz'; w.obNext();
+    w.togglePath('student');   // Student board: 3 habits, 3 dailies, 3 rewards, Doomscrolling already seeded
+    ok(w.obStep === 2 && w.ob.paths.length === 1 && w.ob.paths[0] === 'student', 'the path pick is mirrored into ob');
+    w.obNext();
+    w.obPick('minutes', 15); w.obPick('struggle', 'phone');
+    ok(d.querySelectorAll('.obchips .chip.on').length === 2 && w.ob.minutes === 15 && w.ob.struggle === 'phone', 'step 3 chips write the time budget and the struggle');
+    w.obNext();
+    var habitTitles = w.obSug.habits.map(function (h) { return h.title; });
+    ok(habitTitles.length === 3 && d.querySelectorAll('.obitem').length === 4, 'step 4 shows the three Student habits plus the struggle monster');
+    ok(d.querySelector('#modal').textContent.indexOf('Doomscrolling') >= 0, 'a phone struggle suggests the Doomscrolling monster');
+    w.obToggle('habits', 0);
+    ok(d.querySelectorAll('.obitem.on').length === 3 && w.ob.habitsOff[habitTitles[0]] === true, 'a habit row toggles off');
+    w.obTarget(1, 5);
+    ok(w.ob.targets[habitTitles[1]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
+    w.obNext();
+    ok(d.querySelectorAll('.obitem').length === 3 && d.querySelectorAll('.obitem.on').length === 2, '15 minutes switches on the first two dailies of three');
+    d.querySelector('#obCustom').value = 'Call grandma';
+    w.obNext();
+    ok(w.ob.custom === 'Call grandma', 'the custom quest field is read on Continue');
+    ok(d.querySelectorAll('.obcard').length === 3 && d.querySelectorAll('.obcard.on').length === 3, 'step 6 shows the Student rewards, first three on');
+    w.obToggle('rewards', 2);
+    ok(d.querySelectorAll('.obcard.on').length === 2, 'a reward card toggles off');
+    w.obNext();
+    ok(d.querySelector('#obStart') !== null && d.querySelector('#modal').textContent.indexOf('Wiz') >= 0, 'Ready screen shows the name and Start');
+    d.querySelector('#obStart').click();
+    var s = w.state;
+    ok(s && s.hero.name === 'Wiz', 'Start creates the hero');
+    ok(!s.habits.some(function (h) { return h.title === habitTitles[0]; }), 'the habit toggled off on step 4 is absent');
+    var targeted = s.habits.find(function (h) { return h.title === habitTitles[1]; });
+    ok(targeted && targeted.target === 5, 'the picked weekly target is applied through editHabit');
+    ok(s.habits.filter(function (h) { return h.type === 'bad' && h.title === 'Doomscrolling'; }).length === 1, 'the struggle monster exists as a bad habit, once (Student already seeds it)');
+    ok(s.quests.filter(function (q) { return q.recurring; }).length === 2, 'with 15 minutes only two dailies exist');
+    var custom = s.quests.find(function (q) { return q.title === 'Call grandma'; });
+    ok(custom && !custom.recurring && !custom.main, 'the custom quest is added as a side quest');
+    ok(!s.shop.some(function (it) { return it.title === 'Night out with friends'; }) && s.shop.some(function (it) { return it.special === 'shield'; }), 'the reward toggled off is gone, the Streak Shield stays');
+    var onb = s.settings.onboard;
+    ok(onb && Object.keys(onb).sort().join(',') === 'minutes,paths,struggle' && onb.minutes === 15 && onb.struggle === 'phone' && onb.paths.length === 1 && onb.paths[0] === 'student', 'settings.onboard has exactly {paths, struggle, minutes}');
+    ok(d.querySelector('#modal.show') === null && w.ob.name === '' && w.pickedPaths[0] === 'general', 'the wizard closes and its picks reset for the next hero');
+
+    // skipping from step 3 lands on Ready with the defaults, and Start still works
+    w.state = null; w.renderHUDShell(); w.onboarding();
+    d.querySelector('#obName').value = 'Skipper'; w.obNext();
+    ok(d.querySelector('#modal').textContent.indexOf('Skip') < 0, 'no Skip before step 3');
+    w.obNext();
+    ok(w.obStep === 3 && d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'Skip appears from step 3');
+    w.obSkip();
+    ok(d.querySelector('#obStart') !== null, 'skipping lands on the Ready screen');
+    d.querySelector('#obStart').click();
+    ok(w.state && w.state.hero.name === 'Skipper' && w.state.settings.onboard.minutes === 30 && w.state.settings.onboard.struggle === 'none', 'Start after a skip creates the hero with the defaults');
+    ok(w.state.quests.length === 2 && w.state.habits.length === 5, 'the skipped board is the untouched Balanced board');
+
+    // a struggle no path seeds is added as a new monster
+    w.state = null; w.renderHUDShell(); w.onboarding();
+    d.querySelector('#obName').value = 'Owl'; w.obNext(); w.obNext(); w.obPick('struggle', 'sleep'); w.obSkip();
+    d.querySelector('#obStart').click();
+    ok(w.state.habits.some(function (h) { return h.type === 'bad' && h.title === 'Late-night scrolling'; }), 'a sleep struggle adds the Late-night scrolling monster');
+
+    // createHero from a later step with a blank name goes back to step 1 and points at the field
+    w.state = null; w.renderHUDShell(); w.onboarding(3);
+    w.createHero();
+    ok(w.state === null && w.obStep === 1 && d.querySelector('#obNameErr').style.display !== 'none', 'a blank name sends createHero back to step 1 with the inline error');
+
+    // Settings still replays the slides
+    w.state = keep; w.render();
+    w.openSettings(); w.tut(0);
+    ok(d.querySelector('.tutbig') !== null && d.querySelector('#modal').textContent.indexOf('YOUR LIFE IS THE GAME') >= 0, 'tut(0) from Settings still shows the slides');
+    w.tut(4);
+    ok(d.querySelector('#modal').textContent.indexOf('Done') >= 0, 'with a hero the last slide says Done');
+    w.closeModal();
+  })();
 
   console.log('\nMastery tiers past Master (v4)');
   w.state.skills[0].level = 15;
