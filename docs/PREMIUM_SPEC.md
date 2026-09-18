@@ -1,3 +1,5 @@
+Status: parked. The coming-soon screen was removed from the app on 2026-09-18; this spec stays for when the tier returns.
+
 # Premium Tier Spec (roadmap item 2)
 
 Status: living spec, owner-locked direction. Spec only, no app code yet.

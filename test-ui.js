@@ -40,15 +40,33 @@ setTimeout(async function () {
 
   console.log('\nBoot & onboarding');
   ok(errors.length === 0, 'no JS errors on load' + (errors.length ? ' -> ' + errors[0] : ''));
-  ok(!!d.querySelector('#modal.show'), 'tutorial modal shows on first run');
-  ok(d.querySelector('.tdots') !== null, 'tutorial step dots visible');
-  ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'skip button offered');
+  ok(!!d.querySelector('#modal.show'), 'onboarding wizard shows on first run');
+  ok(d.querySelector('.tdots') !== null, 'wizard step dots visible');
+  ok(d.querySelector('#obName') !== null && d.querySelector('.avpick') !== null && d.querySelector('.obthemes') !== null, 'step 1 asks for a name, an avatar and a look');
+  ok(d.querySelector('#obNext') !== null && d.querySelector('#obNext').disabled === true, 'Continue waits for a name');
+  // the five educational slides still exist (Settings "How it works") and, with no hero, hand over to the wizard
+  w.tut(0);
+  ok(d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'slides offer Skip');
   w.tut(1); w.tut(2); w.tut(3); w.tut(4);
-  ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last step leads to hero creation');
+  ok(d.querySelector('#modal').textContent.indexOf('Create my hero') >= 0, 'last slide leads to hero creation');
   w.tutSkip();
-  ok(d.querySelector('#obName') !== null, 'skip lands on character creation');
-  d.querySelector('#obName').value = 'Alp';
-  w.createHero();
+  ok(d.querySelector('#obName') !== null && w.obStep === 1, 'skip lands on step 1 of the wizard');
+  d.querySelector('#obName').value = 'Alp'; w.obNameCheck();
+  ok(d.querySelector('#obNext').disabled === false, 'a name enables Continue');
+  w.obNext();
+  ok(d.querySelector('.pathpick') !== null && w.obStep === 2, 'step 2 is the path picker');
+  w.obNext();
+  ok(d.querySelectorAll('.obchips .chip').length === 8 && d.querySelectorAll('.obchips .chip.on').length === 2, 'step 3 offers time and struggle chips, 30 min and None preselected');
+  w.obNext();
+  ok(d.querySelectorAll('.obitem').length === 4 && d.querySelectorAll('.obitem.on').length === 4, 'step 4 lists the four Balanced habits, all on');
+  ok(d.querySelector('.obchips.targets') !== null, 'a habit row carries its weekly target chips');
+  w.obNext();
+  ok(d.querySelectorAll('.obitem').length === 2 && d.querySelectorAll('.obitem.on').length === 2 && d.querySelector('#obCustom') !== null, 'step 5 lists the two Balanced dailies plus a field of your own');
+  w.obNext();
+  ok(d.querySelectorAll('.obcard').length === 3 && d.querySelectorAll('.obcard.on').length === 3, 'step 6 lists the three Balanced rewards, on by default');
+  w.obNext();
+  ok(d.querySelector('#obStart') !== null && d.querySelector('#modal').textContent.indexOf('Alp') >= 0, 'Ready screen shows the hero and a Start button');
+  d.querySelector('#obStart').click();
   ok(w.state && w.state.hero.name === 'Alp', 'hero created');
   ok(d.querySelector('#hud').textContent.indexOf('Alp') >= 0, 'HUD shows hero name');
   ok(d.querySelector('#hud').textContent.indexOf('LV.1') >= 0, 'HUD shows level 1');
@@ -58,7 +76,7 @@ setTimeout(async function () {
   console.log('\nToday tab (default home)');
   ok(w.tab === 'today', 'app opens on the Today tab');
   ok(d.querySelector('.todayhead') !== null, 'today header renders');
-  ok(d.querySelector('#view').textContent.indexOf('Daily quests') >= 0 && d.querySelector('#view').textContent.indexOf('Habits to check') >= 0, 'dailies and habit checks merged in one view');
+  ok(d.querySelector('#view .panel.now') !== null && d.querySelector('#view .panel.habits') !== null, 'dailies (Now) and habit checks (Habits today) merged in one view');
   ok(d.querySelector('.chestchip') !== null, 'chest chip visible on today');
   var th = w.state.habits.find(function (x) { return x.type === 'good'; });
   w.doHabit(th.id);
@@ -96,7 +114,8 @@ setTimeout(async function () {
   var good = w.state.habits.filter(function (h) { return h.type === 'good'; })[1];
   w.doHabit(good.id);
   ok(good.streak === 1, 'good habit checked, streak 1');
-  ok(d.querySelector('#view').textContent.indexOf('✓ today') >= 0, 'UI marks habit done today');
+  // the ✓ is a sprite icon now, so assert on the done row itself
+  ok(d.querySelector('#view .item.done') !== null && d.querySelector('#view').textContent.indexOf('today') >= 0, 'UI marks habit done today');
   var bad = w.state.habits.find(function (h) { return h.type === 'bad'; });
   var hpB = w.state.hero.hp;
   w.slip(bad.id);
@@ -108,12 +127,14 @@ setTimeout(async function () {
   console.log('\nMarket tab');
   w.go('market');
   w.state.hero.coins = 200; w.render();
+  ok(d.querySelector('#balCoins') !== null && d.querySelector('#balCoins').textContent.indexOf('200') >= 0, 'balance hero shows the coin total');
   var buyable = w.state.shop.find(function (i) { return i.tab === 'market'; });
   var cB = w.state.hero.coins;
   w.buy(buyable.id);
   ok(w.state.hero.coins === cB - buyable.price, 'purchase deducted coins');
   w.shopTab = 'hotel'; w.render();
   ok(/\+\d+ ❤️/.test(d.querySelector('#view').textContent), 'hotel items show HP restore');
+  ok(d.querySelector('#sHp') !== null, 'the rest section form has the HP field');
   w.state.hero.hp = 40;
   var nap = w.state.shop.find(function (i) { return i.tab === 'hotel'; });
   w.buy(nap.id);
@@ -240,6 +261,16 @@ setTimeout(async function () {
   var sCount = w.state.shop.length;
   w.usePreset('shop', 0);
   ok(w.state.shop.length === sCount + 1 || w.state.shop.some(function(i){return i.title==='Gaming: 1 hour';}), 'shop preset adds gaming reward');
+
+  console.log('\nSuggested for you (revamp 7)');
+  var suggIdx = w.suggestedRewards();
+  ok(suggIdx.length > 0, 'suggested rewards row has at least one match (no onboarding record falls back to skill-name matching)');
+  var pickIdx = suggIdx[0], pickTitle = w.PRESETS.shop.market[pickIdx][0];
+  ok(d.querySelector('#shop-suggested').textContent.indexOf(pickTitle) >= 0, 'a suggested reward renders by title');
+  w.usePreset('shop', pickIdx, 'market');
+  ok(w.state.shop.some(function (i) { return i.title === pickTitle; }), 'tapping Stock it adds the suggested reward to Your rewards');
+  ok(w.suggestedRewards().indexOf(pickIdx) === -1, 'a stocked reward drops out of the suggestions row (dupe() hides it)');
+
   w.go('habits');
   var hCount = w.state.habits.length;
   w.usePreset('bad', 0);
@@ -248,12 +279,34 @@ setTimeout(async function () {
   console.log('\nStats tab (v2)');
   w.go('stats');
   var sv = d.querySelector('#view').textContent;
-  ok(sv.indexOf('Week in review') >= 0, 'week review renders');
+  ok(sv.indexOf('This week') >= 0, 'the This week panel renders (was "Week in review")');
   ok(d.querySelectorAll('.chart:not(.sleepchart) .col').length === 7, '7-day XP chart renders');
   ok(d.querySelectorAll('.chart.sleepchart .col').length === 7, '7-day sleep chart renders below mood');
   ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'all achievements shown');
   ok(d.querySelectorAll('.ach.unlocked').length >= 1, 'at least one achievement unlocked (first_blood)');
   ok(sv.indexOf('Adventure log') >= 0 && sv.indexOf('Focus session') >= 0, 'log includes focus session');
+
+  console.log('\nProgress dashboard (revamp 8)');
+  var heroCard = d.querySelector('#view .panel.herocard');
+  ok(heroCard !== null && heroCard.querySelector('.herotitle[onclick*="openTitlePicker"]') !== null, 'the hero card renders on Progress with the title picker');
+  ok(heroCard !== null && heroCard.querySelector('[onclick*="openCharacter"]') !== null, 'the hero card offers Customize');
+  ok(heroCard !== null && heroCard.querySelector('.lvbig') !== null && heroCard.querySelector('.rank[role="button"]') !== null, 'big level number and rank chip on the card');
+  ok(heroCard !== null && heroCard.querySelector('.ranknext[onclick]') !== null && heroCard.textContent.indexOf('HP') >= 0, 'rank progress button and the HP line come with it');
+  var srow = d.querySelector('#view #skillsRow');
+  ok(heroCard !== null && srow !== null && heroCard.nextElementSibling !== null && heroCard.nextElementSibling.contains(srow), 'life areas sit right after the hero card');
+  ok(d.querySelector('#skillsSlot') === null, 'the slot placeholder is gone once the row moved in');
+  ok(d.querySelectorAll('#view .panel.thisweek svg.pring').length === 3, 'This week draws three rings');
+  ok(d.querySelector('#view .panel.thisweek .review .rv.suggest') !== null, 'the encouraging line sits under the rings');
+  var xpCols = d.querySelectorAll('.chart:not(.sleepchart) .col');
+  ok(xpCols.length === 7 && [].every.call(xpCols, function (c) { return c.querySelector('svg rect') !== null; }), 'each of the 7 XP columns draws an SVG bar');
+  var slCols = d.querySelectorAll('.chart.sleepchart .col');
+  ok(slCols.length === 7 && [].every.call(slCols, function (c) { return c.querySelector('svg rect') !== null; }), 'each of the 7 sleep columns draws an SVG bar');
+  var snum = d.querySelector('#view .panel.streakcard .sn.cur .v');
+  ok(snum !== null && snum.textContent.trim() === String(w.state.hero.streak), 'the streak panel shows the current streak number');
+  ok(d.querySelector('#view .panel.streakcard .heatmap') !== null, 'the consistency grid lives in the streak panel');
+  ok(d.querySelector('#view .statgrid .stat .v') !== null, 'the compact tiles render under the streak panel');
+  ok(d.querySelectorAll('.achgrid .ach').length === w.RPG.ACHIEVEMENTS.length, 'the achievements grid still lists every achievement');
+  ok(sv.indexOf('Share my week') >= 0, 'Share my week stays in the header row');
 
   console.log('\nSound toggle (v2)');
   w.openSettings();
@@ -310,8 +363,9 @@ setTimeout(async function () {
   w.saveCharacter();
   w.avTab = 'heroes';
   ok(w.state.hero.name === 'Mehmet' && w.state.hero.title === 'Essay Slayer' && w.state.hero.avatar === '🚀', 'name, title, custom emoji saved');
-  ok(d.querySelector('#hud').textContent.indexOf('Essay Slayer') >= 0, 'title shown in HUD');
+  // the worn title moved from the header into the Hero sheet (openCharacter)
   w.openCharacter();
+  ok(d.querySelector('#modal').textContent.indexOf('Essay Slayer') >= 0, 'title shown in the Hero sheet');
   w.setTheme('synthwave');
   ok(w.state.settings.theme === 'synthwave', 'theme persisted');
   ok(d.documentElement.style.getPropertyValue('--gold') === '#ff5fa2', 'theme CSS variables applied');
@@ -327,10 +381,63 @@ setTimeout(async function () {
   ok(d.querySelector('.logo').textContent.indexOf('\u2694') < 0, 'swords removed from title');
   ok(d.querySelector('.logo .gear') !== null, 'settings gear lives in header');
   ok(d.querySelector('#hud .gear') === null, 'gear no longer overlaps HUD level display');
-  ok(d.querySelectorAll('.tabs button').length === 7, 'seven tabs incl. TODAY');
+  ok(d.querySelectorAll('.tabs button').length === 5, 'five tabs: Focus and Journal left the bar');
   ok(d.querySelectorAll('.tabs button.pri').length === 3, 'today/quests/habits marked primary by color');
   ok(d.querySelector('.tabs button.big') === null, 'no size-based tab tiers anymore');
   ok(d.querySelector('.tabs button').textContent.indexOf('TODAY') >= 0, 'TODAY is the first tab');
+  var tabLabels = [].map.call(d.querySelectorAll('.tabs .tl'), function (e) { return e.textContent.trim(); });
+  ok(tabLabels.join('|') === 'TODAY|QUESTS|HABITS|REWARDS|PROGRESS', 'tab order: Today, Quests, Habits, Rewards, Progress (' + tabLabels.join(',') + ')');
+  var tabIds = [].map.call(d.querySelectorAll('.tabs button'), function (e) {
+    return (e.getAttribute('onclick') || '').replace(/^go\('|'\)$/g, '');
+  });
+  ok(tabIds.join('|') === 'today|quests|habits|market|stats', 'go() ids keep the engine names market and stats (' + tabIds.join(',') + ')');
+  ok(d.querySelector('.tabs button.home') !== null, 'Today keeps the home treatment');
+
+  console.log('\nFocus & Journal off the bar (v56)');
+  w.go('focus');
+  ok(d.querySelector('#view .vhead .btn.back') !== null, 'Focus renders a back control');
+  ok(d.querySelector('#view .vhead .btn.back').getAttribute('aria-label') === 'Back to Today', 'back control is labelled for screen readers');
+  ok(d.querySelector('#view .vhead h2').textContent.indexOf('Focus') >= 0, 'Focus names itself in the header row');
+  ok(d.querySelector('.tabs button.on') === null, 'no tab is highlighted while Focus is open');
+  d.querySelector('#view .vhead .btn.back').click();
+  ok(w.tab === 'today', 'the back control returns to Today');
+  w.go('journal');
+  ok(d.querySelector('#view .vhead .btn.back') !== null && d.querySelector('#view .vhead h2').textContent.indexOf('Journal') >= 0, 'Journal renders the same back row');
+  ok(d.querySelector('.tabs button.on') === null, 'no tab is highlighted while Journal is open');
+  ok(d.querySelector('#jNote') !== null, 'the journal form still renders under its header');
+  w.go('today');
+
+  console.log('\nFocus control on a quest row (v56)');
+  var fq = w.A.addQuest(w.state, { title: 'Quest worth focusing on', diff: 'normal' });
+  w.go('quests');
+  var frow = [].filter.call(d.querySelectorAll('#view .item'), function (it) {
+    return it.textContent.indexOf('Quest worth focusing on') >= 0;
+  })[0];
+  ok(!!frow, 'the quest row renders');
+  var fbtn = frow && frow.querySelector('.btn.ghost[aria-label="Focus on this quest"]');
+  ok(!!fbtn, 'the row carries a Focus control');
+  fbtn.click();
+  ok(w.tab === 'focus', 'the Focus control opens the Focus view');
+  ok(w.focusPreselect === null, 'the handoff variable is cleared once it is read');
+  var fsel = d.querySelector('#fTask');
+  ok(fsel !== null && fsel.value === 'q:' + fq.id, 'the quest is preselected in the link select');
+  ok(d.querySelector('#fTask option[value="q:' + fq.id + '"][selected]') !== null, 'the preselected option is marked selected in the markup');
+  ok(d.querySelector('#fTask optgroup[label*="Main"]') !== null, 'the optgroup structure survives the preselect');
+  w.focusDraft = { label: '', skill: '', goal: '' };
+  // straight through the engine, not delQuest(): that one parks an undo toast
+  // the later undo tests would pick up first
+  w.A.deleteQuest(w.state, fq.id);
+  w.go('today');
+
+  console.log('\nLife areas move into Progress (v56)');
+  w.go('stats');
+  ok(d.querySelector('#view #skillsRow') !== null, 'on Progress the life areas render inside the content');
+  ok(d.querySelectorAll('#view #skillsRow .skillcard').length >= 5, 'the skill cards come with it');
+  ok(d.querySelector('#wrap > #skillsRow') === null, 'and no longer sit between the header and the tab bar');
+  w.go('today');
+  ok(d.querySelector('#view #skillsRow') === null, 'on Today the life areas are back out of the content');
+  ok(d.querySelector('#wrap > #skillsRow') !== null, 'parked in the shell, where the CSS hides them');
+  ok(d.querySelectorAll('.skillcard').length >= 5, 'renderSkills keeps filling it wherever it lives');
 
   console.log('\nHabit dots & records');
   w.go('habits');
@@ -339,12 +446,12 @@ setTimeout(async function () {
   var mon = w.state.habits.find(function (h) { return h.type === 'bad'; });
   ok(d.querySelector('#view').textContent.indexOf('best:') >= 0, 'monster best record shown');
 
-  console.log('\nBlack market rework');
+  console.log('\nGuilty pleasures (revamp 7 - formerly Black market)');
   w.go('market');
   w.shopTab = 'black'; w.render();
-  ok(d.querySelector('#view').textContent.indexOf('costs coins AND HP') >= 0, 'new black market blurb');
-  ok(d.querySelector('#sDmg') !== null, 'HP-cost input in black tab form');
-  w.usePreset('shop', 0);
+  ok(d.querySelector('#shop-black').textContent.indexOf('It beats lying to yourself') >= 0, 'guilty pleasures framing renders');
+  ok(d.querySelector('#sDmg') !== null, 'HP-cost input in the guilty pleasures form');
+  w.usePreset('shop', 0, 'black');
   var sinItem = w.state.shop.find(function (i) { return i.tab === 'black' && i.dmg > 0; });
   ok(!!sinItem, 'black preset carries HP cost');
   w.state.hero.coins = 500;
@@ -371,7 +478,7 @@ setTimeout(async function () {
   ok(w.state.goals.some(function (g) { return g.title === 'Promote me'; }), 'side quest promoted to main quest from UI');
   ok(d.querySelector('#view').textContent.indexOf('Promote me') >= 0, 'promoted goal visible in main quests');
   w.go('today');
-  ok(d.querySelector('#view').textContent.indexOf('Due today') >= 0, 'today tab surfaces overdue work');
+  ok(d.querySelector('#view .comingup .ag.overdue') !== null && d.querySelector('#view .comingup').textContent.indexOf('Late') >= 0, 'today tab surfaces overdue work under Coming up > Late');
 
   console.log('\nWeekly-target habits UI');
   w.go('habits');
@@ -395,35 +502,24 @@ setTimeout(async function () {
   ok(d.querySelector('.downbar') !== null, 'today tab explains the defeat (downed banner)');
   w.state.hero.woundedOn = null; w.state.hero.downed = null;
   w.go('market');
-  w.usePreset('shop', 0); // streak shield preset
+  w.usePreset('shop', 0, 'market'); // streak shield preset
   var shieldItem = w.state.shop.find(function (i) { return i.special === 'shield'; });
   ok(!!shieldItem, 'streak shield stocked from preset');
   w.state.hero.coins = 300; w.render();
   w.buy(shieldItem.id);
   ok(w.state.hero.shields === 1, 'shield equipped via UI');
   ok(d.querySelector('#hud').textContent.indexOf(String.fromCodePoint(0x1F6E1)) >= 0, 'shield icon in HUD');
+  ok(d.querySelector('#shop-protection').textContent.indexOf('Held') >= 0, 'the Protection shield card shows Held once equipped');
 
   console.log('\nTutorial replay');
   w.openSettings();
   ok(d.querySelector('#modal').textContent.indexOf('How it works') >= 0 && d.querySelector('#modal').textContent.indexOf('Interactive tour') >= 0, 'tutorial + interactive tour available in settings');
 
-  console.log('\nThe Royal Chamber (premium, Phase A)');
-  ok(d.querySelector('#modal').textContent.indexOf('Royal Chamber') >= 0, 'settings links to the Royal Chamber');
-  w.openRoyalChamber();
-  var rc = d.querySelector('#modal');
-  ok(rc.querySelector('.box.royal') !== null, 'chamber renders in its dark box');
-  ok(rc.textContent.indexOf('Founder’s Crest') >= 0 && rc.textContent.indexOf('19 EUR, once') >= 0, 'Founder offer anchors the screen');
-  ok(rc.textContent.indexOf('Royal Pass') >= 0 && rc.textContent.indexOf('2.49 EUR / month') >= 0, 'monthly pass shown below the anchor');
-  var rcFounder = rc.querySelector('.rc-offer.founder'), rcAll = rc.querySelectorAll('.rc-offer');
-  ok(rcAll.length === 2 && rcAll[0] === rcFounder, 'Founder card comes first (price anchoring)');
-  ok(rc.querySelectorAll('.rc-perk').length === 3, 'exactly three cosmetic perk cards');
-  ok(rc.textContent.indexOf('Never pay to win.') >= 0, 'never-pay-to-win footer promise present');
-  var rcBuys = rc.querySelectorAll('.rc-buy');
-  ok(rcBuys.length === 2 && rcBuys[0].disabled && rcBuys[1].disabled, 'Phase A: both purchase buttons disabled (coming soon)');
-  ok(rc.textContent.indexOf('—') < 0 && rc.textContent.indexOf('⚔') < 0, 'chamber copy: no em-dashes, no sword emoji');
+  ok(d.querySelector('#modal').textContent.indexOf('Royal Chamber') < 0, 'settings no longer mentions the Royal Chamber');
   w.closeModal();
   w.go('market');
-  ok(d.querySelector('.royaltab') !== null, 'market shows the Royal entry');
+  ok(d.querySelector('.royaltab') === null, 'market has no Royal Chamber entry point');
+  ok(d.querySelector('.shoptabs') === null, 'market has no tab switcher - sections scroll instead (revamp 7)');
   w.openSettings();
   w.tut(0);
   ok(d.querySelector('.tdots') !== null, 'tutorial replays');
@@ -460,7 +556,9 @@ setTimeout(async function () {
   ok(d.querySelector('#chTitle').value === 'Dragonheart', 'tapping a chip fills the title');
   w.saveCharacter();
   ok(w.state.hero.title === 'Dragonheart', 'earned title equipped');
-  ok(d.querySelector('#hud').textContent.indexOf('Dragonheart') >= 0, 'title shows in HUD');
+  w.openCharacter();
+  ok(d.querySelector('#modal').textContent.indexOf('Dragonheart') >= 0, 'title shows in the Hero sheet');
+  w.closeModal();
 
   console.log('\nPWA wiring');
   ok(d.querySelector('link[rel=manifest]') !== null, 'manifest linked');
@@ -502,7 +600,8 @@ setTimeout(async function () {
   ok(w.pendingDays.length === 0, 'pending days reset after add');
   w.render();
   ok(d.querySelector('#view').textContent.indexOf('not today') >= 0, 'off-day daily shows "not today"');
-  ok(d.querySelector('.chip.sched') !== null, 'schedule chip rendered on the row');
+  // the schedule chip became part of the row's meta sentence ("Normal, Mon Thu")
+  ok(d.querySelector('#view').textContent.indexOf(w.DOW[wdOther]) >= 0, 'schedule named on the row');
 
   console.log('\nInsights & weekly review (v3)');
   w.go('stats');
@@ -558,9 +657,9 @@ setTimeout(async function () {
   w.state.hero.level = 3; w.render();
   ok(!d.querySelector('#wrap').classList.contains('legend'), 'dropping below S exits Legend mode');
 
-  console.log('\nOnboarding paths (v3) - now multi-select');
-  w.onboarding();
-  ok(d.querySelector('.pathpick') !== null, 'path picker rendered in onboarding');
+  console.log('\nOnboarding paths (v3) - now multi-select, on step 2 of the wizard');
+  w.onboarding(2);
+  ok(d.querySelector('.pathpick') !== null, 'path picker rendered on step 2');
   ok(d.querySelector('#modal').textContent.indexOf('Student') >= 0, 'named paths listed');
   ok(d.querySelector('#modal').textContent.indexOf('Pick ALL that fit') >= 0, 'copy invites picking several identities');
   w.togglePath('student'); w.togglePath('founder');
@@ -571,15 +670,91 @@ setTimeout(async function () {
   ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'deselecting everything falls back to Balanced');
   w.togglePath('athlete'); w.togglePath('general');
   ok(w.pickedPaths.length === 1 && w.pickedPaths[0] === 'general', 'choosing Balanced clears other picks');
-  // theme picker with live preview
-  ok(d.querySelector('.obthemes') !== null, 'onboarding offers a theme picker');
+  // theme picker with live preview, on step 1
+  w.onboarding(1);
+  ok(d.querySelector('.obthemes') !== null, 'step 1 offers a theme picker');
   var stashState = w.state; w.state = null;   // real onboarding has no save yet
   w.previewTheme('ocean');
-  ok(w.pickedTheme === 'ocean', 'clicking a theme stores the pick');
+  ok(w.pickedTheme === 'ocean' && w.ob.theme === 'ocean', 'clicking a theme stores the pick');
   ok(d.documentElement.style.getPropertyValue('--gold').trim() === '#59c2ff', 'preview repaints the page live (ocean accent applied)');
   w.state = stashState; w.pickedTheme = null; w.applyTheme();
   ok(d.documentElement.style.getPropertyValue('--gold').trim() !== '#59c2ff', 'an existing hero’s saved theme always beats the preview');
   w.closeModal();
+
+  console.log('\nOnboarding wizard (revamp 5): the picks become the board');
+  (function () {
+    var keep = w.state; w.state = null; w.renderHUDShell(); w.onboarding();
+    ok(w.obStep === 1 && d.querySelector('#obName') !== null, 'wizard opens on step 1');
+    d.querySelector('#obName').value = 'Wiz'; w.obNext();
+    w.togglePath('student');   // Student board: 3 habits, 3 dailies, 3 rewards, Doomscrolling already seeded
+    ok(w.obStep === 2 && w.ob.paths.length === 1 && w.ob.paths[0] === 'student', 'the path pick is mirrored into ob');
+    w.obNext();
+    w.obPick('minutes', 15); w.obPick('struggle', 'phone');
+    ok(d.querySelectorAll('.obchips .chip.on').length === 2 && w.ob.minutes === 15 && w.ob.struggle === 'phone', 'step 3 chips write the time budget and the struggle');
+    w.obNext();
+    var habitTitles = w.obSug.habits.map(function (h) { return h.title; });
+    ok(habitTitles.length === 3 && d.querySelectorAll('.obitem').length === 4, 'step 4 shows the three Student habits plus the struggle monster');
+    ok(d.querySelector('#modal').textContent.indexOf('Doomscrolling') >= 0, 'a phone struggle suggests the Doomscrolling monster');
+    w.obToggle('habits', 0);
+    ok(d.querySelectorAll('.obitem.on').length === 3 && w.ob.habitsOff[habitTitles[0]] === true, 'a habit row toggles off');
+    w.obTarget(1, 5);
+    ok(w.ob.targets[habitTitles[1]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
+    w.obNext();
+    ok(d.querySelectorAll('.obitem').length === 3 && d.querySelectorAll('.obitem.on').length === 2, '15 minutes switches on the first two dailies of three');
+    d.querySelector('#obCustom').value = 'Call grandma';
+    w.obNext();
+    ok(w.ob.custom === 'Call grandma', 'the custom quest field is read on Continue');
+    ok(d.querySelectorAll('.obcard').length === 3 && d.querySelectorAll('.obcard.on').length === 3, 'step 6 shows the Student rewards, first three on');
+    w.obToggle('rewards', 2);
+    ok(d.querySelectorAll('.obcard.on').length === 2, 'a reward card toggles off');
+    w.obNext();
+    ok(d.querySelector('#obStart') !== null && d.querySelector('#modal').textContent.indexOf('Wiz') >= 0, 'Ready screen shows the name and Start');
+    d.querySelector('#obStart').click();
+    var s = w.state;
+    ok(s && s.hero.name === 'Wiz', 'Start creates the hero');
+    ok(!s.habits.some(function (h) { return h.title === habitTitles[0]; }), 'the habit toggled off on step 4 is absent');
+    var targeted = s.habits.find(function (h) { return h.title === habitTitles[1]; });
+    ok(targeted && targeted.target === 5, 'the picked weekly target is applied through editHabit');
+    ok(s.habits.filter(function (h) { return h.type === 'bad' && h.title === 'Doomscrolling'; }).length === 1, 'the struggle monster exists as a bad habit, once (Student already seeds it)');
+    ok(s.quests.filter(function (q) { return q.recurring; }).length === 2, 'with 15 minutes only two dailies exist');
+    var custom = s.quests.find(function (q) { return q.title === 'Call grandma'; });
+    ok(custom && !custom.recurring && !custom.main, 'the custom quest is added as a side quest');
+    ok(!s.shop.some(function (it) { return it.title === 'Night out with friends'; }) && s.shop.some(function (it) { return it.special === 'shield'; }), 'the reward toggled off is gone, the Streak Shield stays');
+    var onb = s.settings.onboard;
+    ok(onb && Object.keys(onb).sort().join(',') === 'minutes,paths,struggle' && onb.minutes === 15 && onb.struggle === 'phone' && onb.paths.length === 1 && onb.paths[0] === 'student', 'settings.onboard has exactly {paths, struggle, minutes}');
+    ok(d.querySelector('#modal.show') === null && w.ob.name === '' && w.pickedPaths[0] === 'general', 'the wizard closes and its picks reset for the next hero');
+
+    // skipping from step 3 lands on Ready with the defaults, and Start still works
+    w.state = null; w.renderHUDShell(); w.onboarding();
+    d.querySelector('#obName').value = 'Skipper'; w.obNext();
+    ok(d.querySelector('#modal').textContent.indexOf('Skip') < 0, 'no Skip before step 3');
+    w.obNext();
+    ok(w.obStep === 3 && d.querySelector('#modal').textContent.indexOf('Skip') >= 0, 'Skip appears from step 3');
+    w.obSkip();
+    ok(d.querySelector('#obStart') !== null, 'skipping lands on the Ready screen');
+    d.querySelector('#obStart').click();
+    ok(w.state && w.state.hero.name === 'Skipper' && w.state.settings.onboard.minutes === 30 && w.state.settings.onboard.struggle === 'none', 'Start after a skip creates the hero with the defaults');
+    ok(w.state.quests.length === 2 && w.state.habits.length === 5, 'the skipped board is the untouched Balanced board');
+
+    // a struggle no path seeds is added as a new monster
+    w.state = null; w.renderHUDShell(); w.onboarding();
+    d.querySelector('#obName').value = 'Owl'; w.obNext(); w.obNext(); w.obPick('struggle', 'sleep'); w.obSkip();
+    d.querySelector('#obStart').click();
+    ok(w.state.habits.some(function (h) { return h.type === 'bad' && h.title === 'Late-night scrolling'; }), 'a sleep struggle adds the Late-night scrolling monster');
+
+    // createHero from a later step with a blank name goes back to step 1 and points at the field
+    w.state = null; w.renderHUDShell(); w.onboarding(3);
+    w.createHero();
+    ok(w.state === null && w.obStep === 1 && d.querySelector('#obNameErr').style.display !== 'none', 'a blank name sends createHero back to step 1 with the inline error');
+
+    // Settings still replays the slides
+    w.state = keep; w.render();
+    w.openSettings(); w.tut(0);
+    ok(d.querySelector('.tutbig') !== null && d.querySelector('#modal').textContent.indexOf('YOUR LIFE IS THE GAME') >= 0, 'tut(0) from Settings still shows the slides');
+    w.tut(4);
+    ok(d.querySelector('#modal').textContent.indexOf('Done') >= 0, 'with a hero the last slide says Done');
+    w.closeModal();
+  })();
 
   console.log('\nMastery tiers past Master (v4)');
   w.state.skills[0].level = 15;
@@ -663,7 +838,7 @@ setTimeout(async function () {
   ok(d.querySelector('.focusbars') !== null && d.querySelector('.fseg') !== null, 'stacked focus bars render');
   ok(d.querySelector('.focuslegend') !== null, 'focus legend shows life areas');
 
-  console.log('\nInteractive tour (v6)');
+  console.log('\nInteractive tour (v6, rewritten v56)');
   w.go('today');
   w.startTour();
   w.positionTour(d.querySelector('#hud')); // force synchronous positioning for the test
@@ -673,6 +848,21 @@ setTimeout(async function () {
   ok(w.tourStep === 1, 'tour advances a step');
   w.endTour();
   ok(d.querySelector('#tour.show') === null, 'tour closes cleanly');
+  ok(w.TOUR.length === 7, 'tour is seven steps (' + w.TOUR.length + ')');
+  ok(w.TOUR.every(function (s) { return s.sel.indexOf('#skillsRow') < 0; }), 'no step targets #skillsRow, which moves between the shell and the view');
+  ok(w.TOUR.every(function (s) { return s.body.indexOf('—') < 0 && s.body.indexOf('.') < 0; }), 'every step is one line, no em dashes');
+  // the point of a spotlight is that it lands on something: walk the list the
+  // way showTourStep() does and check each target resolves after its own go()
+  w.state.settings.mascot = true;
+  var tourMisses = w.TOUR.filter(function (s) {
+    w.go(s.tab);
+    w.mascotMoodSync();
+    var hit = null;
+    s.sel.split(',').some(function (sel) { hit = d.querySelector(sel.trim()); return !!hit; });
+    return !hit;
+  }).map(function (s) { return s.tab + ' ' + s.sel; });
+  ok(tourMisses.length === 0, 'every tour step finds its target after its own go()' + (tourMisses.length ? ' -> ' + tourMisses.join(' | ') : ''));
+  w.go('today');
 
   console.log('\nCloud sync UI (v7)');
   ok(typeof w.SMLCloud === 'object', 'cloud client loads in the page');
@@ -719,7 +909,10 @@ setTimeout(async function () {
   w.go('quests');
   ok(d.querySelector('#view').textContent.indexOf('invested') >= 0, 'goal card shows invested deep-work time');
   w.go('today');
-  ok(d.querySelector('#hud .glance') !== null, 'HUD shows the today-at-a-glance line');
+  // today's gains moved out of the header and into the Hero sheet
+  w.openCharacter();
+  ok(d.querySelector('#modal .glance') !== null, 'Hero sheet shows the today-at-a-glance line');
+  w.closeModal();
 
   console.log('\nDaylight theme (v7)');
   w.setTheme('daylight');
@@ -1191,7 +1384,9 @@ setTimeout(async function () {
   await new Promise(function (r) { setTimeout(r, 20); });
   ok(w.mascotChatBusy === false, 'no longer busy once the reply lands');
   ok(d.querySelector('.mchat-row.sage') !== null && d.querySelector('.mchat-row.sage').textContent.indexOf('One step at a time') >= 0, 'Sage\'s reply renders in its own bubble');
-  ok(sageCalls.length === 1 && /\/functions\/v1\/sage-chat$/.test(sageCalls[0].url), 'the real chat call hits the sage-chat function');
+  var sageOnly = sageCalls.filter(function (c) { return /\/functions\/v1\/sage-chat$/.test(c.url); });
+  ok(sageOnly.length === 1, 'the real chat call hits the sage-chat function');
+  sageCalls = sageOnly;   // later assertions read sageCalls[0]; sync traffic after a day change must not shift it
   ok(sageCalls[0].body.brief.indexOf(w.state.hero.name) >= 0 && sageCalls[0].body.brief.indexOf('streak') >= 0, 'a compact state summary rides along as context');
   // an error from the function shows as Sage's own line, not a crash
   w.SMLCloud.configure({ fetch: function () {
@@ -1303,6 +1498,48 @@ setTimeout(async function () {
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
+
+  console.log('\nSage Actions: propose_steps checklist card');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok9', refresh_token: 'sage-rt9', user: { id: 'sage-uid9', email: 's@b.c' } }));
+  var stepsGoal = w.A.addGoal(w.state, { title: 'Ship the portfolio' });
+  var questsBeforeSteps = w.state.quests.length;
+  w.SMLCloud.configure({ fetch: function () {
+    return Promise.resolve({ status: 200, ok: true, text: function () { return Promise.resolve(JSON.stringify({ reply: 'Here is a plan.', action: { type: 'propose_steps', params: { main_quest_id: stepsGoal.id, steps: [{ title: 'Pick three projects', difficulty: 'easy' }, { title: 'Write the case studies', difficulty: 'hard' }, { title: 'Publish the site', difficulty: 'normal' }] } }, remaining: 12 })); } });
+  } });
+  w.toggleMascot(true); d.querySelector('.mchat-entry').click();
+  d.querySelector('#mChatInput').value = 'break down my portfolio quest';
+  w.sageSend();
+  await new Promise(function (r) { setTimeout(r, 20); });
+  var stepBoxes = d.querySelectorAll('.mchat-action .mstepbox');
+  ok(stepBoxes.length === 3 && stepBoxes[0].checked, 'a propose_steps action renders one checked checkbox per step');
+  ok(w.state.quests.length === questsBeforeSteps, 'nothing is added until the user confirms');
+  stepBoxes[1].checked = false;
+  d.querySelector('.mchat-action .btn.go').click();
+  var linked = w.state.quests.filter(function (q) { return q.main === stepsGoal.id; });
+  ok(linked.length === 2 && linked[0].title === 'Pick three projects' && linked[1].title === 'Publish the site', 'Add selected creates only the checked steps, linked to the main quest');
+  ok(linked[0].diff === 'easy' && linked[1].diff === 'normal', 'each step keeps its proposed difficulty');
+  ok(d.querySelector('.mchat-action') === null, 'the checklist card resolves after adding');
+  w.SMLCloud.configure({ fetch: null });
+  w.localStorage.removeItem('sml.cloud.session.v1');
+  w.mascotChatLog = []; w.mascotChatBusy = false;
+  w.toggleMascot(false);
+
+  console.log('\nQuick add: plain phrases fill the add forms');
+  w.go('quests');
+  var tmr = new Date(); tmr.setDate(tmr.getDate() + 1); var tmrKey = w.RPG.todayKey(tmr);
+  d.querySelector('#qTitle').value = 'Finish the essay by tomorrow hard';
+  w.quickParse('q');
+  ok(d.querySelector('#qDiff').value === 'hard' && d.querySelector('#qDue').value === tmrKey, 'typing a phrase pre-fills difficulty and due date');
+  ok(d.querySelector('#qHint').textContent.indexOf('hard') >= 0, 'a hint line says what was understood');
+  w.addQuest();
+  var parsedQ = w.state.quests[w.state.quests.length - 1];
+  ok(parsedQ.title === 'Finish the essay' && parsedQ.diff === 'hard' && parsedQ.due === tmrKey, 'adding strips the phrases from the title and keeps the parsed fields');
+  d.querySelector('#dTitle').value = 'Stretch every weekday';
+  w.quickParse('d');
+  ok(JSON.stringify(w.pendingDays) === JSON.stringify([1, 2, 3, 4, 5]), 'a repeat phrase selects the weekday buttons');
+  w.addDaily();
+  var parsedD = w.state.quests[w.state.quests.length - 1];
+  ok(parsedD.recurring === true && parsedD.title === 'Stretch' && JSON.stringify(parsedD.days) === JSON.stringify([1, 2, 3, 4, 5]), 'the daily is created with the parsed days and a clean title');
 
   console.log('\nSage Actions: conversation memory + action feedback');
   w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'sage-tok4', refresh_token: 'sage-rt4', user: { id: 'sage-uid4', email: 's@b.c' } }));
@@ -1466,6 +1703,100 @@ setTimeout(async function () {
     d.dispatchEvent(new w.Event('visibilitychange'));
     ok(w.state.lastSeenDay === w.RPG.todayKey(), 'foreground resume immediately corrects the stale day (no reload, no waiting on the poll interval)');
     ok(daily.doneOn !== yKey, 'yesterday\'s completed daily is reset on resume, not stuck showing done');
+  })();
+
+  console.log('\nToday as the productivity dashboard (revamp 4)');
+  (function () {
+    var today = w.RPG.todayKey();
+    function dOff(n) { var dt = new w.Date(); dt.setDate(dt.getDate() + n); return w.RPG.todayKey(dt); }
+    var dueQ = w.A.addQuest(w.state, { title: 'Hand in the case study', diff: 'normal', due: today });
+    var tomQ = w.A.addQuest(w.state, { title: 'Book the train to Lille', diff: 'easy', due: dOff(1) });
+    w.state.settings.cloudNudgeOff = true;
+    w.go('today');
+    // order and the Now panel
+    var firstPanel = d.querySelector('#view .panel');
+    ok(firstPanel !== null && firstPanel.classList.contains('now'), 'Now is the first panel on Today (the tour spotlights #view .panel)');
+    var now = d.querySelector('#view .panel.now');
+    ok(now && now.querySelector('.item') !== null && now.textContent.indexOf('Hand in the case study') >= 0, 'a quest due today is a full row in Now');
+    ok(now && now.querySelector('.item .btn.go') !== null && now.querySelector('.item .btn.ghost[aria-label="Focus on this quest"]') !== null, 'Now rows keep the Clear and Focus controls from questRow');
+    ok(now && now.querySelector('h3 .chestring .chestchip') !== null, 'the chest ring label carries the chestchip class');
+    ok(d.querySelector('#view').textContent.indexOf('Quick Add') < 0 && d.querySelector('#view').textContent.indexOf('Daily quests') < 0, 'the old Quick Add and Daily quests panels are gone');
+    // Coming up
+    var cu = d.querySelector('#view .panel.comingup');
+    ok(cu !== null && cu.textContent.indexOf('Book the train to Lille') >= 0 && cu.textContent.indexOf('Tomorrow') >= 0, 'a quest due tomorrow lists under Coming up > Tomorrow');
+    ok(cu && cu.textContent.indexOf('Hand in the case study') < 0, 'a due-today quest is not repeated under Coming up');
+    // Habits today
+    var hp = d.querySelector('#view .panel.habits');
+    ok(hp !== null && hp.querySelector('.item .btn.go') !== null && hp.querySelector('.hdots') !== null, 'Habits today lists the good habits with the Done control and the dots');
+    ok(hp && hp.querySelector('details.slipped') !== null && hp.querySelector('details.slipped .item.monster .btn.slip') !== null, 'monsters sit behind a Slipped? fold with the I slipped control');
+    ok(hp && hp.textContent.indexOf('this wk') >= 0 && hp.querySelector('.wkring .ring') !== null, 'a weekly-target habit shows its ring and count on Today');
+    // quick actions
+    var qa = d.querySelectorAll('#view .quick.qa button.qab:not(.potion)');
+    ok(qa.length === 3, 'quick actions row has three buttons (' + qa.length + ')');
+    var qaTxt = d.querySelector('#view .quick.qa').textContent;
+    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') >= 0, 'they read Add, Focus, Ask Sage');
+    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 3, 'each quick action carries a sprite icon');
+    w.quickAdd();
+    ok(w.tab === 'quests' && d.activeElement === d.querySelector('#qTitle'), 'Add lands on the Quests form with the title field focused');
+    w.go('today');
+    // Log your day: collapsed, expanded, saved, summary, archive
+    delete w.state.journal[today]; delete w.state.sleep[today]; w.render();
+    var lc = d.querySelector('#view .panel.logcard');
+    ok(lc !== null && lc.textContent.indexOf('+15 XP') >= 0 && d.querySelector('#view #jNote') === null, 'the log card starts collapsed with the XP promise');
+    d.querySelector('#view .logcard .logmain').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .moods button[aria-pressed]') !== null && d.querySelector('#view .hrbtn') !== null && d.querySelector('#view #slHours') !== null, 'tapping the row expands the same journal form on Today');
+    d.querySelector('#view .moods button[aria-label="Mood: Good"]').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .moods button.on') !== null, 'picking a mood re-renders with the card still open');
+    d.querySelector('#view #jNote').value = 'dashboard day';
+    d.querySelector('#view #slHours').value = '7.5';
+    w.saveDailyLog();
+    var je = w.state.journal[today], se = w.state.sleep[today];
+    ok(je && je.mood === 'good' && je.note === 'dashboard day' && se && se.hours === 7.5, 'saveDailyLog() saves mood, note and sleep from the Today form');
+    lc = d.querySelector('#view .panel.logcard');
+    ok(lc && lc.classList.contains('logged') && lc.textContent.indexOf('Good') >= 0 && lc.textContent.indexOf('7.5h') >= 0, 'once saved the row shows the logged mood and sleep');
+    ok(lc && lc.querySelector('[aria-label="Edit today\'s log"]') !== null, 'the saved row offers Edit');
+    lc.querySelector('[aria-label="Edit today\'s log"]').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view #jNote').value === 'dashboard day', 'Edit reopens the form with the saved note');
+    w.go('today');
+    d.querySelector('#view .logcard .archivebtn').click();
+    ok(d.querySelector('#modal.show') !== null && d.querySelector('#modal #jSearch') !== null && d.querySelector('#modal details.jmonth') !== null, 'Archive opens the journal archive in the modal');
+    w.closeModal();
+    // Journal view still draws the same form
+    w.go('journal');
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .hrbtn') !== null && d.querySelector('#view').textContent.indexOf('saved ✓') >= 0, 'the Journal view renders the shared form with its saved state');
+    w.go('today');
+    // Sage's daily line
+    w.localStorage.removeItem('sml.mascot.day');
+    w.toggleMascot(false);
+    w.mascotDailyGreet();
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'the daily greet renders one Sage line under the greeting');
+    ok(d.querySelector('#mBubble').hidden === true, 'the greet no longer pops the bubble');
+    ok(d.querySelector('#view .sageline').textContent.indexOf(w.RPG.briefing(w.state).lines[0].text) >= 0, 'the line is the first briefing line');
+    w.mascotDailyGreet();
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'greeting again on the same day still renders one line');
+    d.querySelector('#view .sageline .btn').click();
+    ok(d.querySelector('#mBubble').hidden === false && d.querySelector('#mBubble .mline') !== null, 'the More control opens the briefing bubble');
+    w.toggleMascot(false);
+    w.go('quests'); w.go('today');
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'the line survives navigation for the rest of the day');
+    // empty Now
+    var keep = w.state.quests;
+    w.state.quests = w.state.quests.filter(function (q) { return !q.recurring && q.due !== today; });
+    w.render();
+    var nowEmpty = d.querySelector('#view .panel.now .ebox');
+    ok(nowEmpty !== null && nowEmpty.textContent.indexOf('Nothing due right now') >= 0 && nowEmpty.querySelectorAll('.btn').length === 2, 'an empty Now offers Add a quest and Start focus');
+    w.state.quests = keep; w.render();
+    // header carry-overs
+    ok(d.querySelector('#hud .who .nm') !== null, 'the header name sits in its truncating element');
+    var css = fs2.readFileSync(__dirname + '/styles.css', 'utf8');
+    ok(/\.hud \.nm\{[^}]*text-overflow:ellipsis/.test(css) && /\.hud \.nm\{[^}]*min-width:0/.test(css) && /\.hud \.side\{[^}]*flex-wrap:wrap/.test(css), 'stylesheet truncates the name and lets the pills wrap instead of clipping');
+    w.openCharacter();
+    var rn = d.querySelector('#modal .ranknext');
+    ok(rn !== null && rn.tagName === 'BUTTON' && /rank/i.test(rn.getAttribute('aria-label') || ''), 'the Hero sheet rank line is a labelled button');
+    rn.click();
+    ok(d.querySelector('#modal.show') !== null && d.querySelector('#modal').textContent.indexOf('RANKS') >= 0, 'tapping it opens the ranks sheet');
+    w.closeModal();
+    w.A.deleteQuest(w.state, dueQ.id); w.A.deleteQuest(w.state, tomQ.id); w.render();
   })();
 
   console.log('\nRuntime errors during session: ' + errors.length);

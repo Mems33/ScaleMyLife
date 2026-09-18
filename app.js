@@ -10,6 +10,18 @@ var overlaySeq=0;
 var tab='today', shopTab='market', pendingMood=null, pendingQuality=null;
 var pendingNote=null, pendingHours=null; // journal drafts, preserved across re-renders
 var focusDraft={label:'',skill:'',goal:''}; // focus form draft - selecting music/mode must never wipe typed text
+/* Set by the Focus button on a quest row, read once by renderFocus and then
+   cleared. It is a handoff, not state: leave it set and every later visit to
+   Focus would silently re-link the same quest. */
+var focusPreselect=null;
+/* Today's dashboard state. sageLineDay is the day key for which Sage's daily
+   line shows under the greeting (set by mascotDailyGreet, compared against
+   todayKey at render time, so it goes away by itself at midnight). logOpen is
+   whether the "Log your day" card is expanded; logAnim plays the 160ms expand
+   once, on the tap that opened it, and not again on every mood re-render.
+   None of this is saved: it is screen state, and persisting it would reopen
+   the card on every device. */
+var sageLineDay=null, logOpen=false, logAnim=false;
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var boardView='global';          // Stats leaderboard: 'global' | 'friends'
@@ -43,13 +55,16 @@ var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
 var pickedPaths=['general'];     // onboarding paths (you can be several things at once)
+/* The path cards live on step 2 of the wizard, so every toggle re-renders
+   that step. onboarding() with no argument means step 1 (the hero), which is
+   why the number is spelled out here. */
 function togglePath(id){
-  if(id==='general'){ pickedPaths=['general']; onboarding(); return; }   // Balanced stands alone
+  if(id==='general'){ pickedPaths=['general']; onboarding(2); return; }   // Balanced stands alone
   var at=pickedPaths.indexOf(id);
   if(at>=0) pickedPaths.splice(at,1); else pickedPaths.push(id);
   pickedPaths=pickedPaths.filter(function(p){return p!=='general';});
   if(!pickedPaths.length) pickedPaths=['general'];
-  onboarding();
+  onboarding(2);
 }
 
 var RANK_COLORS={E:'#9a94b8',D:'#5aa2ff',C:'#3ddc84',B:'#b07bff',A:'#ff9d47',S:'#f5c542',SS:'#ff5fa2'};
@@ -285,7 +300,7 @@ function defeatScreen(res){
     '<div class="sub">The monsters dragged you down. You’re <b style="color:var(--hp)">Downed</b>.</div>'+
     (cost>0?'<div class="sub" style="color:var(--hp)">You lost <b>'+cost+' 💰</b> in the fall.</div>':'')+
     '<div class="sub" style="color:var(--muted)">While downed: <b>half XP</b> and <b>no coins</b> earned. Rest back to <b>full HP</b> - sleep well or heal at the 🛏️ Hotel - to <b>rise</b>.</div>'+
-    '<button class="btn go" onclick="closeOverlay();go(\'market\');shopTab=\'hotel\';render()">🛏️ Go rest</button>'+
+    '<button class="btn go" onclick="closeOverlay();goMarket(\'hotel\')">🛏️ Go rest</button>'+
     '<button class="btn" onclick="closeOverlay()">Get up</button></div>';
 }
 function riseScreen(cb){
@@ -328,7 +343,9 @@ function usePotion(){
 function closeOverlay(){ $('#overlay').className=''; render(); }
 
 /* ---------- rendering ---------- */
-function skillName(id){ var s=state.skills.find(function(k){return k.id===id;}); return s? s.icon+' '+s.name : null; }
+/* Both parts are typed by the user (life-area name and its emoji override) and
+   both callers drop the result straight into HTML, so escape here, once. */
+function skillName(id){ var s=state.skills.find(function(k){return k.id===id;}); return s? esc(s.icon)+' '+esc(s.name) : null; }
 
 /* today at a glance: xp, coins earned and focus minutes logged since midnight */
 function todayGlance(){
@@ -341,8 +358,16 @@ function todayGlance(){
   if(min) bits.push('<b style="color:var(--blue)">'+fmtHm(min)+' \u23f3</b>');
   return '<div class="nextrank glance" title="Earned today">today '+bits.join(' \u00b7 ')+'</div>';
 }
+/* The compact header: two slim rows on a phone, one line from 860px up.
+   Row 1 is identity (avatar, name, rank, level, coins, streak), row 2 is the
+   two bars. Anything that is not glanceable every single screen belongs in the
+   Hero sheet (openCharacter), not here: the header is what stands between the
+   user and the first real card on Today. Every selector below is under test:
+   .avatar keeps its aria-label and openCharacter, .rank keeps role/tabindex,
+   .bar.hp keeps role/tabindex and openDefeatInfo, #coinCounter is where
+   flyCoins() lands, and hurtBar() flashes .bar.hp. */
 function renderHUD(){
-  var h=state.hero, need=RPG.xpForLevel(h.level), r=RPG.rankFor(h.level), nr=RPG.nextRank(h.level);
+  var h=state.hero, need=RPG.xpForLevel(h.level), r=RPG.rankFor(h.level);
   var col=RANK_COLORS[r.code]||'var(--gold)';
   var maxHp=RPG.maxHpOf(state);
   var fr=h.frame?RPG.frameById(h.frame):null;
@@ -354,24 +379,26 @@ function renderHUD(){
       :'<span class="cloudchip on" title="Cloud sync on - tap for status" onclick="event.stopPropagation();openSettings()">☁✓</span>')
     :'';
   var buffM=RPG.buffXpMult(state);
-  var buff=buffM>1?'<div class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+' XP</div>':'';
+  var buff=buffM>1?'<span class="buffpill" title="Focus Elixir active - XP boosted for the rest of today">🧪 ×'+(+buffM.toFixed(2))+'</span>':'';
+  var hpPct=Math.max(0,Math.min(100,h.hp/maxHp*100));
   $('#hud').innerHTML=
-    '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Customize character" aria-label="Customize character">'+avHtml(h.avatar)+'</div>'+
-    '<div class="who"><div class="name">'+esc(h.name)+' <span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="See all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">Rank '+r.code+' · '+r.name+'</span>'+asc+cloudChip+'</div>'+
-    (h.title
-      ?'<div class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</div>'
-      :'<div class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</div>')+
+    '<div class="hdrow">'+
+      '<div class="avatar'+(fr?' framed':'')+(h.downed?' downed':'')+'" style="'+avStyle+'" role="button" tabindex="0" onclick="openCharacter()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openCharacter()}" title="Your hero: rank, title, HP and life areas" aria-label="Customize character">'+avHtml(h.avatar)+'</div>'+
+      '<div class="who"><div class="name"><span class="nm">'+esc(h.name)+'</span>'+
+        '<span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="Rank '+r.code+', '+esc(r.name)+' - see all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+'</span>'+
+        asc+cloudChip+'</div></div>'+
+      '<div class="side">'+
+        (h.woundedOn===RPG.todayKey()?'<span class="wound" title="Wounded today: you earn half XP until you heal">🩸 wounded</span>':'')+
+        buff+
+        '<span class="lvl">LV.'+h.level+'</span>'+
+        '<span class="coin" id="coinCounter" title="Coins to spend in Rewards">💰 '+h.coins+'</span>'+
+        '<span class="flame" title="'+h.streak+' day streak'+((h.shields||0)>0?' - a Streak Shield is held':'')+'">🔥 '+h.streak+((h.shields||0)>0?' <span aria-label="Streak Shield held">🛡</span>':'')+'</span>'+
+      '</div>'+
+    '</div>'+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
-      '<div class="bar hp" role="button" tabindex="0" style="cursor:pointer" title="What happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+(h.hp/maxHp*100)+'%"></i><b>HP '+h.hp+' / '+maxHp+'</b></div>'+
-    '</div></div>'+
-    '<div class="side"><div class="lvl">LV.'+h.level+'</div>'+
-      '<div class="coin" id="coinCounter">💰 '+h.coins+'</div>'+
-      '<div class="flame">🔥 '+h.streak+' day'+(h.streak===1?'':'s')+((h.shields||0)>0?' <span title="Streak Shield active">🛡</span>':'')+'</div>'+
-      todayGlance()+
-      buff+
-      (h.woundedOn===RPG.todayKey()?'<div class="nextrank" style="color:var(--hp)">🩸 wounded · ×0.5 XP</div>':'')+
-      (nr?'<div class="nextrank" style="cursor:pointer" onclick="openRanks()">▲ rank '+nr.code+' at Lv.'+nr.min+'</div>':'<div class="nextrank" style="color:var(--gold);cursor:pointer" onclick="openAscend()">✦ MAX - Ascend ▶</div>')+'</div>';
+      '<div class="bar hp'+(h.hp>=maxHp?' full':'')+'" role="button" tabindex="0" style="cursor:pointer" title="Health '+h.hp+' of '+maxHp+' - what happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+hpPct+'%"></i></div>'+
+    '</div>';
 }
 
 function renderSkills(){
@@ -387,16 +414,62 @@ function renderSkills(){
   $('#skillsRow').innerHTML = html;
 }
 
-var TABS=[['today','🏠','TODAY','pri home'],['quests','📜','QUESTS','pri'],['habits','🌱','HABITS','pri'],['focus','⏳','FOCUS','sec'],['market','🏪','MARKET','sec'],['journal','📔','JOURNAL','sec'],['stats','📊','STATS','sec']];
+/* Tab bar. Column 2 is a sprite icon name, not an emoji: emoji render at a
+   different size and hue on every platform, which is exactly what a navigation
+   bar cannot afford. Emoji stay everywhere they carry meaning (life areas,
+   rewards, avatars, monsters, Sage). A name with no matching <symbol> in
+   index.html draws nothing, so keep the two in sync.
+
+   Five destinations, no more. Focus and Journal kept their views and their
+   go() ids but left the bar: seven buttons on a 375px phone gave every label
+   about 50px, which is why the labels were down at 9px. Focus is reached from
+   a quest row or from Today, Journal from Today. The ids here are what go()
+   receives, so 'market' and 'stats' stay as written even though the labels
+   read Rewards and Progress. Renaming an id silently breaks every saved
+   onclick string in the app. */
+var TABS=[['today','home','TODAY','pri home'],['quests','scroll-text','QUESTS','pri'],['habits','sprout','HABITS','pri'],['market','gift','REWARDS','sec'],['stats','bar-chart-3','PROGRESS','sec']];
 function renderTabs(){
   var chest=A.chestStatus(state);
   $('#tabs').innerHTML = TABS.map(function(t){
-    var dot=((t[0]==='quests'||t[0]==='today')&&chest.eligible)||(t[0]==='focus'&&state.activeFocus)?'<span class="dot"></span>':'';
-    return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+t[1]+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
+    /* A running focus session used to light the Focus tab. That tab is gone,
+       and #focuspill already follows the user across every screen, so the
+       chest is the only thing left worth a dot. */
+    var dot=(t[0]==='quests'||t[0]==='today')&&chest.eligible?'<span class="dot"></span>':'';
+    return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+svgIcon(t[1])+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
   }).join('');
 }
-function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; navAnim=true; render(); }
+/* Focus and Journal are off the tab bar, so each one carries its own way back.
+   Without this row the only exit on a phone PWA is the browser gesture, which
+   an installed app does not have. go('today') and not history.back(): the app
+   never pushes history entries. */
+function viewBackHead(title){
+  return '<div class="vhead"><button class="btn ghost back" title="Back to Today" aria-label="Back to Today" onclick="go(\'today\')">'+svgIcon('chevron-left')+'</button>'+
+    '<h2>'+esc(title)+'</h2></div>';
+}
+function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; logOpen=false; navAnim=true; render(); }
+/* Rewards is one scrolling page now (revamp 7), so shopTab no longer picks
+   which grid renders - all three (market/hotel/black) are always on the
+   page. It still names which section a link should land on: the "Rest"
+   buttons on the defeat/wounded banners call this instead of hand-rolling
+   go('market');shopTab=...;render(), and it scrolls the matching #shop-*
+   panel into view once the page is up. */
+function goMarket(section){
+  go('market');
+  shopTab=section;
+  var el=document.getElementById('shop-'+section);
+  if(el) el.scrollIntoView({block:'start'});
+}
 
+/* One icon from the sprite in index.html. `cls` adds a modifier, 'sm' for the
+   14px version used inside meta text. Icons inherit the surrounding text colour
+   through currentColor, so they never need a colour of their own. Named
+   svgIcon, not icon, because emptyState() already takes an `icon` argument and
+   a shadowed name here would be a silent failure. */
+function svgIcon(name,cls){
+  return '<svg class="i'+(cls?' '+cls:'')+'" aria-hidden="true" focusable="false"><use href="#i-'+name+'"/></svg>';
+}
+/* Kept for the creation flows (difficulty is a real choice there, and shows its
+   payout). List rows use the meta sentence in questRow instead. */
 function diffChip(d){ return '<span class="chip '+d+'">'+RPG.DIFF[d].label+' · '+RPG.DIFF[d].xp+'xp/'+RPG.DIFF[d].coins+'💰</span>'; }
 /* illustrated empty state: a friendly scene instead of a bare line of text */
 function emptyState(icon,title,hint,cta){
@@ -416,45 +489,101 @@ var PRESETS={
   ],
   good:['Read 20 pages','Gym / 30 min walk','Study / practice 20 min','Plan tomorrow (5 min)','In bed by 23:30','Drink 2L water','Batch-cook Sunday'],
   bad:['Instagram before 1 PM','Doomscrolling','Late-night YouTube','Snoozing alarm','Gaming before work is done'],
+  /* market items carry a 6th element, tags: path ids (student/athlete/founder/
+     coder/gamer/creative), 'all' for anything universal, or a struggle id
+     (phone/procrastination/sleep/junk) the item answers. suggestedRewards()
+     in the Rewards screen reads this; hotel/black never needed it so they
+     stay 5-wide. Keep the Streak Shield at market[0] - the shield-purchase
+     flow (usePreset('shop',0,'market')) and its test depend on that index. */
   shop:{
-    market:[['🛡 Streak Shield - auto-saves one missed day',200,0,0,'shield'],['Gaming: 1 hour',60],['Gaming: full evening',150],['1 episode of a series',40],['Movie night',80],['Café treat',35],['Sweet treat',30],['Takeaway',120],['Sleep-in Saturday',100],['New game (save up!)',600]],
+    market:[['🛡 Streak Shield - auto-saves one missed day',200,0,0,'shield'],
+      ['Gaming: 1 hour',60,0,0,null,['gamer','coder']],
+      ['Gaming: full evening',150,0,0,null,['gamer']],
+      ['1 episode of a series',40,0,0,null,['all']],
+      ['Movie night',80,0,0,null,['all']],
+      ['Café treat',35,0,0,null,['all']],
+      ['Sweet treat',30,0,0,null,['all']],
+      ['Takeaway',120,0,0,null,['junk']],
+      ['Sleep-in Saturday',100,0,0,null,['sleep','procrastination']],
+      ['New game (save up!)',600,0,0,null,['gamer']],
+      ['Phone-free evening treat',50,0,0,null,['phone']],
+      ['New book',35,0,0,null,['student','creative']],
+      ['Post-workout treat',45,0,0,null,['athlete']],
+      ['New tool or plugin',90,0,0,null,['coder','founder']],
+      ['Night out with friends',150,0,0,null,['founder','student']]],
     hotel:[['Power nap (20 min)',25,15],['Walk outside',15,10],['Long shower / bath',40,20],['Full rest evening',90,40],['Massage / spa',200,60]],
     black:[['Instagram before 1 PM (1h)',120,0,8],['Gaming before work is done (1h)',100,0,8],['Junk food feast',90,0,10],['Netflix past midnight',110,0,12],['Skip-the-gym pass',70,0,6]]
   }
 };
-function presetChips(kind){
-  var arr = kind==='shop' ? PRESETS.shop[shopTab] : PRESETS[kind];
+/* tabId picks which PRESETS.shop.{market,hotel,black} array a 'shop' kind
+   reads; the other kinds (quest/good/bad) ignore it. Rewards now shows all
+   three shop forms on one page at once, so each one passes its own tabId
+   instead of relying on the single shared shopTab global. Omitting tabId
+   (the Quests/Habits call sites below never pass one) falls back to shopTab
+   for backward compatibility. */
+function presetChips(kind,tabId){
+  var arr = kind==='shop' ? PRESETS.shop[tabId||shopTab] : PRESETS[kind];
   var chips = arr.map(function(p,i){
-    return '<button onclick="usePreset(\''+kind+'\','+i+')">+ '+esc(kind==='quest'||kind==='shop'?p[0]:p)+(kind==='shop'?' · '+p[1]+'💰':'')+'</button>';
+    return '<button onclick="usePreset(\''+kind+'\','+i+(kind==='shop'?',\''+(tabId||shopTab)+'\'':'')+')">+ '+esc(kind==='quest'||kind==='shop'?p[0]:p)+(kind==='shop'?' · '+p[1]+'💰':'')+'</button>';
   }).join('');
   return '<div class="presets"><span class="plabel">quick add:</span>'+chips+'</div>';
 }
-function usePreset(kind,i){
+function usePreset(kind,i,tabId){
   if(kind==='quest'){ var p=PRESETS.quest[i]; if(dupe(state.quests,p[0]))return; A.addQuest(state,{title:p[0],diff:p[1]}); }
   if(kind==='good'){ var t=PRESETS.good[i]; if(dupe(state.habits,t))return; A.addHabit(state,{title:t,type:'good'}); }
   if(kind==='bad'){ var t2=PRESETS.bad[i]; if(dupe(state.habits,t2))return; A.addHabit(state,{title:t2,type:'bad'}); }
-  if(kind==='shop'){ var s=PRESETS.shop[shopTab][i]; if(dupe(state.shop,s[0]))return; A.addShopItem(state,{title:s[0],price:s[1],tab:shopTab,hp:s[2]||0,dmg:s[3]||0,special:s[4]||null}); }
+  if(kind==='shop'){ var tb=tabId||shopTab; var s=PRESETS.shop[tb][i]; if(dupe(state.shop,s[0]))return; A.addShopItem(state,{title:s[0],price:s[1],tab:tb,hp:s[2]||0,dmg:s[3]||0,special:s[4]||null}); }
   persist(); render();
 }
 function dupe(list,title){ return list.some(function(x){return x.title===title;}); }
 
+/* "due Fri" reads; "due 2026-09-25" does not. Anything further out than a week
+   keeps the raw date, because a weekday name would be ambiguous by then. */
+function dueLabel(due,today){
+  if(due<today) return 'late';
+  if(due===today) return 'due today';
+  var d=new Date(due+'T00:00:00'), now=new Date(today+'T00:00:00');
+  var days=Math.round((d-now)/86400000);
+  if(days===1) return 'due tomorrow';
+  if(days<7 && !isNaN(d.getDay())) return 'due '+DOW[d.getDay()];
+  return 'due '+due;
+}
+/* A quest row shows ONE meta sentence ("Hard, Work, every day") and at most one
+   state chip. The old row stacked up to five coloured chips, which is five
+   things asking for attention on a line whose real job is the title and the
+   Clear button. The payout lives in the tooltip and in the toast on completion.
+   Do not add a second chip here: pick the more urgent state instead. */
 function questRow(q){
   var today=RPG.todayKey(), done=q.doneOn===today || (!q.recurring && q.doneOn);
   var activeToday=RPG.questActiveOn(q,new Date());
-  var meta=[diffChip(q.diff)];
-  if(q.skillId&&skillName(q.skillId)) meta.push('<span class="chip skill">'+skillName(q.skillId)+'</span>');
-  if(q.recurring&&q.days&&q.days.length) meta.push('<span class="chip sched" title="Repeats on selected days">🗓 '+MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n][0];}).join('')+'</span>');
-  if(q.due){ meta.push('<span class="chip '+(q.due<today?'late':'due')+'">'+(q.due<today?'⚠ late ':'due ')+q.due+'</span>'); }
-  if((q.focusMin||0)>0) meta.push('<span class="chip" style="color:var(--blue)" title="Focus time invested on this quest">⏳ '+fmtHm(q.focusMin)+'</span>');
-  var action = done ? '<span style="color:var(--good);font-weight:700">✓</span>'
+  var d=RPG.DIFF[q.diff], bits=[d.label], chip='';
+  if(q.skillId&&skillName(q.skillId)) bits.push(skillName(q.skillId));
+  if(q.recurring){
+    bits.push(q.days&&q.days.length
+      ? MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n];}).join(' ')
+      : 'every day');
+  }
+  if(q.due){
+    var lbl=dueLabel(q.due,today);
+    if(lbl==='late') chip='<span class="chip late">Late</span>';
+    else if(lbl==='due today') chip='<span class="chip due">Due today</span>';
+    else bits.push(lbl);
+  }
+  if((q.focusMin||0)>0) bits.push(fmtHm(q.focusMin)+' focused');
+  var action = done ? '<span style="color:var(--good);font-weight:700">'+svgIcon('check')+'</span>'
     : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
     : '<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>';
+  /* Focus lost its tab, so the way in is from the work itself: anything you
+     could clear right now can be focused right now. A dormant daily or a
+     finished quest gets no button, because there is nothing to work on. */
+  var canFocus = !done && (!q.recurring || activeToday);
   return '<div class="item'+(done?' done':'')+(q.recurring&&!activeToday?' dormant':'')+'"><div class="grow"><div class="title">'+esc(q.title)+'</div>'+
-    '<div class="meta">'+meta.join('')+'</div></div>'+
+    '<div class="meta" title="'+d.label+': '+d.xp+' XP, '+d.coins+' coins">'+bits.join(', ')+chip+'</div></div>'+
     action+
-    (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">⬆</button>':'')+
-    '<button class="btn ghost" title="Edit" aria-label="Edit quest" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
-    '<button class="btn ghost" aria-label="Delete quest" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
+    (canFocus?'<button class="btn ghost" title="Focus on this quest" aria-label="Focus on this quest" onclick="focusOnQuest(\''+q.id+'\')">'+svgIcon('timer','sm')+'</button>':'')+
+    (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" aria-label="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">'+svgIcon('arrow-up-right','sm')+'</button>':'')+
+    '<button class="btn ghost" title="Edit" aria-label="Edit quest" onclick="editQuestModal(\''+q.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
+    '<button class="btn ghost" title="Delete" aria-label="Delete quest" onclick="delQuest(\''+q.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
 }
 
 function chestChip(){
@@ -463,6 +592,34 @@ function chestChip(){
   if(c.claimed) return '<span class="chestchip claimed">🎁 claimed ✓</span>';
   if(c.eligible) return '<button class="chestchip ready" onclick="claimChest()">🎁 OPEN CHEST!</button>';
   return '<button class="chestchip" onclick="openChestPreview()" title="What could be inside?">🎁 '+c.done+'/'+c.total+'</button>';
+}
+/* A small progress ring, the Focus ring's technique at chip size. Starts at
+   12 o'clock (the rotate), which the Focus ring does not need because it
+   counts down. No id on the foreground circle on purpose: checkFocus() finds
+   the Focus ring by #ringFg, and a second element with that id would make the
+   countdown redraw the wrong circle. `w` is the stroke width (3.5 at chip size,
+   6 on the Progress rings) and `cls` an extra class on the svg; the Progress
+   test counts its three rings by that class, so it goes on the svg itself. */
+function miniRing(pct,size,stroke,w,cls){
+  w=w||3.5;
+  var r=(size-w)/2, c=size/2, C=2*Math.PI*r;
+  pct=Math.max(0,Math.min(1,pct||0));
+  return '<svg class="ring'+(cls?' '+cls:'')+'" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" aria-hidden="true" focusable="false">'+
+    '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="'+w+'"/>'+
+    '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="'+stroke+'" stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-pct))+'" transform="rotate(-90 '+c+' '+c+')"/></svg>';
+}
+/* The chest on Today: the same three states as chestChip() (counting, ready,
+   claimed) drawn as a ring with a label. The label keeps the .chestchip class
+   and its .ready / .claimed states because the tests, and the tab-bar dot,
+   read the chest through those. The tap does what the chip does: preview
+   while counting, claim when ready. */
+function chestRing(){
+  var c=A.chestStatus(state);
+  if(c.total===0) return '';
+  var pct=c.total?c.done/c.total:0;
+  if(c.claimed) return '<span class="chestring claimed" title="Chest claimed today">'+miniRing(1,30,'var(--good)')+'<span class="chestchip claimed">🎁 claimed</span></span>';
+  if(c.eligible) return '<button class="chestring ready" onclick="claimChest()" aria-label="All dailies cleared. Open the chest">'+miniRing(1,30,'var(--brand)')+'<span class="chestchip ready">🎁 Open</span></button>';
+  return '<button class="chestring" onclick="openChestPreview()" title="What could be inside?" aria-label="Daily chest, '+c.done+' of '+c.total+' dailies cleared. See what is inside">'+miniRing(pct,30,'var(--brand)')+'<span class="chestchip">🎁 '+c.done+'/'+c.total+'</span></button>';
 }
 /* peek inside: what the chest can drop today, with live odds (Fortune shifts them) */
 function openChestPreview(){
@@ -527,7 +684,7 @@ function renderQuests(){
     '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
       '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
       (dailies.map(questRow).join('')||emptyState('🔁','No dailies yet','Add a repeating task below - it resets every morning and feeds the daily chest.'))+
-      '<div class="form"><input id="dTitle" placeholder="New daily quest…">'+
+      '<div class="form"><input id="dTitle" placeholder="New daily quest… (try: stretch every weekday)" oninput="quickParse(\'d\')"><div class="hint" id="dHint"></div>'+
       '<div class="row"><select id="dDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="dSkill">'+skillOptions()+'</select></div>'+
       '<div class="daysrow"><span class="plabel">repeat on:</span>'+MON_ORDER.map(function(i){
@@ -538,7 +695,7 @@ function renderQuests(){
     '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span></h3>'+
       '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
       (sides.map(questRow).join('')||emptyState('📌','No side quests','Add a one-off task below. The ⬆ button upgrades one into a main quest.'))+
-      '<div class="form"><input id="qTitle" placeholder="New side quest…">'+
+      '<div class="form"><input id="qTitle" placeholder="New side quest… (try: book dentist by friday hard)" oninput="quickParse(\'q\')"><div class="hint" id="qHint"></div>'+
       '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
       '<select id="qSkill">'+skillOptions()+'</select>'+
       '<input type="date" id="qDue" title="Due date (optional)"></div>'+
@@ -614,54 +771,164 @@ function agendaPanel(){
   return out;
 }
 
+/* ---------- Today: the productivity dashboard ----------
+   The order IS the product. Greeting, then only what is on fire (downed,
+   wounded, atonement), two slim one-line slots (cloud nudge, Sage's line),
+   the quick actions, then Now, Coming up, Habits today and the log card.
+   The first row of Now has to be on screen at 375x812 without scrolling;
+   anything added above it costs exactly that height, so new banners go
+   below Now or into a slot, never above it. Every class the tests read
+   (.todayhead, .downbar, .woundbar, .redeembar, .nudgebar, .chestchip,
+   .ag.overdue, .quick button.potion, #jNote, .hrbtn, #slHours) still renders
+   here; move one and grep test-ui.js first. */
 function renderToday(){
   var today=RPG.todayKey();
   var h=new Date().getHours();
   var greet=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
-  var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,new Date());});
-  var habits=state.habits.filter(function(x){return x.type==='good';});
-  var todo=habits.filter(function(x){return x.lastDoneOn!==today;});
-  var j=state.journal[today], sl=state.sleep[today];
   var wounded=state.hero.woundedOn===today;
-  var due=A.agenda(state).filter(function(it){return it.bucket==='overdue'||it.bucket==='today';});
-
+  var boss=state.boss&&!state.boss.doneOn?state.boss:null;
   $('#view').innerHTML=
-    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">Today · '+new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</span>'+
-    (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
+    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span>'+
+      '<span class="dt">'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</span>'+
+      (boss?'<button class="bosschip" onclick="go(\'quests\')" title="Weekly boss: '+esc(boss.title)+'. Tap to see it">🐲 '+esc(boss.title)+' · '+A.bossDaysLeft(state)+'d</button>':'')+'</div>'+
     (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
-      '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
+      '<span class="nb"><button class="btn small go" onclick="goMarket(\'hotel\')" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
       :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
-    (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> - your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
+    /* the nudge is one line now: the text truncates, the two buttons never do.
+       The .ghost dismiss and the cloudNudgeOff flag are what the test clicks. */
+    (cloudNudgeDue()?'<div class="nudgebar">☁️ <span class="grow"><b>Protect your progress.</b> Your save lives only in this browser; free cloud sync keeps it safe.</span>'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
-    (due.length?'<div class="panel" style="border-color:var(--orange);margin-bottom:14px"><h3 style="color:var(--orange)">🔥 Due today</h3>'+
-      due.map(function(it){
-        var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
-        var mainTag=mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'';
-        return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+mainTag+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
-        '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
-      }).join('')+'</div>':'')+
-    '<div class="panel" style="margin-bottom:14px"><h3>⚡ Quick Add</h3><div class="quick">'+
-      '<button class="'+((j&&sl)?'done':'')+'" onclick="go(\'journal\')">'+((j&&sl)?'📔 Mood &amp; sleep ✓':'📔 Log mood &amp; sleep · +15xp, heals ❤️')+'</button>'+
-      '<button onclick="go(\'focus\')">⏳ Start a focus run</button>'+
-      '<button onclick="go(\'quests\')">📌 Add a side quest</button>'+
-      ((state.inventory.potion||0)>0?'<button class="potion" onclick="usePotion()">🧪 Focus Elixir ×'+state.inventory.potion+' · ×2 XP today</button>':'')+
-    '</div></div>'+
-    '<div class="grid two">'+
-    '<div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
-      (dailies.map(questRow).join('')||emptyState('🔁','Nothing to clear today','Add repeating quests in the Quests tab and they line up here every morning.','<button class="btn small" onclick="go(\'quests\')">📜 To the Quests tab</button>'))+'</div>'+
-    '<div class="panel"><h3>🌱 Habits to check <span class="cnt">'+(habits.length-todo.length)+'/'+habits.length+'</span></h3>'+
-      (habits.map(function(hb){
-        var done=hb.lastDoneOn===today;
-        var wk=hb.target<7?' <span class="wk">'+A.weekCount(hb)+'/'+hb.target+' wk</span>':'';
-        return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(hb.title)+'</div>'+
-          '<div class="meta">'+habitDots(hb)+wk+'</div></div>'+
-          (done?'<span style="color:var(--good);font-weight:700">✓</span>'
-            :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
-      }).join('')||emptyState('🌱','No habits planted','Grow good habits (and name your monsters) in the Habits tab.','<button class="btn small" onclick="go(\'habits\')">🌱 To the Habits tab</button>'))+
-    '</div></div>'+
-    (A.agenda(state).length?'<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div>':'');
+    sageLine()+
+    quickActions()+
+    nowPanel()+
+    comingUp()+
+    habitsToday()+
+    logCard()+
+    /* On a phone the quick actions row is fixed above the tab bar, so the
+       last card needs this much room to scroll clear of it. Empty on desktop
+       (see .qaspace in styles.css). */
+    '<div class="qaspace" aria-hidden="true"></div>';
+}
+/* Sage's daily line: the once-a-day greeting that used to pop the bubble over
+   the screen. One line, the first briefing line, and More opens the bubble
+   with the rest. sageLineDay is set by mascotDailyGreet() and only ever
+   equals today, so the line disappears by itself at midnight. */
+function sageLine(){
+  if(sageLineDay!==RPG.todayKey() || !mascotOn()) return '';
+  var b=RPG.briefing(state), l=b.lines[0];
+  if(!l) return '';
+  return '<div class="sageline"><span class="sowl" aria-hidden="true">🦉</span>'+
+    '<span class="grow" title="'+esc(l.text)+'">'+l.icon+' '+esc(l.text)+'</span>'+
+    '<button class="btn ghost small" onclick="toggleMascot(true)" aria-label="More from Sage">More</button></div>';
+}
+/* Three 44px buttons, plus the Focus Elixir when one is held (a test looks
+   for .quick button.potion). Add lands on the Quests form for now; phase 6
+   swaps quickAdd() for the smart add sheet and nothing else here changes. */
+function quickActions(){
+  var potion=state.inventory.potion||0;
+  return '<div class="quick qa" role="group" aria-label="Quick actions">'+
+    '<button class="qab" onclick="quickAdd()">'+svgIcon('plus')+'<span>Add</span></button>'+
+    '<button class="qab" onclick="go(\'focus\')">'+svgIcon('timer')+'<span>Focus</span></button>'+
+    '<button class="qab" onclick="askSage()">'+svgIcon('sparkles')+'<span>Ask Sage</span></button>'+
+    (potion>0?'<button class="qab potion" onclick="usePotion()" title="Focus Elixir: ×2 XP for the rest of today">🧪<span>Elixir ×'+potion+'</span></button>':'')+
+    '</div>';
+}
+function quickAdd(){
+  go('quests');
+  var el=$('#qTitle'); if(!el) return;
+  /* jsdom has no scrollIntoView, and an old WebView may throw on the options
+     object, so both are guarded: focusing the field is the part that matters */
+  if(el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
+  el.focus();
+}
+/* Chat needs the Edge Function, which needs a signed-in user. Signed out, the
+   owl still answers with the offline briefing. */
+function askSage(){ if(cloudOn()) openSageChat(); else toggleMascot(true); }
+/* Now: today's active dailies and the one-offs due today, as full quest rows
+   (Clear, Focus, edit, delete all come from questRow). A one-off cleared today
+   stays in the list with its check so the count reads 3/3 instead of the row
+   vanishing under the user's thumb. */
+function nowPanel(){
+  var today=RPG.todayKey(), now=new Date();
+  var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,now);});
+  var due=state.quests.filter(function(q){return !q.recurring && q.due===today && (!q.doneOn||q.doneOn===today);});
+  var rows=dailies.concat(due);
+  var done=rows.filter(function(q){return q.doneOn===today;}).length;
+  var body=rows.length?rows.map(questRow).join('')
+    :emptyState('☀️','Nothing due right now','Add a quest, or bank some deep work.',
+      '<div class="erow"><button class="btn go" onclick="quickAdd()">'+svgIcon('plus')+' Add a quest</button>'+
+      '<button class="btn" onclick="go(\'focus\')">'+svgIcon('timer')+' Start focus</button></div>');
+  return '<div class="panel now"><h3>Now'+(rows.length?' <span class="cnt">'+done+'/'+rows.length+'</span>':'')+chestRing()+'</h3>'+body+'</div>';
+}
+/* Coming up: Late (only when something is overdue), Tomorrow, This week. The
+   Today group the spec lists is deliberately not here: a quest due today is
+   already a full row in Now, and the same title twice on one screen makes
+   both counts lie. Anything past seven days stays on the Quests tab agenda,
+   which has the room for it. .ag and .ag.overdue are what the tests read. */
+function comingUp(){
+  var items=A.agenda(state).filter(function(it){return it.bucket!=='today' && it.days<=7;});
+  var out='', last='';
+  items.forEach(function(it){
+    var grp=it.days<0?'Late':it.days===1?'Tomorrow':'This week';
+    if(grp!==last){ out+='<div class="logday">'+grp+'</div>'; last=grp; }
+    var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
+    var when=it.days<0?(-it.days)+'d late':it.days===1?'tomorrow':it.days<7?DOW[new Date(it.q.due+'T00:00:00').getDay()]:'in '+it.days+'d';
+    out+='<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+(mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'')+'</div>'+
+      '<span class="when">'+when+'</span>'+
+      '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
+  });
+  return '<div class="panel comingup"><h3>Coming up'+(items.length?' <span class="cnt">'+items.length+'</span>':'')+'</h3>'+
+    (out||'<div class="empty">Nothing due this week. Give a quest a due date and it lines up here.</div>')+'</div>';
+}
+/* Habits today: the good habits as the same rows the Habits tab draws, then
+   the monsters folded behind one "Slipped?" row. slippedOpen survives the
+   re-render that follows a logged slip, so two slips in a row do not mean
+   reopening the fold in between. */
+var slippedOpen=false;
+function habitsToday(){
+  var today=RPG.todayKey();
+  var good=state.habits.filter(function(x){return x.type==='good';});
+  var bad=state.habits.filter(function(x){return x.type==='bad';});
+  var kept=good.filter(function(x){return x.lastDoneOn===today;}).length;
+  return '<div class="panel habits"><h3>Habits today'+(good.length?' <span class="cnt">'+kept+'/'+good.length+'</span>':'')+'</h3>'+
+    (good.map(goodHabitRow).join('')||emptyState('🌱','No habits yet','Something small you want to do most days.','<button class="btn" onclick="go(\'habits\')">Plant one</button>'))+
+    (bad.length?'<details class="slipped"'+(slippedOpen?' open':'')+' ontoggle="slippedOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+'Slipped? <span class="hint">'+bad.length+' monster'+(bad.length===1?'':'s')+', log it honestly</span></summary>'+
+      bad.map(monsterRow).join('')+'</details>':'')+
+    '</div>';
+}
+/* Log your day. Three looks for one card: collapsed to a row while nothing is
+   logged, the form while open, a summary with Edit once something is saved.
+   The form itself is dailyLogForm(), shared with the Journal view, which is
+   why saveDailyLog() can read the same ids from either screen. */
+function logCard(){
+  var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
+  var archive='<button class="btn ghost small archivebtn" onclick="openJournalArchive()">Archive</button>';
+  var open=logOpen || pendingMood!=null || pendingNote!=null || pendingHours!=null || pendingQuality!=null;
+  if(open){
+    var anim=logAnim?' anim':''; logAnim=false;
+    return '<div class="panel logcard open'+anim+'"><h3>Log your day'+(entry?' <span class="cnt">saved ✓</span>':'')+'<span class="right">'+archive+'</span></h3>'+dailyLogForm()+'</div>';
+  }
+  if(entry||sl){
+    var mo=entry?RPG.MOODS.find(function(m){return m.key===entry.mood;}):null;
+    var bits=[];
+    if(sl) bits.push(sl.hours+'h sleep'+(sl.quality?' '+Array(sl.quality+1).join('⭐'):''));
+    if(entry&&entry.note) bits.push(esc(entry.note));
+    return '<div class="panel logcard logged"><div class="logrow"><span class="lmood" aria-hidden="true">'+(mo?mo.emoji:'🌙')+'</span>'+
+      '<div class="grow"><div class="title">'+(mo?'Mood: '+esc(mo.label):'Sleep logged')+'</div><div class="meta">'+(bits.join(' · ')||'logged')+'</div></div>'+
+      '<button class="btn ghost" title="Edit" aria-label="Edit today\'s log" onclick="openLog()">'+svgIcon('pencil','sm')+'</button>'+archive+'</div></div>';
+  }
+  return '<div class="panel logcard"><div class="logrow"><button class="logmain" onclick="openLog()"><span class="lmood" aria-hidden="true">📔</span>'+
+    '<span class="grow"><span class="title">Log your day</span><span class="meta">Mood, one honest line, sleep · +15 XP</span></span>'+svgIcon('chevron-down')+'</button>'+archive+'</div></div>';
+}
+function openLog(){ logOpen=true; logAnim=true; render(); }
+function openJournalArchive(){
+  var n=Object.keys(state.journal).length;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>📔 ARCHIVE</h2><div class="hint" style="margin-bottom:8px">'+n+' entr'+(n===1?'y':'ies')+'</div>'+
+    journalArchive()+
+    '<div class="setrow" style="margin-top:14px"><button class="btn" onclick="closeModal()">Close</button></div></div>';
 }
 
 function habitDots(h){
@@ -674,47 +941,59 @@ function habitDots(h){
   }
   return '<span class="hdots">'+out+'</span>';
 }
+/* One good-habit row, drawn identically on the Habits tab and on Today. Same
+   rule as questRow: the 7-day dots, one meta sentence, one state chip (the
+   weekly count, with a small ring once the habit has a weekly target). The
+   payout sits in the tooltip. "n/N this wk" is asserted by a test. */
+function goodHabitRow(h){
+  var today=RPG.todayKey(), done=h.lastDoneOn===today;
+  var bits=[];
+  if(h.skillId&&skillName(h.skillId)) bits.push(skillName(h.skillId));
+  bits.push(h.target>=7?'every day':h.target+'× a week');
+  bits.push(h.target<7
+    ? '🔥 '+A.weekStreak(h)+' wk'+(A.weekStreak(h)===1?'':'s')
+    : '🔥 '+h.streak+' day'+(h.streak===1?'':'s'));
+  var wk=h.target<7?'<span class="wkring">'+miniRing(A.weekCount(h)/h.target,20,'var(--info)')+'<span class="wk">'+A.weekCount(h)+'/'+h.target+' this wk</span></span>':'';
+  return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
+    '<div class="meta" title="Keeping it pays +'+(12+Math.min(10,h.streak+1))+' XP and 6 coins">'+habitDots(h)+
+    '<span>'+bits.join(', ')+'</span>'+wk+'</div></div>'+
+    (done?'<span style="color:var(--good);font-weight:700">'+svgIcon('check')+' today</span>'
+      :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
+    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
+    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+}
+/* One monster row: clean days, the honest cost of a slip, the menace meter
+   once it has grown, and the I slipped control. Shared by the Habits tab and
+   Today's "Slipped?" fold. */
+function monsterRow(h){
+  var days=A.cleanDays(h);
+  var best=Math.max(h.bestClean||0,days);
+  var men=RPG.menaceOf(h);
+  var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
+  var dmg=Math.round(12*men*damp);
+  var menPct=Math.round((men-1)/(2.5-1)*100);
+  var menClass=men>=2?' hot':men>1.3?' warm':'';
+  return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
+    '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
+    '<span>best: '+best+', slips: '+h.slips+'</span>'+
+    '<span class="chip late" title="What one honest slip costs you right now">−'+dmg+' ❤️ −10 💰</span></div>'+
+    (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
+    '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
+    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
+    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+}
 function renderHabits(){
-  var today=RPG.todayKey();
   var good=state.habits.filter(function(h){return h.type==='good';});
   var bad=state.habits.filter(function(h){return h.type==='bad';});
   $('#view').innerHTML='<div class="grid two">'+
     '<div class="panel"><h3>🌱 Grow - good habits <span class="hint" style="margin-left:auto">checkable again every morning</span></h3>'+
-    (good.map(function(h){
-      var done=h.lastDoneOn===today;
-      return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
-        '<div class="meta">'+habitDots(h)+
-        (h.target<7?'<span class="wk">'+A.weekCount(h)+'/'+h.target+' this wk</span><span class="streakN">🔥 '+A.weekStreak(h)+' wk'+(A.weekStreak(h)===1?'':'s')+'</span>'
-          :'<span class="streakN">🔥 '+h.streak+'</span>')+
-        (h.skillId&&skillName(h.skillId)?'<span class="chip skill">'+skillName(h.skillId)+'</span>':'')+
-        '<span>+'+(12+Math.min(10,h.streak+1))+'xp/6💰</span></div></div>'+
-        (done?'<span style="color:var(--good);font-weight:700">✓ today</span>'
-          :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
-        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
-        '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
+    (good.map(goodHabitRow).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
     '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
     '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
     '<button class="btn go" onclick="addHabit(\'good\')">+ Add</button></div>'+presetChips('good')+'</div></div>'+
     '<div class="panel"><h3>👾 Fight - bad habits <button class="btn small right" onclick="openDefeatInfo()" title="What happens if a monster knocks you out?">💀 What if I lose?</button></h3>'+
-    (bad.map(function(h){
-      var days=A.cleanDays(h);
-      var best=Math.max(h.bestClean||0,days);
-      var men=RPG.menaceOf(h);
-      var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
-      var dmg=Math.round(12*men*damp);
-      var menPct=Math.round((men-1)/(2.5-1)*100);
-      var menClass=men>=2?' hot':men>1.3?' warm':'';
-      return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
-        '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
-        '<span style="color:var(--gold)">best: '+best+'</span>'+
-        '<span>slips: '+h.slips+'</span><span style="color:var(--hp)">slip = −'+dmg+' ❤️ / −10 💰</span></div>'+
-        (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
-        '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
-        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">✎</button>'+
-        '<button class="btn ghost" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">✕</button></div>';
-    }).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
+    (bad.map(monsterRow).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
 }
@@ -797,8 +1076,25 @@ function sessionStats(f){
     '<span>banked so far <b id="seshPay">'+xp+'xp / '+coins+'💰</b></span>'+
     '<span>cycles <b>'+f.cycles+'</b></span></div>';
 }
+/* The Focus button on a quest row. It cannot touch the form directly, because
+   the form does not exist yet: go() re-renders the whole view. So it parks the
+   id and lets renderFocus pick it up. */
+function focusOnQuest(id){ focusPreselect=id; go('focus'); }
 function renderFocus(){
   var f=state.activeFocus;
+  /* Turn the parked id into the value focusTaskSelect() already reads. Doing it
+     here, before the markup is built, is the only moment the option list and
+     the selection are guaranteed to agree. A quest that was deleted in between
+     leaves the select on "no link", which is the honest result. */
+  if(focusPreselect){
+    var pre=state.quests.find(function(q){return q.id===focusPreselect;});
+    if(pre) focusDraft.goal='q:'+pre.id;
+    focusPreselect=null;
+  }
+  /* Every branch below writes #view from scratch, so the back row is prefixed
+     to each one rather than injected afterwards. Drop it from a branch and that
+     state of the timer becomes a dead end. */
+  var head=viewBackHead('Focus');
   if(f){
     var paused=!!f.pausedAt;
     var refNow=f.pausedAt||Date.now();
@@ -806,7 +1102,7 @@ function renderFocus(){
     var left=f.phaseEnd-refNow, pct=RPG.clamp(1-left/phaseTotal,0,1);
     if(f.awaitingBreak){
       // work phase finished - wait for the user to start the break (the alarm already rang)
-      $('#view').innerHTML='<div class="panel focusbox break">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox break">'+
         '<div class="phase brk" style="color:var(--orange)">🔔 TIME FOR A BREAK</div>'+
         '<div class="focusring brk" style="width:150px;height:150px"><div class="bellwrap">🔔</div></div>'+
         '<div class="doing">Nice work. Take '+f.brk+' minutes - the break timer starts when you’re ready.</div>'+
@@ -817,7 +1113,7 @@ function renderFocus(){
         '<button class="btn" onclick="skipToWork()">Skip break, keep working</button>'+
         '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     } else if(f.phase==='work'){
-      $('#view').innerHTML='<div class="panel focusbox'+(paused?' paused':'')+'">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox'+(paused?' paused':'')+'">'+
         '<div class="phase work">'+(paused?'⏸ PAUSED':'🎯 WORK PHASE'+(f.brk>0?' · break in '+fmtTime(left):''))+'</div>'+
         '<div class="focusring">'+ringSvg(pct,'work')+'<div class="time" id="countdown">'+fmtTime(left)+'</div></div>'+
         (f.label?'<div class="doing">Fighting: <b>'+esc(f.label)+'</b></div>':'')+
@@ -829,7 +1125,7 @@ function renderFocus(){
                :'<button class="btn" onclick="pauseFocusUI()">⏸ Pause</button>')+
         '<button class="btn buy" onclick="stopFocus()">⏹ Stop &amp; collect</button></div></div>';
     } else {
-      $('#view').innerHTML='<div class="panel focusbox break'+(paused?' paused':'')+'">'+
+      $('#view').innerHTML=head+'<div class="panel focusbox break'+(paused?' paused':'')+'">'+
         '<div class="phase brk">'+(paused?'⏸ PAUSED':'🏕 BREAK - REST AT THE CAMPFIRE')+'</div>'+
         '<div class="campfire"><span class="tent">⛺</span><span class="fire">🔥</span><span class="moon">🌙</span>'+
         '<span class="z">💤</span><span class="z z2">💤</span><span class="sp">✨</span><span class="sp sp2">✨</span><span class="sp sp3">✨</span></div>'+
@@ -843,7 +1139,7 @@ function renderFocus(){
     }
   } else {
     var modes=[[25,5,'25 / 5'],[50,10,'50 / 10'],[90,15,'90 / 15'],[50,0,'FREE RUN']];
-    $('#view').innerHTML='<div class="panel focusbox">'+
+    $('#view').innerHTML=head+'<div class="panel focusbox">'+
       '<h3 style="justify-content:center">⏳ Focus - get paid for deep work</h3>'+
       '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP + 0.6 💰 - you collect when you hit stop, whether that is after 20 minutes or 3 hours. Breaks heal +3 ❤️. <b>You need to focus at least 5 minutes before any XP or coins are earned.</b></div>'+
       '<div class="durchips">'+modes.map(function(m){
@@ -868,17 +1164,25 @@ function renderFocus(){
   }
 }
 /* one select covering main AND side quests ('g:'/'q:' prefixed) - linking is
-   always optional, you can just work on whatever */
+   always optional, you can just work on whatever. Today's dailies are listed
+   too: the Focus button on a quest row appears on them, and a preselect with
+   no matching option would land the user on an empty select. The engine banks
+   focus minutes on any quest id, recurring or not, so nothing else changes.
+   The optgroup labels are under test (#fTask optgroup[label*="Main"]): keep
+   the three groups and their wording. */
 function focusTaskSelect(){
   var goals=state.goals.filter(function(g){return !g.doneOn;});
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
-  if(!goals.length && !sides.length) return '';
+  var dailies=state.quests.filter(function(q){return q.recurring && q.doneOn!==RPG.todayKey() && RPG.questActiveOn(q,new Date());});
+  if(!goals.length && !sides.length && !dailies.length) return '';
   return '<select id="fTask" title="Bank this deep work on a quest (optional)" onchange="focusDraft.goal=this.value">'+
     '<option value="">- link a quest (optional) -</option>'+
     (goals.length?'<optgroup label="🏆 Main quests">'+goals.map(function(g){
       return '<option value="g:'+g.id+'"'+(focusDraft.goal==='g:'+g.id?' selected':'')+'>🏆 '+esc(g.title)+'</option>';}).join('')+'</optgroup>':'')+
     (sides.length?'<optgroup label="📌 Side quests">'+sides.map(function(q){
       return '<option value="q:'+q.id+'"'+(focusDraft.goal==='q:'+q.id?' selected':'')+'>📌 '+esc(q.title)+'</option>';}).join('')+'</optgroup>':'')+
+    (dailies.length?'<optgroup label="🔁 Dailies">'+dailies.map(function(q){
+      return '<option value="q:'+q.id+'"'+(focusDraft.goal==='q:'+q.id?' selected':'')+'>🔁 '+esc(q.title)+'</option>';}).join('')+'</optgroup>':'')+
     '</select>';
 }
 function startFocus(){
@@ -971,57 +1275,184 @@ function shopIcon(title,tab){
   for(var i=0;i<SHOP_ICONS.length;i++){ if(SHOP_ICONS[i][0].test(title)) return SHOP_ICONS[i][1]; }
   return tab==='hotel'?'🛏️':tab==='black'?'🕶️':'🎁';
 }
+/* Rewards (revamp 7): one scrolling page of sections instead of a tab
+   switcher. market/hotel/black stay as internal ids (shopTab, item.tab,
+   PRESETS.shop.*) but every section is always on the page at once now - see
+   goMarket() for how a link still lands on one of them. */
 function renderMarket(){
-  var tabs=[['market','🛒 Market'],['hotel','🛏️ Hotel'],['black','🕶️ Black Market']];
-  var items=state.shop.filter(function(i){return i.tab===shopTab;});
-  var escOn=state.settings.escalate!==false;
-  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free - that is the whole point.'+(escOn?' Repeat the same treat in one day and its price climbs - indulge, don’t binge.':''),
-    hotel:'Rest and recovery. Hotel items restore ❤️ HP - no surge, rest all you like.',
-    black:'Break your own rules - the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
-  $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span>'+
-    '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
-    '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+
-      '<button class="royaltab" onclick="openRoyalChamber()" title="Cosmetics and deep stats. Never power.">👑 Royal</button></div>'+
-    '<div class="hint" style="margin-bottom:10px">'+blurb+'</div>'+
-    (items.length?'<div class="shopgrid">'+items.map(function(i){
-      var isShield=i.special==='shield';
-      var info=isShield?{price:i.price,capped:false,limit:0,count:0,surge:0}:A.buyInfo(state,i);
-      var haveS=isShield&&(state.hero.shields||0)>=1;
-      var can=state.hero.coins>=info.price && !info.capped && !haveS;
-      var effects=[];
-      if(isShield) effects.push('<span style="color:var(--gold)">auto-saves one missed day</span>');
-      if(i.hp) effects.push('<span style="color:var(--good)">+'+i.hp+' ❤️</span>');
-      if(i.dmg) effects.push('<span style="color:var(--hp)">−'+i.dmg+' ❤️</span>');
-      if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap hit':info.count+'/'+info.limit+' today')+'</span>');
-      else if(info.count>0 && info.surge>0) effects.push('<span class="cap">'+info.count+'× today</span>');
-      var surgedPrice=info.price>i.price;
-      // affordability meter: how close your purse is to this price
-      var aff=can||haveS?'':'<div class="affbar" title="'+(info.price-state.hero.coins)+' 💰 to go"><i style="width:'+Math.min(100,Math.round(state.hero.coins/info.price*100))+'%"></i></div>';
-      return '<div class="scard'+(can?'':' locked')+(shopTab==='black'?' shady':'')+'">'+
-        '<button class="del" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button>'+
-        '<div class="sicon" aria-hidden="true">'+shopIcon(i.title,i.tab)+'</div>'+
-        '<div class="stitle">'+esc(i.title)+'</div>'+
-        (effects.length?'<div class="sfx">'+effects.join(' · ')+'</div>':'')+
-        aff+
-        '<div class="srow"><span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
-        '<button class="btn buy small" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':info.capped?'Capped':'Buy')+'</button></div></div>';
-    }).join('')+'</div>'
-    :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
-    '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
-    '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
-    (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
-    (shopTab==='black'?'<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">':'')+
-    (shopTab!=='hotel'?'<input id="sLimit" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">':'')+
-    '<button class="btn buy" onclick="addShop()">+ Stock it</button></div>'+presetChips('shop')+'</div></div>';
+  $('#view').innerHTML='<div>'+balanceHero()+suggestedSection()+yourRewardsSection()+protectionSection()+guiltyPleasuresSection()+restSection()+'</div>';
 }
 function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
 
-function renderJournal(){
+/* Balance hero: the coin total plus what moved today. Both read straight off
+   state.log - actions.buy() (core.js) logs every purchase with a negative
+   coins field, same log entry type XP/coin grants use with a positive one,
+   so earned/spent both fall out of one pass with no extra bookkeeping. Surge
+   lives here as a small toggle: it changes prices in every section below, so
+   it belongs with the balance, not repeated three times. */
+function balanceHero(){
+  var today=RPG.todayKey(), earned=0, spent=0;
+  state.log.forEach(function(e){
+    if(e.day!==today) return;
+    if(e.coins>0) earned+=e.coins; else if(e.coins<0) spent+=-e.coins;
+  });
+  var escOn=state.settings.escalate!==false;
+  return '<div class="panel" id="shop-balance"><h3>Reward shop'+
+    '<button class="btn small ghost right" onclick="toggleEscalate()">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
+    '<div class="balnum" id="balCoins">💰 '+state.hero.coins+'</div>'+
+    '<div class="balrow"><span>Earned today <b style="color:var(--ok)">+'+earned+' 💰</b></span>'+
+    '<span>Spent today <b style="color:var(--text-2)">'+spent+' 💰</b></span></div>'+
+    '<div class="hint">You earn coins by clearing quests and keeping habits. Spend them here, guilt free.</div>'+
+    '<div class="hint">Surge raises the price each time you repeat the same treat in one day, so a coin hoard cannot buy the whole shelf in one sitting. Turn it off any time.</div>'+
+    '</div>';
+}
+
+/* Suggested for you: PRESETS.shop.market items whose tags overlap the
+   user's onboarding picks. state.settings.onboard ({paths,struggle}) is
+   written by the onboarding wizard (phase 5); until that phase is merged
+   into this branch, or for a save made before it existed, there is no such
+   record, so this falls back to guessing which paths are active from the
+   life areas already on the board - RPG.PATHS[n].skills lists the names
+   each path renames the board to. The Streak Shield is excluded (it lives
+   in Protection) and anything already stocked is hidden so the row only
+   ever offers something new. Returns indices into PRESETS.shop.market,
+   capped at six. */
+function suggestedRewards(){
+  var ob=state.settings&&state.settings.onboard;
+  var paths=ob&&ob.paths?ob.paths:null;
+  var struggle=ob&&ob.struggle?ob.struggle:null;
+  if(!paths){
+    paths=RPG.PATHS.filter(function(p){
+      return p.skills && p.skills.some(function(n){ return state.skills.some(function(s){ return s.name===n; }); });
+    }).map(function(p){ return p.id; });
+  }
+  var out=[];
+  for(var i=0;i<PRESETS.shop.market.length;i++){
+    var it=PRESETS.shop.market[i];
+    if(it[4]) continue; // special (Streak Shield) - shown in Protection, not here
+    if(dupe(state.shop,it[0])) continue;
+    var tags=it[5]||[];
+    var match=tags.indexOf('all')>=0 || (struggle&&tags.indexOf(struggle)>=0) || paths.some(function(p){return tags.indexOf(p)>=0;});
+    if(match){ out.push(i); if(out.length>=6) break; }
+  }
+  return out;
+}
+function suggestedSection(){
+  var idxs=suggestedRewards();
+  if(!idxs.length) return '';
+  return '<div class="panel" id="shop-suggested" style="margin-top:14px"><h3>✨ Suggested for you</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Matched to what is already on your board. One tap stocks it below.</div>'+
+    '<div class="shopgrid">'+idxs.map(function(i){
+      var it=PRESETS.shop.market[i];
+      return '<div class="scard sugg"><div class="sicon" aria-hidden="true">'+shopIcon(it[0],'market')+'</div>'+
+        '<div class="stitle">'+esc(it[0])+'</div>'+
+        '<div class="srow"><span class="price">💰 '+it[1]+'</span>'+
+        '<button class="btn buy small" onclick="usePreset(\'shop\','+i+',\'market\')">Stock it</button></div></div>';
+    }).join('')+'</div></div>';
+}
+
+/* One reward card: shared by Your rewards, Guilty pleasures, Rest and the
+   Streak Shield in Protection once it has a real state.shop row. i.tab picks
+   the shady tint, so the same function always renders the right look no
+   matter which section calls it. */
+function shopCard(i){
+  var isShield=i.special==='shield';
+  var info=isShield?{price:i.price,capped:false,limit:0,count:0,surge:0}:A.buyInfo(state,i);
+  var haveS=isShield&&(state.hero.shields||0)>=1;
+  var can=state.hero.coins>=info.price && !info.capped && !haveS;
+  var effects=[];
+  if(isShield) effects.push('<span style="color:var(--brand)">auto-saves one missed day</span>');
+  if(i.hp) effects.push('<span style="color:var(--ok)">+'+i.hp+' ❤️</span>');
+  if(i.dmg) effects.push('<span style="color:var(--danger)">−'+i.dmg+' ❤️</span>');
+  if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap hit':info.count+'/'+info.limit+' today')+'</span>');
+  else if(info.count>0 && info.surge>0) effects.push('<span class="cap">'+info.count+'× today</span>');
+  var surgedPrice=info.price>i.price;
+  // affordability meter: how close your purse is to this price
+  var aff=can||haveS?'':'<div class="affbar" title="'+(info.price-state.hero.coins)+' 💰 to go"><i style="width:'+Math.min(100,Math.round(state.hero.coins/info.price*100))+'%"></i></div>';
+  return '<div class="scard'+(can?'':' locked')+(i.tab==='black'?' shady':'')+'">'+
+    '<button class="del" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button>'+
+    '<div class="sicon" aria-hidden="true">'+shopIcon(i.title,i.tab)+'</div>'+
+    '<div class="stitle">'+esc(i.title)+'</div>'+
+    (effects.length?'<div class="sfx">'+effects.join(' · ')+'</div>':'')+
+    aff+
+    '<div class="srow"><span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
+    '<button class="btn buy small" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':info.capped?'Capped':'Buy')+'</button></div></div>';
+}
+
+function yourRewardsSection(){
+  var items=state.shop.filter(function(i){return i.tab==='market' && !i.special;});
+  return '<div class="panel" id="shop-market" style="margin-top:14px"><h3>🛒 Your rewards</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Everyday treats. Earn them, then enjoy them guilt-free, that is the whole point.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
+    '<div class="form"><input id="sTitle-market" placeholder="New reward… (e.g. Cinema night)">'+
+    '<div class="row"><input id="sPrice-market" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sLimit-market" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'market\')">+ Stock it</button></div></div>'+
+    presetChips('shop','market')+'</div>';
+}
+
+/* Protection: the Streak Shield always shows here, even before it has ever
+   been stocked - a fresh seed() hero has no state.shop row for it yet (only
+   seedPreset() adds one up front), so this falls back to the PRESETS price
+   and usePreset() (which calls addShopItem) until a real row exists, then
+   switches to the live buy/Held card like any other reward. */
+function protectionSection(){
+  var shieldItem=state.shop.find(function(i){return i.special==='shield';});
+  var shieldCard=shieldItem?shopCard(shieldItem):
+    '<div class="scard"><div class="sicon" aria-hidden="true">🛡️</div>'+
+    '<div class="stitle">Streak Shield</div>'+
+    '<div class="srow"><span class="price">💰 '+PRESETS.shop.market[0][1]+'</span>'+
+    '<button class="btn buy small" onclick="usePreset(\'shop\',0,\'market\')">Stock it</button></div></div>';
+  var potion=state.inventory.potion||0;
+  var elixirCard=potion<=0?'':
+    '<div class="scard"><div class="sicon" aria-hidden="true">🧪</div>'+
+    '<div class="stitle">Focus Elixir ×'+potion+'</div>'+
+    '<div class="sfx">×2 XP for the rest of today</div>'+
+    '<div class="srow"><span></span><button class="btn buy small" onclick="usePotion()">Use</button></div></div>';
+  return '<div class="panel" id="shop-protection" style="margin-top:14px"><h3>🛡️ Protection</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Used automatically the first day you miss, so the streak survives.</div>'+
+    '<div class="shopgrid">'+shieldCard+elixirCard+'</div></div>';
+}
+
+function guiltyPleasuresSection(){
+  var items=state.shop.filter(function(i){return i.tab==='black';});
+  return '<div class="panel" id="shop-black" style="margin-top:14px"><h3>🕶️ Guilty pleasures</h3>'+
+    '<div class="hint" style="margin-bottom:10px">The treats you would rather not have right now. One costs coins and HP, the price climbs, and you can only cave twice a day. It beats lying to yourself.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🕶️','Nothing stocked here','Add the treat you already reach for anyway - naming it is more honest than pretending.'))+
+    '<div class="form"><input id="sTitle-black" placeholder="New guilty pleasure…">'+
+    '<div class="row"><input id="sPrice-black" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">'+
+    '<input id="sLimit-black" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'black\')">+ Stock it</button></div></div>'+
+    presetChips('shop','black')+'</div>';
+}
+
+function restSection(){
+  var items=state.shop.filter(function(i){return i.tab==='hotel';});
+  return '<div class="panel" id="shop-hotel" style="margin-top:14px"><h3>🛏️ Rest</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Heals HP, never surges, never capped.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🛏️','Nothing stocked here','Add a way to heal up - a nap, a walk, an early night.'))+
+    '<div class="form"><input id="sTitle-hotel" placeholder="New way to rest…">'+
+    '<div class="row"><input id="sPrice-hotel" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">'+
+    '<button class="btn buy" onclick="addShop(\'hotel\')">+ Stock it</button></div></div>'+
+    presetChips('shop','hotel')+'</div>';
+}
+
+/* The daily log form: mood faces, the note, the sleep row (quick hours, the
+   free field, the stars) and the one Save. Today embeds it inside the log
+   card and the Journal view draws it in its panel; saveDailyLog() reads
+   #jNote and #slHours by id, which is why only one of the two screens can be
+   on the page at a time and why these ids must not change. The pending*
+   drafts keep typed text alive across the re-render every mood tap causes. */
+function dailyLogForm(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
   var hrs=pendingHours!=null?String(pendingHours):((sl||{}).hours!=null?String(sl.hours):'');
   var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
-  $('#view').innerHTML='<div class="grid two">'+
-    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+  return '<div class="logform">'+
     '<div class="flabel">Mood</div>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
       var on=(pendingMood||((entry||{}).mood))===m.key;
@@ -1029,7 +1460,7 @@ function renderJournal(){
     }).join('')+'</div>'+
     '<textarea id="jNote" rows="3" placeholder="One honest line about today… (optional)" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
     '<div class="flabel">🌙 Sleep last night '+(sl?'<span class="cnt" style="font-size:10px">logged ✓</span>':'')+'</div>'+
-    '<div class="row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+    '<div class="row sleeprow">'+
     [7,8,9].map(function(n){
       var on=hrs!==''&&Number(hrs)===n;
       return '<button type="button" class="hrbtn'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingHours='+n+';render()">'+n+'h</button>';
@@ -1039,7 +1470,13 @@ function renderJournal(){
       var on=n<=q;
       return '<button class="'+(on?'on':'')+'" title="Sleep quality '+n+'/5" aria-pressed="'+(on?'true':'false')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div></div>'+
     '<div class="hint" style="margin-top:2px">Pick a quick 7-9h button or type your own. Stars = how rested you feel.</div>'+
-    '<button class="btn wide go" style="margin-top:10px" onclick="saveDailyLog()">'+((entry||sl)?'Update entry':'Log entry')+'</button></div>'+
+    '<button class="btn wide go" style="margin-top:10px" onclick="saveDailyLog()">'+((entry||sl)?'Update entry':'Log entry')+'</button></div>';
+}
+function renderJournal(){
+  var entry=state.journal[RPG.todayKey()];
+  $('#view').innerHTML=viewBackHead('Journal')+'<div class="grid two">'+
+    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+    dailyLogForm()+'</div>'+
     '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
     journalArchive()+'</div></div>';
 }
@@ -1057,20 +1494,26 @@ function saveDailyLog(){
     r2=A.logSleep(state,hrs,q);
   }
   pendingMood=null; pendingNote=null; pendingHours=null; pendingQuality=null;
+  logOpen=false;   /* Today's card folds back to its summary row after a save */
   persist(); render(); fx(r); if(r2&&r2.hp) fx({hp:r2.hp}); afterAction();
 }
 
+/* ---------- Progress (tab id 'stats') ----------
+   Every panel below is a plain function returning HTML, and renderStats()
+   stacks them. The class names inside (.insight, .frow, .fseg, .heatmap,
+   .hc.lN, .trophy, .brow, .review, .rv.suggest, .chart .col, .stat .v,
+   .achgrid .ach) are what the tests query; rename one and a test goes red. */
 function insightsPanel(){
   var iv=RPG.insights(state);
   var body;
   if(!iv.enough){
-    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and ScaleMyLife starts showing what actually moves your mood - sleep, focus, slips.</div>';
+    body='<div class="empty">Log your mood for '+Math.max(0,6-iv.sampleSize)+' more day'+((6-iv.sampleSize)===1?'':'s')+' ('+iv.sampleSize+'/6) and Insights starts showing what moves it: sleep, focus, slips.</div>';
   } else if(!iv.findings.length){
-    body='<div class="empty">No strong patterns yet across your good and low days. Keep logging - the signal sharpens with more data.</div>';
+    body='<div class="empty">No strong pattern yet across your good and low days. Keep logging, the signal sharpens with more data.</div>';
   } else {
     body=iv.findings.map(function(f){ return '<div class="insight"><span class="ic">'+f.icon+'</span><span>'+esc(f.text)+'</span></div>'; }).join('');
   }
-  return '<div class="panel" style="margin-top:14px"><h3>🔎 Insights - what moves your mood</h3>'+body+'</div>';
+  return '<div class="panel"><h3>Insights <span class="sub">what moves your mood</span></h3>'+body+'</div>';
 }
 function focusPanel(){
   var month=focusSpan===30;
@@ -1078,7 +1521,7 @@ function focusPanel(){
   var toggle='<span class="spantoggle right"><button class="'+(month?'':'on')+'" onclick="focusSpan=7;render()">Week</button><button class="'+(month?'on':'')+'" onclick="focusSpan=30;render()">Month</button></span>';
   var body;
   if(!f.totalMin){
-    body='<div class="empty">No focus sessions in this window. Start a run in ⏳ Focus (tag it with a life area) and your daily breakdown - what you actually worked on - appears here.</div>';
+    body='<div class="empty">No focus sessions in this window. Start a run from Today, tag it with a life area, and what you worked on shows up here day by day.</div>';
   } else {
     var legend='<div class="focuslegend">'+f.skills.map(function(id){
       return '<span><i style="background:'+skillColorById(id)+'"></i>'+skillLabelById(id)+'</span>';
@@ -1094,27 +1537,44 @@ function focusPanel(){
       return '<div class="frow'+(month?' slim':'')+'"><span class="fdl">'+lbl+'</span><div class="ftrack">'+segs+'</div>'+
         '<span class="ftt">'+(total?fmtHm(total):'')+'</span></div>';
     }).join('');
-    body='<div class="hint" style="margin-bottom:8px">Total this '+(month?'month':'week')+': <b style="color:var(--gold)">'+fmtHm(f.totalMin)+'</b></div>'+legend+'<div class="focusbars">'+rows+'</div>';
+    body=legend+'<div class="focusbars">'+rows+'</div>';
   }
-  return '<div class="panel" style="margin-top:14px"><h3>⏳ Focus by life area - what you worked on'+toggle+'</h3>'+body+'</div>';
+  /* "this week" / "this month" is asserted by a test in month mode */
+  var total=f.totalMin?'<span class="cnt">'+fmtHm(f.totalMin)+' this '+(month?'month':'week')+'</span>':'';
+  return '<div class="panel"><h3>Focus by life area'+total+toggle+'</h3>'+body+'</div>';
 }
-/* GitHub-style consistency heatmap: 12 weeks of daily XP */
+/* GitHub-style consistency grid: 12 weeks of days, one square each, lit by XP.
+   Returns the grid, its key and a one-line caption; streakPanel() puts the
+   streak numbers above it. The grid always draws (an empty wall is the promise
+   of a full one), only the caption changes. */
 function heatmapPanel(){
   var h=RPG.heatmap(state,12);
-  if(!h.total) return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks</h3><div class="empty">Every day you earn XP lights a square. Come back in a few days and watch the wall fill up.</div></div>';
   var cells=h.cells.map(function(c){
     return '<i class="hc l'+c.level+(c.future?' fut':'')+'" title="'+c.day+(c.future?'':' · '+c.xp+' XP')+'"></i>';
   }).join('');
-  return '<div class="panel" style="margin-top:14px"><h3>🗓 Consistency - last 12 weeks '+
-    '<span class="cnt">'+h.activeDays+' active days · '+h.total+' XP</span></h3>'+
-    '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
-    '<div class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></div></div>';
+  var cap=h.total
+    ?'<b>'+h.activeDays+'</b> active day'+(h.activeDays===1?'':'s')+' in the last 12 weeks, <b>'+h.total+'</b> XP'
+    :'Every day you earn XP lights a square. Come back in a few days and watch the wall fill.';
+  return '<div class="heatwrap"><div class="heatmap">'+cells+'</div></div>'+
+    '<div class="heatfoot"><span class="heatcap">'+cap+'</span>'+
+    '<span class="heatkey"><span>less</span><i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i><span>more</span></span></div>';
+}
+/* Streak: the running streak and the best one as big mono numbers, then the
+   consistency grid. "best streak" (lower case) is asserted by a test. */
+function streakPanel(){
+  var h=state.hero, best=Math.max(h.bestStreak||0,h.streak||0);
+  var shield=(h.shields||0)>0?'<span class="cnt shieldon" title="Used automatically the first day you miss, so the streak survives">'+svgIcon('shield','sm')+' shield held</span>':'';
+  return '<div class="panel streakcard"><h3>Streak'+shield+'</h3>'+
+    '<div class="streaknums">'+
+      '<div class="sn cur">'+svgIcon('flame')+'<b class="v">'+h.streak+'</b><span class="k">day'+(h.streak===1?'':'s')+' running</span></div>'+
+      '<div class="sn"><b class="v">'+best+'</b><span class="k">best streak</span></div>'+
+    '</div>'+heatmapPanel()+'</div>';
 }
 /* trophy shelf: every weekly boss slain */
 function trophyShelf(){
   var t=RPG.bossTrophies(state);
   if(!t.length) return '';
-  return '<div class="panel" style="margin-top:14px"><h3>🐲 Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
+  return '<div class="panel"><h3>Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
     '<div class="trophies">'+t.map(function(x){
       return '<div class="trophy"><span class="ti">🏆</span><div><div class="tt">'+esc(x.title)+'</div><div class="td">'+x.day+'</div></div></div>';
     }).join('')+'</div></div>';
@@ -1145,7 +1605,7 @@ function leaderboardPanel(){
   if(typeof SMLCloud==='undefined'||!SMLCloud.configured()) return '';
   var friends=boardView==='friends';
   var toggle='<span class="spantoggle right"><button class="'+(friends?'':'on')+'" onclick="boardView=\'global\';render()">Global</button><button class="'+(friends?'on':'')+'" onclick="boardView=\'friends\';render()">Friends</button></span>';
-  var head='<div class="panel" style="margin-top:14px"><h3>🏆 Leaderboard <span class="cnt">weekly XP</span>'+toggle+'</h3>';
+  var head='<div class="panel"><h3>Leaderboard <span class="cnt">weekly XP</span>'+toggle+'</h3>';
   if(!cloudOn()) return head+'<div class="empty">Sign in (⚙️ → Cloud sync) and join to race other heroes on weekly XP.</div></div>';
   if(friends){
     if(!state.settings.friends) return head+'<div class="empty">Enable friends in ⚙️ Settings, share your code, and race your friends here.</div><button class="btn wide" onclick="openSettings()">🤝 Enable friends</button></div>';
@@ -1173,13 +1633,18 @@ function leaderboardPanel(){
   },0);
   return head+'<div id="boardBody">'+boardSkeleton(6)+'</div></div>';
 }
+/* The encouraging line under the three rings: the engine's suggestion for next
+   week, then the week's two facts in one muted line. .review and .rv.suggest
+   are queried by a test and by the tour. */
 function reviewBox(){
   var rev=RPG.weeklyReview(state);
-  var best=rev.bestDay?new Date(rev.bestDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'}):'-';
+  var best=rev.bestDay&&rev.bestXp>0?new Date(rev.bestDay+'T00:00:00').toLocaleDateString('en-US',{weekday:'long'}):null;
+  var facts=[];
+  if(best) facts.push('Best day '+best+', <b>'+rev.bestXp+' XP</b>');
+  if(rev.worstMonster) facts.push('Toughest monster '+esc(rev.worstMonster)+', <b>'+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</b>');
   return '<div class="review">'+
-    '<div class="rv"><span class="k">🏅 Best day</span><span class="v">'+best+' · '+rev.bestXp+' XP</span></div>'+
-    (rev.worstMonster?'<div class="rv"><span class="k">👾 Toughest monster</span><span class="v">'+esc(rev.worstMonster)+' · '+rev.worstN+' slip'+(rev.worstN===1?'':'s')+'</span></div>':'')+
-    '<div class="rv suggest"><span class="k">🎯 Next week</span><span class="v">'+esc(rev.suggestion)+'</span></div></div>';
+    '<div class="rv suggest"><span class="k">'+svgIcon('target')+'</span><span class="v">'+esc(rev.suggestion)+'</span></div>'+
+    (facts.length?'<div class="rv facts">'+facts.join(' · ')+'</div>':'')+'</div>';
 }
 /* full journal history, grouped by month, filtered in place */
 function journalArchive(){
@@ -1209,28 +1674,107 @@ function filterJournal(q){
   document.querySelectorAll('details.jmonth').forEach(function(dt){ if(q) dt.open=true; });
 }
 
+/* ---------- the 7-day charts (XP, sleep) ----------
+   One bar per day. The value sits above the bar and the weekday letter below,
+   both plain HTML; the bar is an SVG rect. The svg has no viewBox, so the
+   rect's percentage units follow the svg's own size and the corner radius
+   stays 4px whatever the column height. The rect runs 10% past the bottom
+   edge on purpose: the svg clips it, which leaves only the top corners
+   rounded. Fills point at the gradients in chartDefs(), which has to sit in the
+   same panel. A test counts the .col elements (7) and expects an svg in each,
+   so keep both, and keep the sleep chart on .chart.sleepchart. */
+function dayLetter(d){ return ['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()]; }
+function chartCol(v,pct,lbl,grad){
+  var h=v>0?Math.max(4,Math.round(pct*100)):0;
+  return '<div class="col"><div class="cl v">'+(v||'')+'</div>'+
+    '<svg class="cbar" aria-hidden="true" focusable="false">'+
+    (h?'<rect x="0" y="'+(100-h)+'%" width="100%" height="'+(h+10)+'%" rx="4" fill="url(#'+grad+')"/>'
+      :'<rect class="nil" x="0" y="97%" width="100%" height="10%" rx="2"/>')+
+    '</svg><div class="cl">'+lbl+'</div></div>';
+}
+/* The two vertical gradients the bars use: brand for XP, info blue for sleep.
+   Stops take their colour through CSS variables, so the six themes recolour
+   the bars for free. A 0x0 svg, not display:none: browsers ignore gradients
+   defined inside a hidden svg. */
+function chartDefs(){
+  function g(id,c){ return '<linearGradient id="'+id+'" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:'+c+'"/><stop offset="1" style="stop-color:'+c+';stop-opacity:.35"/></linearGradient>'; }
+  return '<svg class="chartdefs" width="0" height="0" aria-hidden="true" focusable="false"><defs>'+g('pgXp','var(--brand)')+g('pgSleep','var(--info)')+'</defs></svg>';
+}
 /* third chart row: sleep hours per day, weekly total + long-run average */
 function sleepChartHtml(w){
   var slMax=9, slWeek=0, logged=false;
   w.days.forEach(function(d){ var s=state.sleep[d]; if(s&&s.hours>slMax) slMax=s.hours; });
   var cols=w.days.map(function(d){
     var s=state.sleep[d], v=s?s.hours:0; slWeek+=v; if(v) logged=true;
-    var lbl=['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()];
-    return '<div class="col"><div class="cl" style="color:var(--blue)">'+(v||'')+'</div><div class="colbar sleep" style="height:'+Math.max(2,Math.round(v/slMax*100))+'%"></div><div class="cl">'+lbl+'</div></div>';
+    return chartCol(v,v/slMax,dayLetter(d),'pgSleep');
   }).join('');
   var all=Object.keys(state.sleep).map(function(k){ return state.sleep[k].hours; });
   var avg=all.length?Math.round(all.reduce(function(a,b){return a+b;},0)/all.length*10)/10:0;
-  if(!logged) return '<div class="hint" style="text-align:center;margin-top:6px">🌙 Log sleep in the Journal and your sleep chart appears here.</div>';
-  return '<div class="chart sleepchart" style="margin-top:10px">'+cols+'</div>'+
-    '<div class="hint" style="text-align:center;margin-top:2px">sleep hours, last 7 days · <b style="color:var(--blue)">'+(Math.round(slWeek*10)/10)+'h</b> this week'+(all.length?' · '+avg+'h long-run average':'')+'</div>';
+  if(!logged) return '<div class="chartcap">Log sleep on Today and your sleep chart appears here.</div>';
+  return '<div class="chart sleepchart">'+cols+'</div>'+
+    '<div class="chartcap">Sleep, last 7 days · <b>'+(Math.round(slWeek*10)/10)+'h</b> this week'+(all.length?' · <b>'+avg+'h</b> long-run average':'')+'</div>';
 }
+/* ---------- This week: three rings ----------
+   XP against last week, habits kept against what the targets asked for, focus
+   minutes against a weekly target. Each is a plain number the user can act
+   on, which is why the rings do not share a scale. */
+/* Minutes that fill the Focus ring: five hour-long blocks a week. A display
+   target only, nothing in the engine reads it and the payout is the same
+   either way. */
+var FOCUS_WEEK_TARGET=300;
+/* XP earned in the seven days before the current seven. weekStats() only
+   covers the current window, so this walks state.log the same way it does. */
+function lastWeekXp(){
+  var keys={};
+  for(var i=13;i>=7;i--){ var d=new Date(); d.setDate(d.getDate()-i); keys[RPG.todayKey(d)]=true; }
+  var xp=0; state.log.forEach(function(e){ if(keys[e.day]) xp+=e.xp||0; });
+  return xp;
+}
+/* Good habits kept in the last seven days against their targets. A daily habit
+   can be checked seven times, a 3x-a-week one three; checks past the target do
+   not count, so the ring tops out at 100%. Reads each habit's own history, not
+   the log, so a deleted habit stops counting on both sides. */
+function habitsKeptWeek(){
+  var keys={};
+  for(var i=6;i>=0;i--){ var d=new Date(); d.setDate(d.getDate()-i); keys[RPG.todayKey(d)]=true; }
+  var kept=0, possible=0;
+  state.habits.forEach(function(h){
+    if(h.type!=='good') return;
+    var target=Math.max(1,Math.min(7,h.target||7)), seen={}, hits=0;
+    (h.history||[]).forEach(function(k){ if(keys[k]&&!seen[k]){ seen[k]=true; hits++; } });
+    possible+=target; kept+=Math.min(target,hits);
+  });
+  return {kept:kept, possible:possible, pct:possible?kept/possible:0};
+}
+function ringCard(pct,stroke,num,label,cap,cls){
+  return '<div class="wring'+(cls?' '+cls:'')+'">'+miniRing(pct,88,stroke,6,'pring')+
+    '<b class="wv">'+num+'</b><span class="wl">'+label+'</span><span class="wd">'+cap+'</span></div>';
+}
+function weekRings(w){
+  var xpNow=w.tot.xp, xpPrev=lastWeekXp(), diff=xpNow-xpPrev;
+  var xpPct=xpPrev>0?Math.min(1,xpNow/xpPrev):(xpNow>0?1:0);
+  var xpCap=xpPrev>0
+    ?(diff===0?'same as last week':(diff>0?'+':'-')+Math.abs(diff)+' vs last week')
+    :(xpNow>0?'first week on the board':'nothing earned yet');
+  var hk=habitsKeptWeek();
+  var fm=w.tot.focusMin;
+  return '<div class="rings">'+
+    ringCard(xpPct,'var(--brand)',String(xpNow),'XP',xpCap,diff>0&&xpPrev>0?'up':'')+
+    ringCard(hk.pct,'var(--ok)',Math.round(hk.pct*100)+'%','habits kept',hk.possible?hk.kept+' of '+hk.possible+' checks':'no good habits yet')+
+    ringCard(Math.min(1,fm/FOCUS_WEEK_TARGET),'var(--info)',fmtHm(fm),'focus',fm?'of a '+(FOCUS_WEEK_TARGET%60?fmtHm(FOCUS_WEEK_TARGET):(FOCUS_WEEK_TARGET/60)+'h')+' week':'no focus runs yet')+
+    '</div>';
+}
+/* The Progress screen, top to bottom: header row, hero card, life areas (the
+   slot render() fills with #skillsRow), This week, Streak, the compact stat
+   tiles, the 7-day charts, then the panels that were already here. Every
+   .panel is a sibling inside .progress, which is a grid with the gap between
+   them, so no panel carries its own margin. */
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
   var chart=w.days.map(function(d){
-    var v=w.per[d].xp, h=Math.round(v/maxXp*100);
-    var lbl=['S','M','T','W','T','F','S'][new Date(d+'T00:00:00').getDay()];
-    return '<div class="col"><div class="cl" style="color:var(--xp)">'+(v||'')+'</div><div class="colbar" style="height:'+Math.max(2,h)+'%"></div><div class="cl">'+lbl+'</div></div>';
+    var v=w.per[d].xp;
+    return chartCol(v,v/maxXp,dayLetter(d),'pgXp');
   }).join('');
   var achHtml=RPG.ACHIEVEMENTS.map(function(a){
     var got=state.achievements.find(function(u){return u.id===a.id;});
@@ -1253,36 +1797,42 @@ function renderStats(){
         return '<div class="logrow"><span class="tm">'+tm+'</span><span>'+e.icon+'</span>'+
           '<span>'+esc(e.text)+'</span><span class="delta">'+dd.join(' ')+'</span></div>';
       }).join('');
-  }).join('')||'<div class="empty">Nothing logged yet. Go clear a quest.</div>';
-
-  $('#view').innerHTML='<div class="panel"><h3>📊 Week in review'+
-    '<button class="btn small right" onclick="shareRecap()" title="Create a shareable image of your week">📸 Share my week</button></h3>'+
-    reviewBox()+
-    '<div class="statgrid">'+
-    '<div class="stat"><div class="v g">'+w.tot.xp+'</div><div class="k">XP earned</div></div>'+
-    '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">💰 earned</div></div>'+
-    '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">💰 spent</div></div>'+
+  }).join('')||'<div class="empty">Nothing logged yet. Clear a quest and it lands here.</div>';
+  /* the tiles that are not already a ring or a streak number above them;
+     "defeats" and "comebacks" appear once there has been a defeat (a test
+     looks for both words) */
+  var tiles='<div class="statgrid">'+
+    '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">coins earned</div></div>'+
+    '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">coins spent</div></div>'+
     '<div class="stat"><div class="v b">'+w.tot.quests+'</div><div class="k">quests cleared</div></div>'+
-    '<div class="stat"><div class="v g">'+w.tot.habits+'</div><div class="k">habits kept</div></div>'+
     '<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>'+
-    '<div class="stat"><div class="v b">'+Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60)+'</div><div class="k">focus time</div></div>'+
-    '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.hero.bestStreak||0)+'d</div><div class="k">best streak</div></div>'+
     ((state.counters.deaths||0)>0?'<div class="stat"><div class="v r">'+state.counters.deaths+'</div><div class="k">defeats</div></div>'+
-      '<div class="stat"><div class="v" style="color:var(--orange)">'+(state.counters.comebacks||0)+'</div><div class="k">🔥 comebacks</div></div>':'')+
-    '</div>'+
+      '<div class="stat"><div class="v w">'+(state.counters.comebacks||0)+'</div><div class="k">comebacks</div></div>':'')+
+    '</div>';
+
+  $('#view').innerHTML='<div class="progress">'+
+    '<div class="proghead"><span class="hi">Progress</span>'+
+      '<button class="btn small" onclick="shareRecap()" title="Create a shareable image of your week">'+svgIcon('arrow-up-right','sm')+' Share my week</button></div>'+
+    '<div class="panel herocard">'+heroSheetTop('card')+'</div>'+
+    /* render() swaps #skillsRow into this slot right after the view is built */
+    '<div class="panel lifeareas"><h3>Life areas <span class="cnt">'+state.skills.length+'</span></h3><div id="skillsSlot"></div></div>'+
+    '<div class="panel thisweek"><h3>This week <span class="cnt">last 7 days</span></h3>'+weekRings(w)+reviewBox()+'</div>'+
+    streakPanel()+
+    tiles+
+    '<div class="panel xpchart"><h3>XP over 7 days <span class="cnt">'+w.tot.xp+' XP</span></h3>'+
+    chartDefs()+
     '<div class="chart">'+chart+'</div>'+
-    '<div class="hint" style="text-align:center;margin-top:2px">XP per day, last 7 days</div>'+
     '<div class="moodstrip">'+w.moods.map(function(m){return '<span>'+m.emoji+'</span>';}).join('')+'</div>'+
-    '<div class="hint" style="text-align:center">mood, last 7 days</div>'+
+    '<div class="chartcap">Mood, last 7 days</div>'+
     sleepChartHtml(w)+'</div>'+
     focusPanel()+
-    heatmapPanel()+
     insightsPanel()+
     trophyShelf()+
     leaderboardPanel()+
-    '<div class="panel" style="margin-top:14px"><h3>🏆 Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
+    '<div class="panel"><h3>Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
     '<div class="achgrid">'+achHtml+'</div></div>'+
-    '<div class="panel" style="margin-top:14px"><h3>📜 Adventure log</h3>'+logHtml+'</div>';
+    '<div class="panel"><h3>Adventure log</h3><div class="advlog">'+logHtml+'</div></div>'+
+    '</div>';
 }
 
 var seenDay = null;
@@ -1291,8 +1841,32 @@ function render(){
   seenDay = state.lastSeenDay;
   persist();
   applyLegend();
+  /* Park #skillsRow back in the shell BEFORE the view is rebuilt. On Progress
+     it lives inside #view (see below), and the view render replaces #view's
+     innerHTML wholesale, which would destroy the element for good. Moving it
+     home first costs nothing and there is no paint in between, so the user
+     never sees it flicker. */
+  var wrapEl=$('#wrap'), skillsEl=$('#skillsRow'), tabsEl=$('#tabs');
+  if(wrapEl && skillsEl && tabsEl && skillsEl.parentNode!==wrapEl) wrapEl.insertBefore(skillsEl, tabsEl);
   renderHUD(); renderSkills(); renderTabs();
+  /* Life areas belong to Progress. renderSkills() keeps filling #skillsRow on
+     every render so it is ready the instant the class flips; this class is the
+     only thing that shows it. Remove it and six cards land back on top of
+     Today, which is the first screen the revamp was trying to clear. */
+  if(wrapEl) wrapEl.classList.toggle('show-skills', tab==='stats');
   ({today:renderToday,quests:renderQuests,habits:renderHabits,focus:renderFocus,market:renderMarket,journal:renderJournal,stats:renderStats}[tab])();
+  /* On Progress the life areas become content, not chrome. Left in the shell
+     they sit between the header and the tab bar and push the bar down the
+     screen, which on a phone is the one row that must not move. renderStats()
+     leaves an empty #skillsSlot inside its Life areas panel and the element
+     takes that spot, so the screen order is decided in one place (there). No
+     slot means the row goes to the end rather than nowhere. renderSkills()
+     writes into the element by id, so it keeps working wherever it lands. */
+  if(tab==='stats' && skillsEl){
+    var viewEl=$('#view'), slot=viewEl?viewEl.querySelector('#skillsSlot'):null;
+    if(slot) slot.parentNode.replaceChild(skillsEl, slot);
+    else if(viewEl) viewEl.appendChild(skillsEl);
+  }
   if(typeof mascotMoodSync==='function') mascotMoodSync();
   if(typeof syncMusicPlayer==='function') syncMusicPlayer();
   if(typeof syncFocusPill==='function') syncFocusPill();
@@ -1362,14 +1936,37 @@ function promoteQ(id){
   var g=A.promoteQuest(state,id);
   if(g){ persist(); render(); toast('⬆️ <span class="c">Promoted to MAIN QUEST</span>'); SND.ach(); }
 }
+/* Plain-phrase quick add. As you type "Finish the essay by friday hard" the
+   difficulty, due date and repeat days fill themselves from RPG.parseTask;
+   you can still change any control before adding. The phrases are stripped
+   from the title on add. kind is 'q' (side quest) or 'd' (daily). */
+var quickParsed={q:'',d:''};   // the exact text the parser last saw per form; add only strips phrases from that text
+function quickParse(kind){
+  var inp=$(kind==='q'?'#qTitle':'#dTitle'); if(!inp) return;
+  var p=RPG.parseTask(inp.value, new Date()), bits=[];
+  quickParsed[kind]=inp.value;
+  var diffSel=$(kind==='q'?'#qDiff':'#dDiff');
+  if(p.diff && diffSel){ diffSel.value=p.diff; bits.push(p.diff); }
+  if(kind==='q'){ var due=$('#qDue'); if(p.due && due){ due.value=p.due; bits.push('due '+p.due); } }
+  else if(p.recurring){
+    pendingDays=Array.isArray(p.days)?p.days.slice():[];
+    var btns=document.querySelectorAll('.daysrow .dow');
+    for(var k=0;k<btns.length && k<MON_ORDER.length;k++) btns[k].classList.toggle('on', pendingDays.indexOf(MON_ORDER[k])>=0);
+    bits.push(pendingDays.length?'repeats on '+pendingDays.length+' days':'every day');
+  }
+  var hint=$(kind==='q'?'#qHint':'#dHint');
+  if(hint) hint.textContent=bits.length?('Understood: '+bits.join(', ')+(p.title&&p.title!==inp.value.trim()?' (title: '+p.title+')':'')):'';
+}
 function addQuest(){
-  var t=$('#qTitle').value.trim(); if(!t) return;
+  var raw=$('#qTitle').value.trim(); if(!raw) return;
+  var t=(quickParsed.q.trim()===raw)?(RPG.parseTask(raw, new Date()).title||raw):raw; quickParsed.q='';
   A.addQuest(state,{title:t,diff:$('#qDiff').value,skillId:$('#qSkill').value||null,
     due:$('#qDue').value||null,recurring:false,days:null,main:null});
   persist(); render();
 }
 function addDaily(){
-  var t=$('#dTitle').value.trim(); if(!t) return;
+  var raw=$('#dTitle').value.trim(); if(!raw) return;
+  var t=(quickParsed.d.trim()===raw)?(RPG.parseTask(raw, new Date()).title||raw):raw; quickParsed.d='';
   A.addQuest(state,{title:t,diff:$('#dDiff').value,skillId:$('#dSkill').value||null,
     due:null,recurring:true,days:pendingDays.slice(),main:null});
   pendingDays=[];
@@ -1423,12 +2020,17 @@ function buy(id){
   if(r&&r.shield){ persist(); render(); toast('🛡 <span class="c">Streak Shield equipped - one missed day is covered</span>'); SND.buy(); afterAction(); return; }
   persist(); render(); fx(r); afterAction();
 }
-function addShop(){
-  var t=$('#sTitle').value.trim(), p=Number($('#sPrice').value); if(!t||!p) return;
-  var hp=shopTab==='hotel'?Number(($('#sHp')||{}).value||0):0;
-  var dmg=shopTab==='black'?Number(($('#sDmg')||{}).value||0):0;
-  var limEl=$('#sLimit'), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
-  A.addShopItem(state,{title:t,price:p,tab:shopTab,hp:hp,dmg:dmg,limit:lim}); persist(); render();
+/* tabId comes from which of the three add forms was submitted (Rewards now
+   shows all three - market/hotel/black - on one page, so there is no single
+   ambient "current tab" left to read). #sTitle/#sPrice/#sLimit are suffixed
+   per section for that reason; #sHp and #sDmg stay bare since only one
+   section (Rest, Guilty pleasures) ever has one on the page. */
+function addShop(tabId){
+  var t=$('#sTitle-'+tabId).value.trim(), p=Number($('#sPrice-'+tabId).value); if(!t||!p) return;
+  var hp=tabId==='hotel'?Number(($('#sHp')||{}).value||0):0;
+  var dmg=tabId==='black'?Number(($('#sDmg')||{}).value||0):0;
+  var limEl=$('#sLimit-'+tabId), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
+  A.addShopItem(state,{title:t,price:p,tab:tabId,hp:hp,dmg:dmg,limit:lim}); persist(); render();
 }
 function delShop(id){
   var it=state.shop.find(function(x){return x.id===id;});
@@ -1625,6 +2227,48 @@ function avPickerHtml(from){
       :'<div class="avpick scroll">'+AVATARS.map(function(a){
           return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';'+from+'()">'+a+'</button>';}).join('')+'</div>');
 }
+/* The top of the Hero sheet, and since Revamp 8 the hero card on Progress too.
+   This is where everything the compact header stopped showing now lives: the
+   worn title (and the picker behind it), the level in pixel type, the rank
+   chip, XP to the next level, how far the next rank is, HP with the defeat
+   explainer, and what today has paid so far. If you ever want one of these
+   back in the header, weigh it against the first card on Today being visible
+   without scrolling on a phone.
+   `where` is 'sheet' (the default, inside openCharacter) or 'card' (Progress).
+   The only difference is the Customize button: the sheet IS the customize
+   screen, so there it would just reopen itself. */
+function heroSheetTop(where){
+  var card=where==='card';
+  var h=state.hero, r=RPG.rankFor(h.level), nr=RPG.nextRank(h.level), maxHp=RPG.maxHpOf(state);
+  var col=RANK_COLORS[r.code]||'var(--gold)';
+  var need=RPG.xpForLevel(h.level), left=Math.max(0,need-h.xp);
+  var asc=(h.ascension||0)>0?' · Season '+h.ascension:'';
+  return '<div class="herotop'+(card?' card':'')+'">'+
+    '<div class="heroid"><div class="heroav">'+avHtml(h.avatar)+'</div>'+
+      '<div class="grow"><div class="heroname">'+esc(h.name)+'</div>'+
+      /* the pixel font is allowed here because the number is 14px or larger;
+         the same chip as the header, so it opens the same ranks sheet */
+      '<div class="herometa"><span class="lvbig">LV.'+h.level+'</span>'+
+        '<span class="rank" role="button" tabindex="0" style="color:'+col+';border-color:'+col+';cursor:pointer" title="Rank '+r.code+', '+esc(r.name)+' - see all ranks & how prestige works" aria-label="Rank '+r.code+', '+esc(r.name)+'. See all ranks and how prestige works" onclick="openRanks()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openRanks()}">'+r.code+'</span>'+
+        '<span class="hint">'+esc(r.name)+asc+'</span></div>'+
+      (h.title
+        ?'<div><span class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</span></div>'
+        :'<div><span class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</span></div>')+
+      '</div></div>'+
+    '<div class="heroxp"><div class="bar xp" title="XP '+h.xp+' of '+need+'"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i></div>'+
+      '<div class="xpline"><span>'+h.xp+' / '+need+' XP</span><span>'+left+' to Lv.'+(h.level+1)+'</span></div></div>'+
+    /* the rank progress line is a button: the ranks sheet explains what the
+       next rank is, and at max rank the same tap starts the ascension flow */
+    (nr
+      ?'<button class="btn ghost small ranknext" aria-label="Next rank '+nr.code+' at level '+nr.min+'. See all ranks" onclick="openRanks()">▲ Rank '+nr.code+' at Lv.'+nr.min+' '+svgIcon('chevron-right','sm')+'</button>'
+      :'<button class="btn ghost small ranknext" aria-label="Max rank reached. Ascend into a new season" onclick="openAscend()">✦ Max rank. Ascend into a new season '+svgIcon('chevron-right','sm')+'</button>')+
+    '<div class="hpline"><span>❤️ HP '+h.hp+' / '+maxHp+'</span>'+
+      '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button>'+
+      (card?'<button class="btn small" onclick="openCharacter()" title="Name, title, avatar, theme">'+svgIcon('pencil','sm')+' Customize</button>':'')+
+    '</div>'+
+    todayGlance()+
+    '</div>';
+}
 function openCharacter(){
   pickedAv=pickedAv||state.hero.avatar;
   /* preserve half-typed name/title across in-modal re-renders (avatar taps etc.) */
@@ -1632,6 +2276,7 @@ function openCharacter(){
   var keepT=$('#chTitle')?$('#chTitle').value:(state.hero.title||'');
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>🧝 CHARACTER</h2>'+
+    heroSheetTop()+
     '<div class="flabel">Name</div><input id="chName" maxlength="24" value="'+esc(keepN)+'">'+
     '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(keepT)+'">'+
     titleChips()+
@@ -1781,48 +2426,13 @@ function saveCharacter(){
   persist(); closeModal(); render();
 }
 
-/* ---------- The Royal Chamber (premium, Phase A: coming soon) ----------
-   Spec: docs/PREMIUM_SPEC.md. Cosmetic-only forever - never pay to win.
-   Always rendered in dungeon-dark so it looks premium under every theme. */
-var ROYAL_THEME_PREVIEWS=[['Obsidian','#0b0b0e','#c9ccd6'],['Aurora','#06231f','#5ef2b8'],['Sakura','#231320','#ff9ecb'],['Starfield','#0a1030','#e8ecff']];
-function openRoyalChamber(){
-  var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box royal"><h2>👑 THE ROYAL CHAMBER</h2>'+
-    '<div class="rc-sub">Dress your legend. Your climb stays free, always.</div>'+
-    '<div class="rc-offer founder"><div class="rc-t">Founder’s Crest</div>'+
-      '<div class="rc-price">19 EUR, once. Yours forever.</div>'+
-      '<div class="rc-body">Every royal perk, for life. Every future one too. Plus the Founder badge, only for those who were here first.</div>'+
-      '<button class="btn rc-buy" disabled>Coming soon</button></div>'+
-    '<div class="rc-offer"><div class="rc-t">Royal Pass</div>'+
-      '<div class="rc-price">2.49 EUR / month</div>'+
-      '<div class="rc-body">All royal perks while your pass is active.</div>'+
-      '<button class="btn rc-buy" disabled>Coming soon</button></div>'+
-    '<div class="rc-note">The chamber opens after launch. Everything you see stays cosmetic.</div>'+
-    '<div class="rc-perks">'+
-      '<div class="rc-perk"><div class="rc-pt">🎨 Royal Themes</div>'+
-        '<div class="rc-swatches">'+ROYAL_THEME_PREVIEWS.map(function(t){
-          return '<span class="rc-sw" title="'+t[0]+'" style="background:'+t[1]+'"><i style="background:'+t[2]+'"></i></span>';}).join('')+'</div>'+
-        '<div class="rc-pb">Four new realms for your interface. Obsidian, Aurora, Sakura, Starfield.</div></div>'+
-      '<div class="rc-perk"><div class="rc-pt">🖼 Legend’s Wardrobe</div>'+
-        '<div class="rc-ring" aria-hidden="true">🧙</div>'+
-        '<div class="rc-pb">Glowing frames, new hero styles, and a shimmer on your title.</div></div>'+
-      '<div class="rc-perk"><div class="rc-pt">🦉 Sage’s Ledger</div>'+
-        '<div class="rc-chart" aria-hidden="true"><i style="height:35%"></i><i style="height:60%"></i><i style="height:45%"></i><i style="height:80%"></i><i style="height:65%"></i></div>'+
-        '<div class="rc-pb">The owl opens his ledger. Deep charts on your habits, focus, and skills.</div></div>'+
-    '</div>'+
-    '<div class="rc-footer"><b>Never pay to win.</b> No XP for money. No shields for money. No shortcuts, ever. Premium is style and stats, nothing else. Quests, habits, focus, and streaks are free for everyone, forever.</div>'+
-    '<div class="setrow" style="margin-top:12px;justify-content:center"><button class="btn" onclick="closeModal()">Back to the quest</button></div></div>';
-}
-
 /* ---------- settings ---------- */
 function openSettings(){
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>⚙️ SETTINGS</h2>'+
     '<div class="setrow"><button class="btn" onclick="closeModal();openCharacter()">🧝 Character & theme</button>'+
     '<button class="btn" onclick="closeModal();startTour()">🎯 Interactive tour</button></div>'+
-    '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button>'+
-    '<button class="btn" style="border-color:var(--gold);color:var(--gold)" onclick="closeModal();openRoyalChamber()">👑 The Royal Chamber</button></div>'+
-    '<div class="hint" style="margin-top:-4px">Cosmetics and deep stats. Never power.</div>'+
+    '<div class="setrow"><button class="btn" onclick="tut(0)">❓ How it works</button></div>'+
     '<div class="setrow">'+
     '<button class="btn" onclick="toggleSound()">'+(state.settings.sound?'🔊 Sound ON':'🔇 Sound OFF')+'</button>'+
     '<button class="btn" onclick="toggleReminders()">'+(state.settings.reminders?'🔔 Reminders ON':'🔕 Reminders OFF')+'</button>'+
@@ -2077,7 +2687,7 @@ function handleRecoveryHash(){
       if(state){ afterCloudSignIn(); return; }
       SMLCloud.pull().then(function(r){   // fresh device: just take the cloud save
         if(r.ok && r.exists && r.data && r.data.hero){ state=RPG.migrate(r.data); RPG.save(state,localStorage); applyTheme(); render(); toast('☁️ <span class="p">Cloud save loaded</span>'); }
-        else tut(0);
+        else onboarding();   // no save anywhere: same first run as boot()
       });
     });
   });
@@ -2344,18 +2954,23 @@ function saveEditHabit(id){
 }
 
 /* ---------- interactive spotlight tour ---------- */
+/* Seven steps, one line each. The old ten-step version narrated features; this
+   one only shows where things are, because the app teaches the rest in place.
+   Two rules hold it together. Every `sel` must match something that is on
+   screen once `tab` has rendered, or the tooltip floats in the middle of the
+   viewport pointing at nothing (a test walks the list and checks each one).
+   And nothing here targets #skillsRow any more: that element moves between the
+   shell and #view depending on the tab, so it is the one selector that cannot
+   be trusted to sit still. */
 var tourStep=0;
 var TOUR=[
-  {tab:'today', sel:'#hud', title:'Your hero', body:'Your rank, level, experience (XP), health points (HP), coins and streak live here. Tap your avatar any time to rename or re-theme.'},
-  {tab:'today', sel:'#skillsRow', title:'Life areas', body:'Each of these areas levels up and unlocks mastery bonuses on its own actions. Connect quests, habits and focus sessions to these areas.'},
-  {tab:'today', sel:'.tabs', title:'Getting around', body:'Today is home base. Quests, Habits, Focus, Market, Journal and Stats each live in their own tab.'},
-  {tab:'today', sel:'.quick', title:'Quick Add', body:'Log your mood and sleep, and start a focus run, right from here. Keeping the streak alive multiplies all your XP.'},
-  {tab:'quests', sel:'.boss', title:'The weekly boss', body:'Name THE task of your week and slay it before the week ends for a big reward.'},
-  {tab:'quests', sel:'.panel', title:'Quests', body:'Main quests are big goals broken into steps. Daily quests reset each morning and fill the chest. Side quests are one-off tasks with an optional due date. The ✎ button edits anything you added.'},
-  {tab:'focus', sel:'.focusbox', title:'Focus = paid deep work', body:'Pomodoro cycles that pay you for every worked minute. Tag a life area so it shows up in your Stats breakdown.'},
-  {tab:'market', sel:'.shoptabs', title:'Spend what you earned', body:'Turn coins into real rewards, guilt-free. Prices climb if you binge the same treat in one day.'},
-  {tab:'stats', sel:'.review', title:'See your patterns', body:'Your week in review, a focus-by-area breakdown, and insights on what actually moves your mood.'},
-  {tab:'stats', sel:'#mascot', title:'Sage, your guide', body:'The owl in the corner. Tap Sage any time for a daily briefing: what is urgent, what is left today, and where to go next.'}
+  {tab:'today', sel:'#hud', title:'Your hero', body:'Your hero, level, XP, coins and streak live here'},
+  {tab:'today', sel:'#tabs', title:'Getting around', body:'Five places: Today, Quests, Habits, Rewards, Progress'},
+  {tab:'today', sel:'#view .panel', title:'Today', body:'Today shows what to do now'},
+  {tab:'quests', sel:'#view .panel', title:'Quests', body:'Big goals with steps, side quests and dailies'},
+  {tab:'market', sel:'#view .panel', title:'Rewards', body:'Earn coins by doing real things, spend them here'},
+  {tab:'stats', sel:'.review,#view .panel', title:'Progress', body:'Your week, streak and life areas'},
+  {tab:'stats', sel:'#mascot', title:'Sage', body:'Ask Sage when you are stuck'}
 ];
 function startTour(){ closeModal(); tourStep=0; showTourStep(); }
 function showTourStep(){
@@ -2451,49 +3066,221 @@ function tut(i){
 }
 function tutSkip(){ if(state){ closeModal(); } else { onboarding(); } }
 
-/* ---------- onboarding ---------- */
-function onboarding(){
-  var prev=$('#obName'); var keep=prev?prev.value:'';
+/* ---------- onboarding: the six-step wizard ----------
+   boot() opens this when there is no save. Steps: 1 hero, 2 path, 3 day,
+   4 habits, 5 quests, 6 rewards, then a Ready screen whose Start button is
+   createHero(). Each tap re-renders the current step (onboarding(obStep)),
+   so every pick lives in the module-level `ob` object, not in the DOM: a
+   re-render that read its values back from the DOM would lose them.
+
+   Three picks are still owned by older variables because the controls that
+   write them are shared with the Character sheet: pickedAv (the avatar
+   picker and the hero builder), pickedTheme (previewTheme, also read by
+   applyTheme before a save exists) and pickedPaths (togglePath, which the
+   tests read directly). obSync() copies those three into `ob` before every
+   render and inside createHero, so createHero reads one object. If you add a
+   pick, add it to obFresh() as well or it will leak into the next hero after
+   a reset. */
+var OB_STEPS=6;
+var OB_MINUTES=[[15,'15 min'],[30,'30 min'],[60,'60 min or more']];
+var OB_STRUGGLES=[['phone','Phone'],['procrastination','Procrastination'],['sleep','Sleep'],['junk','Junk food'],['none','None']];
+/* the monster a struggle adds on step 4. The ids are stored on
+   state.settings.onboard.struggle and the Rewards screen matches on them, so
+   renaming an id here means renaming it there too. */
+var OB_MONSTERS={phone:'Doomscrolling',procrastination:'Putting off the hard task',sleep:'Late-night scrolling',junk:'Junk food binge'};
+function obFresh(){ return {name:'',avatar:null,paths:['general'],theme:null,minutes:30,struggle:'none',habitsOff:{},questsOff:{},rewardsOff:{},targets:{},custom:''}; }
+var ob=obFresh(), obStep=1, obSug=null;
+function obSync(){
+  ob.avatar=pickedAv||ob.avatar||'🧙';
+  ob.paths=(pickedPaths&&pickedPaths.length?pickedPaths:['general']).slice();
+  ob.theme=pickedTheme;
+}
+/* how many dailies start switched on for a time budget: 15 min two, 30 min
+   three, 60 min all of them. Infinity is deliberate: "all" must stay true
+   however many quests a blend of paths seeds. */
+function obBudget(min){ return min===15?2:(min===30?3:Infinity); }
+/* The suggestions ARE the board the picked paths would seed, read off a
+   throwaway state. Running the real seeder keeps steps 4 to 6 in step with
+   PATHS in core.js without a second copy of the presets. createHero runs the
+   same function over the real state, so the row order shown is the row order
+   kept: change the filter here and the two go out of sync. */
+function obLists(st){
+  var habits=[], quests=[], rewards=[], di=0;
+  st.habits.forEach(function(h){ if(h.type==='good') habits.push({id:h.id,title:h.title,target:h.target}); });
+  st.quests.forEach(function(q){ quests.push({id:q.id,title:q.title,recurring:!!q.recurring,di:q.recurring?di++:-1}); });
+  /* market items only, minus the protection items (Streak Shield): those are
+     not "rewards you picked", the Rewards screen shows them under Protection */
+  st.shop.forEach(function(s){ if(s.tab==='market'&&!s.special) rewards.push({id:s.id,title:s.title,price:s.price}); });
+  return {habits:habits,quests:quests,rewards:rewards};
+}
+function obSuggest(){ return obLists(RPG.seedPreset(RPG.newState('preview', ob.avatar||'🧙'), ob.paths)); }
+/* Is a suggested item switched on? ob.<kind>Off[title] true means the user
+   turned it off, false means turned it back on; absent means the default:
+   habits on, dailies inside the time budget on, the first three rewards on. */
+function obOn(kind,it,i){
+  var off=ob[kind+'Off'], t=it.title;
+  if(Object.prototype.hasOwnProperty.call(off,t)) return !off[t];
+  if(kind==='quests') return it.di<0 || it.di<obBudget(ob.minutes);
+  if(kind==='rewards') return i<3;
+  return true;
+}
+/* the toggles pass an index into obSug rather than the title, so no title
+   ever lands inside an onclick attribute (an apostrophe would break it) */
+function obToggle(kind,i){ var it=obSug&&obSug[kind]&&obSug[kind][i]; if(!it) return; ob[kind+'Off'][it.title]=obOn(kind,it,i); onboarding(obStep); }
+function obToggleMonster(){ var t=OB_MONSTERS[ob.struggle]; if(!t) return; ob.habitsOff[t]=!ob.habitsOff[t]; onboarding(obStep); }
+function obTarget(i,n){ var it=obSug&&obSug.habits[i]; if(!it) return; ob.targets[it.title]=n; onboarding(obStep); }
+function obPick(key,val){ ob[key]=val; onboarding(obStep); }
+function obNext(){
+  if(obStep===1){
+    if(!obNameCheck()){ var e=$('#obNameErr'); if(e) e.style.display=''; var i=$('#obName'); if(i) i.focus(); return; }
+    ob.name=$('#obName').value.trim();
+  }
+  if(obStep===5){ var c=$('#obCustom'); if(c) ob.custom=c.value; }
+  onboarding(obStep+1);
+}
+function obBack(){ onboarding(Math.max(1,obStep-1)); }
+function obSkip(){ onboarding(OB_STEPS+1); }   // straight to Ready; picks not yet made keep their defaults
+function obDots(step){
+  var h='';
+  for(var j=1;j<=OB_STEPS;j++) h+='<i class="'+(j<step?'done':(j===step?'on':''))+'"></i>';
+  return '<div class="tdots" role="img" aria-label="'+(step>OB_STEPS?'All steps done':'Step '+step+' of '+OB_STEPS)+'">'+h+'</div>';
+}
+function obChips(key,opts){
+  return '<div class="obchips" role="group">'+opts.map(function(o){ var on=ob[key]===o[0], v=typeof o[0]==='number'?o[0]:'\''+o[0]+'\'';
+    return '<button type="button" class="chip'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obPick(\''+key+'\','+v+')">'+o[1]+'</button>'; }).join('')+'</div>';
+}
+/* weekly target chips under a habit: 3x, 5x, daily, plus the preset's own
+   value when it is none of those (Meal prep starts at 2x), so what is shown
+   is always what the engine will use */
+function obTargets(i,it){
+  var cur=ob.targets[it.title]||it.target||7, vals=[3,5,7];
+  if(vals.indexOf(cur)<0) vals.push(cur);
+  vals.sort(function(a,b){ return a-b; });
+  return '<div class="obchips targets" role="group" aria-label="Times per week">'+vals.map(function(n){ var on=n===cur;
+    return '<button type="button" class="chip'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obTarget('+i+','+n+')">'+(n===7?'daily':n+'x')+'</button>'; }).join('')+'</div>';
+}
+function obRow(kind,i,it,on,meta){
+  return '<div class="obitem'+(on?' on':'')+'">'+
+    '<button type="button" class="obtog" aria-pressed="'+on+'" onclick="obToggle(\''+kind+'\','+i+')">'+
+      '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span>'+(meta?'<span class="obmeta">'+meta+'</span>':'')+'</button>'+
+    (kind==='habits'&&on?obTargets(i,it):'')+'</div>';
+}
+function obThemesHtml(){
+  return '<div class="obthemes">'+Object.keys(THEMES).map(function(k){ var t=THEMES[k];
+    return '<button type="button" class="obtheme'+((pickedTheme||'dungeon')===k?' on':'')+'" onclick="previewTheme(\''+k+'\')" aria-pressed="'+((pickedTheme||'dungeon')===k)+'">'+
+      '<span class="sw" style="background:'+t.bg+'"><i style="background:'+t.panel+'"></i><i style="background:'+t.accent+'"></i></span>'+esc(t.name)+'</button>';
+  }).join('')+'</div>';
+}
+function onboarding(step){
+  obStep=step||1; obSync();
   pickedAv=pickedAv||'🧙';
+  var s=obStep, title='', copy='', body='', nav='', mon=OB_MONSTERS[ob.struggle];
+  if(s===1){
+    title='Your hero'; copy='Name your character and pick a look.';
+    body='<input id="obName" placeholder="Hero name" maxlength="24" autocomplete="off" value="'+esc(ob.name)+'" oninput="obNameCheck()">'+
+      '<div class="hint" id="obNameErr" style="color:var(--danger);display:none">Give your hero a name to continue.</div>'+
+      '<div class="flabel">Avatar</div>'+avPickerHtml('onboarding')+
+      '<div class="flabel">Look</div>'+obThemesHtml();
+  } else if(s===2){
+    title='Your path'; copy='Pick ALL that fit, the board blends them.';
+    body='<div class="pathpick">'+RPG.PATHS.map(function(p){ var on=ob.paths.indexOf(p.id)>=0;
+      return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
+    }).join('')+'</div>';
+  } else if(s===3){
+    title='Your day'; copy='How much time, and what gets in the way.';
+    body='<div class="flabel">Time per day</div>'+obChips('minutes',OB_MINUTES)+
+      '<div class="flabel">Biggest struggle</div>'+obChips('struggle',OB_STRUGGLES);
+  } else if(s===4){
+    obSug=obSuggest();
+    title='Habits to start'; copy='Turn off any you do not want, set how often.';
+    body='<div class="oblist">'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i)); }).join('')+'</div>'+
+      (mon?'<div class="flabel">Monster to fight</div><div class="oblist"><div class="obitem'+(ob.habitsOff[mon]?'':' on')+'">'+
+        '<button type="button" class="obtog" aria-pressed="'+!ob.habitsOff[mon]+'" onclick="obToggleMonster()">'+
+        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(mon)+'</span><span class="obmeta">costs HP when you slip</span></button></div></div>':'');
+  } else if(s===5){
+    obSug=obSuggest();
+    title='First quests'; copy='Dailies that fit your time are on. Toggle any.';
+    body='<div class="oblist">'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),it.recurring?'daily':''); }).join('')+'</div>'+
+      '<div class="flabel">Your own (optional)</div>'+
+      '<input id="obCustom" placeholder="Add one of your own" maxlength="60" autocomplete="off" value="'+esc(ob.custom)+'" oninput="ob.custom=this.value">';
+  } else if(s===6){
+    obSug=obSuggest();
+    title='Rewards'; copy='What your coins will buy. Add more later.';
+    body='<div class="oblist">'+obSug.rewards.map(function(it,i){ var on=obOn('rewards',it,i);
+      return '<button type="button" class="obcard'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obToggle(\'rewards\','+i+')">'+
+        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span><span class="obprice">💰 '+it.price+'</span></button>'; }).join('')+'</div>';
+  } else {
+    title='Ready when you are';
+    body='<div class="obready"><div class="obav">'+avHtml(ob.avatar)+'</div><div class="obheroname">'+esc(ob.name||'Hero')+'</div></div>'+
+      '<div class="oblines">'+
+      '<div class="obline">'+svgIcon('coins')+'<span>Clear quests and keep habits to earn XP and coins</span></div>'+
+      '<div class="obline">'+svgIcon('flame')+'<span>Keep the streak, Sage will help</span></div>'+
+      '<div class="obline">'+svgIcon('gift')+'<span>Spend coins on the rewards you picked</span></div></div>';
+  }
+  if(s>OB_STEPS){
+    nav='<button class="btn go wide" id="obStart" onclick="createHero()">Start</button>'+
+      '<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button></div>';
+  } else {
+    nav='<button class="btn go wide" id="obNext" onclick="obNext()">Continue</button>'+
+      (s>1?'<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button>'+
+        (s>=3?'<button type="button" class="btn ghost" onclick="obSkip()">Skip</button>':'')+'</div>':'');
+  }
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box"><h2>🎮 SCALEMYLIFE<br><span style="font-size:10px;color:var(--muted)">CREATE YOUR HERO</span></h2>'+
-    '<div class="hint" style="margin-bottom:6px">Your real life is the game. Name your character:</div>'+
-    '<input id="obName" placeholder="Hero name (required)" maxlength="24" value="'+esc(keep)+'" oninput="obNameCheck()">'+
-    '<div class="hint" id="obNameErr" style="color:var(--hp);display:none;margin-bottom:4px">Give your hero a name to continue.</div>'+
-    '<div class="flabel">Pick an avatar</div>'+avPickerHtml('onboarding')+
-    '<div class="flabel">Who are you? Pick ALL that fit - a student can also be an athlete and a founder. Your starting quests, habits, life areas and rewards blend everything you pick.</div>'+
-    '<div class="pathpick">'+RPG.PATHS.map(function(p){
-      return '<button class="'+(pickedPaths.indexOf(p.id)>=0?'on':'')+'" aria-pressed="'+(pickedPaths.indexOf(p.id)>=0)+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
-    }).join('')+'</div>'+
-    '<div class="flabel">Pick a look - the page behind previews it live (change it any time later)</div>'+
-    '<div class="obthemes">'+Object.keys(THEMES).map(function(k){ var t=THEMES[k];
-      return '<button type="button" class="obtheme'+((pickedTheme||'dungeon')===k?' on':'')+'" onclick="previewTheme(\''+k+'\')" aria-pressed="'+((pickedTheme||'dungeon')===k)+'">'+
-        '<span class="sw" style="background:'+t.bg+'"><i style="background:'+t.panel+'"></i><i style="background:'+t.accent+'"></i></span>'+esc(t.name)+'</button>';
-    }).join('')+'</div>'+
-    '<button class="btn wide go" id="obStart" onclick="createHero()">▶ START ADVENTURE</button>'+
-    '<div class="hint" style="margin-top:10px">You start with 50 💰 and a starter board matched to your picks - edit everything. Full customization lives behind your avatar.</div></div>';
-  var inp=$('#obName'); if(inp && !inp.value) inp.focus();
-  obNameCheck();
+  m.innerHTML='<div class="box obwiz">'+obDots(s)+'<h2>'+title+'</h2>'+(copy?'<p class="obcopy">'+copy+'</p>':'')+body+nav+'</div>';
+  if(s===1){ var inp=$('#obName'); if(inp && !inp.value) inp.focus(); obNameCheck(); }
 }
 function previewTheme(k){
   if(!THEMES[k]) return;
-  pickedTheme=k; applyTheme();
+  pickedTheme=k; ob.theme=k; applyTheme();
   var btns=document.querySelectorAll('.modal .obthemes .obtheme'), keys=Object.keys(THEMES);
   for(var i=0;i<btns.length;i++){ var on=keys[i]===k; btns[i].className='obtheme'+(on?' on':''); btns[i].setAttribute('aria-pressed',on); }
 }
+/* Continue on step 1 waits for a non-blank name. Returns true when there is
+   no name field on screen (later steps), so callers can use it as a plain
+   "is the name fine" check. */
 function obNameCheck(){
-  var inp=$('#obName'), btn=$('#obStart'); if(!inp||!btn) return true;
-  var ok=inp.value.trim().length>0;
+  var inp=$('#obName'), btn=$('#obNext'); if(!inp||!btn) return true;
+  var ok=inp.value.trim().length>0; ob.name=inp.value;
   btn.disabled=!ok; btn.style.opacity=ok?'':'0.5'; btn.style.cursor=ok?'':'not-allowed';
+  if(ok){ var e=$('#obNameErr'); if(e) e.style.display='none'; }
   return ok;
 }
+/* Turns `ob` into the real save. The board is seeded exactly as before and
+   the picks are then applied through the engine's own actions (delete, edit,
+   add): editing the arrays here directly would skip the bookkeeping those
+   actions do. */
 function createHero(){
-  var raw=($('#obName')&&$('#obName').value||'').trim();
-  if(!raw){ var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); var i=$('#obName'); if(i) i.focus(); return; }
-  var n=raw;
-  state=RPG.seedPreset(RPG.newState(n,pickedAv||'🧙'), pickedPaths&&pickedPaths.length?pickedPaths:'general');
-  if(pickedTheme&&THEMES[pickedTheme]) state.settings.theme=pickedTheme;
-  pickedAv=null; pickedTheme=null;
+  obSync();
+  var inp=$('#obName');
+  var raw=((inp?inp.value:ob.name)||'').trim();
+  if(!raw){
+    /* the name lives on step 1: if we are elsewhere, go back there so the
+       error has an input to point at (inline error plus focus, as before) */
+    if(!inp){ onboarding(1); inp=$('#obName'); }
+    var e=$('#obNameErr'); if(e) e.style.display=''; obNameCheck(); if(inp) inp.focus(); return;
+  }
+  var n=raw, paths=ob.paths;
+  state=RPG.seedPreset(RPG.newState(n,ob.avatar||'🧙'), paths);
+  var L=obLists(state);
+  L.habits.forEach(function(it,i){
+    if(!obOn('habits',it,i)) A.deleteHabit(state,it.id);
+    else if(ob.targets[it.title]) A.editHabit(state,it.id,{target:ob.targets[it.title]});
+  });
+  L.quests.forEach(function(it,i){ if(!obOn('quests',it,i)) A.deleteQuest(state,it.id); });
+  L.rewards.forEach(function(it,i){ if(!obOn('rewards',it,i)) A.deleteShopItem(state,it.id); });
+  var mon=OB_MONSTERS[ob.struggle];
+  if(mon){
+    /* a path may already seed the same monster (Doomscrolling): keep that one
+       rather than adding a twin, and drop it if the user switched the row off */
+    var twins=state.habits.filter(function(h){ return h.type==='bad'&&h.title.toLowerCase()===mon.toLowerCase(); });
+    if(ob.habitsOff[mon]) twins.forEach(function(h){ A.deleteHabit(state,h.id); });
+    else if(!twins.length) A.addHabit(state,{title:mon,type:'bad'});
+  }
+  if(ob.custom&&ob.custom.trim()) A.addQuest(state,{title:ob.custom.trim(),diff:'normal'});
+  /* the Rewards screen reads this to suggest rewards; keep exactly this shape */
+  state.settings.onboard={paths:paths.slice(),struggle:ob.struggle,minutes:ob.minutes};
+  if(ob.theme&&THEMES[ob.theme]) state.settings.theme=ob.theme;
+  pickedAv=null; pickedTheme=null; pickedPaths=['general']; ob=obFresh(); obStep=1; obSug=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
   setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
@@ -2571,7 +3358,7 @@ function sageToday(state){
     .map(function(g){ return 'main-quest '+g.id+': '+String(g.title||'').replace(/[":;]/g,' '); });
   return qs.concat(hs).concat(gs).join('; ').slice(0,1600);
 }
-var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm'};
+var SAGE_ACTION_TIERS={complete_quest:'auto',complete_habit:'auto',log_mood:'auto',add_quest:'confirm',add_habit:'confirm',propose_steps:'confirm'};
 function sageApplyAction(type, params){
   params=params||{};
   if(type==='complete_quest'){
@@ -2613,7 +3400,16 @@ function openSageChat(){
 function mascotChatHtml(){
   var rows=mascotChatLog.map(function(m,i){
     var body=m.text?esc(m.text):'';
-    if(m.pendingAction){
+    if(m.pendingAction && m.pendingAction.type==='propose_steps'){
+      /* Sage proposed a plan: one checkbox per step, all on by default. Nothing
+         is saved until "Add selected"; unchecked steps are simply skipped. */
+      var ps=m.pendingAction, goal=(state.goals||[]).find(function(g){ return g.id===ps.params.main_quest_id; });
+      var steps=Array.isArray(ps.params.steps)?ps.params.steps:[];
+      body+='<div class="mchat-action" id="mact'+i+'"><div>Steps for "'+esc(goal?goal.title:'your main quest')+'"</div>'+
+        steps.map(function(st,k){ return '<label class="mstep"><input type="checkbox" class="mstepbox" data-k="'+k+'" checked> '+esc(String(st.title||''))+(st.difficulty?' <span class="hint">('+esc(String(st.difficulty))+')</span>':'')+'</label>'; }).join('')+
+        '<button class="btn go small" onclick="sageConfirmAction('+i+')">Add selected</button>'+
+        '<button class="btn ghost small" onclick="sageCancelAction('+i+')">Cancel</button></div>';
+    } else if(m.pendingAction){
       var p=m.pendingAction, label=(p.type==='add_quest'?'Add quest: "':'Add habit: "')+esc(String(p.params.title||''))+'"';
       body+='<div class="mchat-action"><div>'+label+'</div>'+
         '<button class="btn go small" onclick="sageConfirmAction('+i+')">Yes, add it</button>'+
@@ -2628,9 +3424,23 @@ function mascotChatHtml(){
 }
 function sageConfirmAction(i){
   var m=mascotChatLog[i]; if(!m||!m.pendingAction) return;
-  var applied=sageApplyAction(m.pendingAction.type, m.pendingAction.params);
+  var p=m.pendingAction, applied, note;
+  if(p.type==='propose_steps'){
+    /* read the checkboxes from the card before it re-renders; each checked
+       step becomes a quest linked to the main quest through the normal
+       add_quest path, so the same validation applies */
+    var card=document.getElementById('mact'+i), steps=Array.isArray(p.params.steps)?p.params.steps:[], added=0;
+    var boxes=card?card.querySelectorAll('.mstepbox'):[];
+    for(var k=0;k<steps.length;k++){
+      var box=boxes[k]; if(box && !box.checked) continue;
+      if(sageApplyAction('add_quest',{title:steps[k].title,difficulty:steps[k].difficulty,main_quest_id:p.params.main_quest_id})) added++;
+    }
+    applied=added>0; note=added>0?('Added '+added+' step'+(added===1?'':'s')+'.'):'Nothing selected.';
+  } else {
+    applied=sageApplyAction(p.type, p.params); note=applied?'Done!':'Could not add that.';
+  }
   m.pendingAction=null;
-  m.text=(m.text?m.text+'\n\n':'')+(applied?'Done!':'Could not add that.');
+  m.text=(m.text?m.text+'\n\n':'')+note;
   var b=document.getElementById('mBubble'); if(b) b.innerHTML=mascotChatHtml();
 }
 function sageCancelAction(i){
@@ -2651,7 +3461,8 @@ function sageHistory(){
     var content=(m.text||'').trim();
     if(!content && m.pendingAction){
       var p=m.pendingAction;
-      content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
+      if(p.type==='propose_steps') content='Proposed steps: '+(Array.isArray(p.params.steps)?p.params.steps.map(function(s){ return String(s.title||''); }).join('; '):'');
+      else content=(p.type==='add_quest'?'Proposed adding a quest: ':'Proposed adding a habit: ')+String((p.params&&p.params.title)||'');
     }
     if(!content) continue;
     if(out.length && out[out.length-1].role===role){          // coalesce consecutive same-role (a turn can add several sage bubbles)
@@ -2709,6 +3520,10 @@ function mascotMoodSync(){
   var aura=host.querySelector('.maura'); if(aura) aura.textContent=MASCOT_AURA[b.mood]||'';
   updateSageCue();
 }
+/* Once a day, on the first open: Sage's line appears under Today's greeting
+   (sageLine()) instead of the bubble popping over the screen. The bubble is
+   one tap away through the line's More control. The sml.mascot.day key is the
+   once-per-day rule; clear it in devtools to see the line again today. */
 function mascotDailyGreet(){
   if(!mascotOn()) return;
   var k='sml.mascot.day';
@@ -2716,7 +3531,8 @@ function mascotDailyGreet(){
     if(localStorage.getItem(k)===RPG.todayKey()) return;
     localStorage.setItem(k,RPG.todayKey());
   }catch(e){ return; }
-  setTimeout(function(){ if(state && !document.querySelector('.modal.show')) toggleMascot(true); }, 1600);
+  sageLineDay=RPG.todayKey();
+  if(state && tab==='today') render();
 }
 function toggleMascotSetting(){
   state.settings.mascot=state.settings.mascot===false?true:false;
@@ -2726,7 +3542,10 @@ function toggleMascotSetting(){
   if(state.settings.mascot!==false) mascotMoodSync();
   openSettings();
 }
-function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) tut(0); } }
+/* No save means a first run: the empty shell goes up behind the onboarding
+   wizard. The five "How it works" slides (tut) are no longer the front door;
+   they stay in Settings and, with no hero, still hand over to the wizard. */
+function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) onboarding(); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);

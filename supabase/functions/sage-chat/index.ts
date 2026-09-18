@@ -75,6 +75,30 @@ const TOOLS = [
       required: ["title"],
     },
   },
+  {
+    name: "propose_steps",
+    description: "Propose 3 to 6 concrete, ordered steps for one of the user's existing main quests, when they ask to plan it, break it down or get started on it. The app shows the steps as a checklist the user confirms; nothing is saved until then. Use the main quest's id from the Today list.",
+    input_schema: {
+      type: "object",
+      properties: {
+        main_quest_id: { type: "string", description: "id of an existing main quest, from the 'main-quest <id>: <title>' entries in the Today list" },
+        steps: {
+          type: "array",
+          minItems: 3,
+          maxItems: 6,
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "one step, doable in a single sitting, phrased as an action" },
+              difficulty: { type: "string", enum: ["easy", "normal", "hard", "epic"] },
+            },
+            required: ["title"],
+          },
+        },
+      },
+      required: ["main_quest_id", "steps"],
+    },
+  },
 ];
 
 function corsHeaders(origin: string | null) {
@@ -136,6 +160,10 @@ Tool use rules (non-negotiable):
   a main_quest_id the quest is a standalone side quest.
 - Call log_mood when the user tells you how they're feeling today in a way that
   reads as wanting it logged.
+- When the user asks to plan, break down or get started on a main quest, call
+  propose_steps with that main quest's id and 3 to 6 concrete ordered steps,
+  each doable in one sitting. The app shows them as a checklist the user
+  confirms, so propose freely; nothing is saved until they tap.
 - When the user asks for several things in one message (e.g. "check off my
   workout and log that I feel great"), call every tool that applies in the same
   reply - one tool_use block per action. If nothing the user said calls for an

@@ -174,6 +174,143 @@
     return null;
   }
 
+  /* ---------- quick-add phrase parsing ----------
+     Turns a plain-English quick-add line into structured quest fields, e.g.
+     "Read 20 pages every day easy" -> title "Read 20 pages", diff 'easy',
+     recurring true, target 7. Pure (no Date.now(), no state) so it can be
+     unit tested without touching the DOM - app.js just calls this and drops
+     the result straight into the add-quest form.
+     Every pattern below is wrapped in \b...\b word boundaries on purpose -
+     remove one and a phrase starts matching inside unrelated words (e.g.
+     "hard" inside "hardware", or "sun" inside "Sundance"). */
+  var PT_WD_IDX = {
+    sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+    sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6
+  };
+  // Full names listed before their abbreviations: PT_RE_EVERYLIST reuses this
+  // string without \b anchors between tokens, so the first alternative that
+  // fits at a given spot wins - "monday" must be offered before "mon" or a
+  // typed "monday" would only ever match its first 3 letters.
+  var PT_WD_SRC = '(?:sunday|monday|tuesday|wednesday|thursday|friday|saturday|sun|mon|tue|wed|thu|fri|sat)';
+  // A date is often typed "by friday" / "on friday" - the connector is
+  // optional but, when present, must be removed together with the date word
+  // so the title never ends with a dangling "by"/"on".
+  var PT_CONNECT = '(?:\\b(?:by|on)\\s+)?';
+  var PT_RE_DIFF = /\b(easy|normal|hard|epic)\b/i;
+  var PT_RE_EVERY_WEEKDAY = /\bevery\s+weekdays?\b/i;
+  var PT_RE_WEEKDAYS = /\bweekdays\b/i;
+  var PT_RE_EVERY_WEEKEND = /\bevery\s+weekends?\b/i;
+  var PT_RE_WEEKENDS = /\bweekends\b/i;
+  var PT_RE_DAILY = /\b(?:every\s+day|everyday|daily|each\s+day)\b/i;
+  var PT_RE_FREQ = /\b(\d+)\s*(?:x\s*(?:a\s*week|\/\s*week)|times\s+a\s+week)\b/i;
+  var PT_RE_EVERYLIST = new RegExp('\\bevery\\s+(' + PT_WD_SRC + '(?:(?:\\s*,\\s*|\\s+and\\s+|\\s+)' + PT_WD_SRC + ')*)\\b', 'i');
+  var PT_RE_TOKEN = new RegExp(PT_WD_SRC, 'gi');
+  // Each due-date pattern repeats \b right after the (optional) connector:
+  // PT_CONNECT can match zero characters, and without that second \b a
+  // phrase like "in 3 days" could start matching mid-word (e.g. inside
+  // "Skin 3 days"). Keep both boundaries even though that looks redundant.
+  var PT_RE_INDAYS = new RegExp(PT_CONNECT + '\\bin\\s+(\\d{1,3})\\s+days?\\b', 'i');
+  var PT_RE_NEXTWEEK = new RegExp(PT_CONNECT + '\\bnext\\s+week\\b', 'i');
+  var PT_RE_TODAY = new RegExp(PT_CONNECT + '\\btoday\\b', 'i');
+  var PT_RE_TOMORROW = new RegExp(PT_CONNECT + '\\btomorrow\\b', 'i');
+  var PT_RE_WEEKDAY = new RegExp(PT_CONNECT + '\\b(' + PT_WD_SRC + ')\\b', 'i');
+
+  function ptCloneDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function ptAddDays(d, n) { var r = ptCloneDay(d); r.setDate(r.getDate() + n); return r; }
+  // Next time this weekday comes around AFTER today, never today itself -
+  // typing "monday" on a Monday means next Monday (7 days out), matching how
+  // people actually use the word in a quick-add box.
+  function ptNextWeekday(now, idx) {
+    var delta = (idx - now.getDay() + 7) % 7;
+    if (delta === 0) delta = 7;
+    return ptAddDays(now, delta);
+  }
+  // Cuts the first match of `re` out of `text`, replacing it with a single
+  // space (never empty) so the words on either side don't get glued
+  // together. Returns the match (with .remainder holding the new text) or
+  // null when `re` doesn't occur at all - callers read the captured groups
+  // off the returned match before switching `title` to `.remainder`.
+  function ptTake(text, re) {
+    var m = re.exec(text);
+    if (!m) return null;
+    m.remainder = text.slice(0, m.index) + ' ' + text.slice(m.index + m[0].length);
+    return m;
+  }
+
+  function parseTask(text, now) {
+    now = now || new Date();
+    var out = { title: '', diff: null, due: null, recurring: false, days: null, target: null };
+    if (typeof text !== 'string') return out;
+    var original = text.trim();
+    var title = text;
+
+    var mDiff = ptTake(title, PT_RE_DIFF);
+    if (mDiff) { out.diff = mDiff[1].toLowerCase(); title = mDiff.remainder; }
+
+    // Recurring phrases are tried from most to least specific, and each one
+    // is fully removed before the due-date pass below runs - that's what
+    // stops e.g. "every monday" from also being re-read as a one-off due
+    // date once its weekday would otherwise be sitting alone in the title.
+    var mRec = ptTake(title, PT_RE_EVERY_WEEKDAY) || ptTake(title, PT_RE_WEEKDAYS);
+    if (mRec) { out.recurring = true; out.days = [1, 2, 3, 4, 5]; title = mRec.remainder; }
+    if (!out.recurring) {
+      mRec = ptTake(title, PT_RE_EVERY_WEEKEND) || ptTake(title, PT_RE_WEEKENDS);
+      if (mRec) { out.recurring = true; out.days = [0, 6]; title = mRec.remainder; }
+    }
+    if (!out.recurring) {
+      mRec = ptTake(title, PT_RE_DAILY);
+      if (mRec) { out.recurring = true; out.days = null; out.target = 7; title = mRec.remainder; }
+    }
+    if (!out.recurring) {
+      mRec = ptTake(title, PT_RE_FREQ);
+      if (mRec) { out.recurring = true; out.target = clamp(parseInt(mRec[1], 10), 1, 7); out.days = null; title = mRec.remainder; }
+    }
+    if (!out.recurring) {
+      mRec = ptTake(title, PT_RE_EVERYLIST);
+      if (mRec) {
+        var tokens = mRec[1].toLowerCase().match(PT_RE_TOKEN) || [];
+        var days = [];
+        for (var i = 0; i < tokens.length; i++) {
+          var idx = PT_WD_IDX[tokens[i]];
+          if (days.indexOf(idx) === -1) days.push(idx);
+        }
+        days.sort(function (a, b) { return a - b; });
+        out.recurring = true; out.days = days; title = mRec.remainder;
+      }
+    }
+
+    // Due date: a single value, first recognised phrase wins. Runs after the
+    // recurring block above on purpose - see the comment there.
+    var mInDays = ptTake(title, PT_RE_INDAYS);
+    if (mInDays) {
+      var n = parseInt(mInDays[1], 10);
+      if (n >= 1 && n <= 60) { out.due = todayKey(ptAddDays(now, n)); title = mInDays.remainder; }
+    }
+    if (!out.due) {
+      var mNextWeek = ptTake(title, PT_RE_NEXTWEEK);
+      if (mNextWeek) { out.due = todayKey(ptAddDays(now, 7)); title = mNextWeek.remainder; }
+    }
+    if (!out.due) {
+      var mToday = ptTake(title, PT_RE_TODAY);
+      if (mToday) { out.due = todayKey(now); title = mToday.remainder; }
+    }
+    if (!out.due) {
+      var mTomorrow = ptTake(title, PT_RE_TOMORROW);
+      if (mTomorrow) { out.due = todayKey(ptAddDays(now, 1)); title = mTomorrow.remainder; }
+    }
+    if (!out.due) {
+      var mWeekday = ptTake(title, PT_RE_WEEKDAY);
+      if (mWeekday) { out.due = todayKey(ptNextWeekday(now, PT_WD_IDX[mWeekday[1].toLowerCase()])); title = mWeekday.remainder; }
+    }
+
+    // Collapse the gaps left by every removal above; if that eats the whole
+    // string, fall back to the original text so a recognised-but-only phrase
+    // ("tomorrow" typed on its own) never leaves the title empty.
+    title = title.replace(/\s+/g, ' ').trim();
+    out.title = title || original;
+    return out;
+  }
+
   /* ---------- prestige / buff multipliers ----------
      Everything defaults to 1.0 on a fresh hero, so base payouts are unchanged. */
   function boonCount(state, id) { return (state.hero && state.hero.boons && state.hero.boons[id]) || 0; }
@@ -1477,7 +1614,7 @@
   return {
     SCHEMA: SCHEMA, DIFF: DIFF, RANKS: RANKS, MOODS: MOODS, ACHIEVEMENTS: ACHIEVEMENTS, MAX_HP: MAX_HP, MAX_SKILLS: MAX_SKILLS, KEY: KEY,
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
-    uid: uid, todayKey: todayKey, clamp: clamp,
+    uid: uid, todayKey: todayKey, clamp: clamp, parseTask: parseTask,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     progressKey: progressKey, compareProgress: compareProgress,
     skillTier: skillTier, boonById: boonById, frameById: frameById, pathById: pathById,

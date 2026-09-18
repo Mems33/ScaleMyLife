@@ -1029,6 +1029,110 @@ ok(mbB6.greeting === mbB.greeting, 'briefing phrasing is stable within a day');
 var mb7 = RPG.newState('B7', '🧙'); delete mb7.settings.mascot;
 ok(RPG.migrate(mb7).settings.mascot === true, 'migration turns the mascot on by default');
 
+section('parseTask: plain-phrase quick add');
+/* Fixed "now" so every weekday/relative-date result below is deterministic.
+   2026-09-18 is a Friday - if that stops being true (e.g. someone "fixes" this
+   date later), every weekday expectation in this section has to be redone. */
+var ptNow = new Date(2026, 8, 18);
+function pt(text) { return RPG.parseTask(text, ptNow); }
+function ptDaysEq(a, b) { if (a === null || b === null) return a === b; return a.join(',') === b.join(','); }
+
+var p1 = pt('Buy groceries');
+ok(p1.title === 'Buy groceries' && p1.diff === null && p1.due === null && p1.recurring === false && p1.days === null && p1.target === null,
+  'plain title passes through untouched with every field null/false');
+
+var p2 = pt('Clean the kitchen easy');
+ok(p2.title === 'Clean the kitchen' && p2.diff === 'easy', 'difficulty word "easy" is parsed and stripped');
+var p3 = pt('Prep the slides normal');
+ok(p3.title === 'Prep the slides' && p3.diff === 'normal', 'difficulty word "normal" is parsed and stripped');
+var p4 = pt('Fix the bug hard');
+ok(p4.title === 'Fix the bug' && p4.diff === 'hard', 'difficulty word "hard" is parsed and stripped');
+var p5 = pt('Ship the launch epic');
+ok(p5.title === 'Ship the launch' && p5.diff === 'epic', 'difficulty word "epic" is parsed and stripped');
+
+var p6 = pt('Water the plants today');
+ok(p6.title === 'Water the plants' && p6.due === '2026-09-18', '"today" resolves to the same day');
+var p7 = pt('Buy milk tomorrow');
+ok(p7.title === 'Buy milk' && p7.due === '2026-09-19', '"tomorrow" resolves to the next day');
+var p8 = pt('Pay rent in 3 days');
+ok(p8.title === 'Pay rent' && p8.due === '2026-09-21', '"in 3 days" resolves 3 days out');
+var p9 = pt('Plan the trip next week');
+ok(p9.title === 'Plan the trip' && p9.due === '2026-09-25', '"next week" resolves 7 days out');
+
+var p10 = pt('Clean the garage saturday');
+ok(p10.title === 'Clean the garage' && p10.due === '2026-09-19', 'weekday "saturday" resolves to the next Saturday (09-19)');
+var p11 = pt('Movie night friday');
+ok(p11.title === 'Movie night' && p11.due === '2026-09-25', 'weekday "friday" typed on a Friday means next Friday, not today (09-25)');
+var p12 = pt('Team sync mon');
+ok(p12.title === 'Team sync' && p12.due === '2026-09-21', '3-letter weekday "mon" resolves the same way (09-21)');
+var p13 = pt('Call gran sun');
+ok(p13.title === 'Call gran' && p13.due === '2026-09-20', '3-letter weekday "sun" resolves to next Sunday (09-20)');
+
+var p14 = pt('Submit report by friday');
+ok(p14.title === 'Submit report' && p14.due === '2026-09-25', '"by friday" strips the connector "by" along with the weekday');
+var p15 = pt('Dentist on tue');
+ok(p15.title === 'Dentist' && p15.due === '2026-09-22', '"on tue" strips the connector "on" along with the weekday');
+
+var p16 = pt('Meditate every day');
+ok(p16.title === 'Meditate' && p16.recurring === true && p16.days === null && p16.target === 7, '"every day" is daily: recurring, no day list, target 7');
+var p17 = pt('Meditate daily');
+ok(p17.title === 'Meditate' && p17.recurring === true && p17.days === null && p17.target === 7, '"daily" behaves the same as "every day"');
+var p18 = pt('Meditate everyday');
+ok(p18.title === 'Meditate' && p18.recurring === true && p18.days === null && p18.target === 7, '"everyday" (one word) is also recognised');
+var p19 = pt('Meditate each day');
+ok(p19.title === 'Meditate' && p19.recurring === true && p19.days === null && p19.target === 7, '"each day" is also recognised');
+
+var p20 = pt('Gym every weekday');
+ok(p20.title === 'Gym' && p20.recurring === true && ptDaysEq(p20.days, [1, 2, 3, 4, 5]) && p20.target === null, '"every weekday" sets Mon-Fri, no weekly target');
+var p21 = pt('Gym weekdays');
+ok(p21.title === 'Gym' && p21.recurring === true && ptDaysEq(p21.days, [1, 2, 3, 4, 5]), 'plain "weekdays" behaves the same as "every weekday"');
+var p22 = pt('Sleep in every weekend');
+ok(p22.title === 'Sleep in' && p22.recurring === true && ptDaysEq(p22.days, [0, 6]), '"every weekend" sets Sat/Sun');
+var p23 = pt('Sleep in weekends');
+ok(p23.title === 'Sleep in' && p23.recurring === true && ptDaysEq(p23.days, [0, 6]), 'plain "weekends" behaves the same as "every weekend"');
+var p24 = pt('Trash day every monday');
+ok(p24.title === 'Trash day' && p24.recurring === true && ptDaysEq(p24.days, [1]) && p24.due === null,
+  '"every monday" sets a single weekday and is not also re-read as a one-off due date');
+var p25 = pt('Gym every mon and wed');
+ok(p25.title === 'Gym' && p25.recurring === true && ptDaysEq(p25.days, [1, 3]), '"every mon and wed" sets both weekdays');
+
+var p26 = pt('Gym 3x a week');
+ok(p26.title === 'Gym' && p26.recurring === true && p26.target === 3 && p26.days === null, '"3x a week" sets a weekly target, no day list');
+var p27 = pt('Gym 3 times a week');
+ok(p27.title === 'Gym' && p27.recurring === true && p27.target === 3 && p27.days === null, '"3 times a week" is the same phrasing');
+var p28 = pt('Gym 3x/week');
+ok(p28.title === 'Gym' && p28.recurring === true && p28.target === 3, '"3x/week" (slash form) is also recognised');
+
+var p29 = pt('Read 20 pages every day easy');
+ok(p29.title === 'Read 20 pages' && p29.diff === 'easy' && p29.recurring === true && p29.target === 7 && p29.days === null,
+  'mixed input parses a difficulty word and a recurrence phrase out of the same sentence');
+
+var p30 = pt('Stretch EVERY DAY');
+ok(p30.title === 'Stretch' && p30.recurring === true && p30.target === 7, 'phrase matching is case-insensitive');
+
+var p31 = pt('');
+ok(p31.title === '' && p31.diff === null && p31.due === null && p31.recurring === false && p31.days === null && p31.target === null,
+  'empty string never throws and returns all nulls');
+
+var p32 = pt('Sundance festival');
+ok(p32.title === 'Sundance festival' && p32.due === null, 'a weekday name embedded in a longer word is not parsed as a weekday');
+
+var p33 = pt('Call mum on friday');
+ok(p33.title === 'Call mum' && p33.due === '2026-09-25', 'spec example: "Call mum on friday" strips the connector and resolves the date');
+var p34 = pt('Finish the essay by tomorrow hard');
+ok(p34.title === 'Finish the essay' && p34.diff === 'hard' && p34.due === '2026-09-19', 'spec example: date phrase and difficulty both parsed out of the same sentence');
+
+var p35 = pt('tomorrow');
+ok(p35.title === 'tomorrow' && p35.due === '2026-09-19', 'if stripping the phrase would empty the title, the original trimmed text is kept instead');
+var p36 = pt('every day');
+ok(p36.title === 'every day' && p36.recurring === true && p36.target === 7, 'the same fallback applies to a bare recurring phrase');
+
+var p37 = pt('Renew passport in 90 days');
+ok(p37.title === 'Renew passport in 90 days' && p37.due === null, '"in N days" outside the 1-60 range is left alone, not parsed as a due date');
+
+var p38 = RPG.parseTask('Water the plants');
+ok(p38 && p38.title === 'Water the plants', 'omitting `now` falls back to the current date without throwing');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a
