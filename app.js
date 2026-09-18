@@ -14,6 +14,14 @@ var focusDraft={label:'',skill:'',goal:''}; // focus form draft - selecting musi
    cleared. It is a handoff, not state: leave it set and every later visit to
    Focus would silently re-link the same quest. */
 var focusPreselect=null;
+/* Today's dashboard state. sageLineDay is the day key for which Sage's daily
+   line shows under the greeting (set by mascotDailyGreet, compared against
+   todayKey at render time, so it goes away by itself at midnight). logOpen is
+   whether the "Log your day" card is expanded; logAnim plays the 160ms expand
+   once, on the tap that opened it, and not again on every mood re-render.
+   None of this is saved: it is screen state, and persisting it would reopen
+   the card on every device. */
+var sageLineDay=null, logOpen=false, logAnim=false;
 var editDays=[];                 // weekday picker state inside the edit-quest modal
 var focusSpan=7;                 // Stats focus chart: 7 = week, 30 = month
 var boardView='global';          // Stats leaderboard: 'global' | 'friends'
@@ -435,7 +443,7 @@ function viewBackHead(title){
   return '<div class="vhead"><button class="btn ghost back" title="Back to Today" aria-label="Back to Today" onclick="go(\'today\')">'+svgIcon('chevron-left')+'</button>'+
     '<h2>'+esc(title)+'</h2></div>';
 }
-function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; navAnim=true; render(); }
+function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; logOpen=false; navAnim=true; render(); }
 
 /* One icon from the sprite in index.html. `cls` adds a modifier, 'sm' for the
    14px version used inside meta text. Icons inherit the surrounding text colour
@@ -543,6 +551,31 @@ function chestChip(){
   if(c.claimed) return '<span class="chestchip claimed">🎁 claimed ✓</span>';
   if(c.eligible) return '<button class="chestchip ready" onclick="claimChest()">🎁 OPEN CHEST!</button>';
   return '<button class="chestchip" onclick="openChestPreview()" title="What could be inside?">🎁 '+c.done+'/'+c.total+'</button>';
+}
+/* A small progress ring, the Focus ring's technique at chip size. Starts at
+   12 o'clock (the rotate), which the Focus ring does not need because it
+   counts down. No id on the foreground circle on purpose: checkFocus() finds
+   the Focus ring by #ringFg, and a second element with that id would make the
+   countdown redraw the wrong circle. */
+function miniRing(pct,size,stroke){
+  var w=3.5, r=(size-w)/2, c=size/2, C=2*Math.PI*r;
+  pct=Math.max(0,Math.min(1,pct||0));
+  return '<svg class="ring" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" aria-hidden="true" focusable="false">'+
+    '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="var(--line)" stroke-width="'+w+'"/>'+
+    '<circle cx="'+c+'" cy="'+c+'" r="'+r+'" fill="none" stroke="'+stroke+'" stroke-width="'+w+'" stroke-linecap="round" stroke-dasharray="'+C+'" stroke-dashoffset="'+(C*(1-pct))+'" transform="rotate(-90 '+c+' '+c+')"/></svg>';
+}
+/* The chest on Today: the same three states as chestChip() (counting, ready,
+   claimed) drawn as a ring with a label. The label keeps the .chestchip class
+   and its .ready / .claimed states because the tests, and the tab-bar dot,
+   read the chest through those. The tap does what the chip does: preview
+   while counting, claim when ready. */
+function chestRing(){
+  var c=A.chestStatus(state);
+  if(c.total===0) return '';
+  var pct=c.total?c.done/c.total:0;
+  if(c.claimed) return '<span class="chestring claimed" title="Chest claimed today">'+miniRing(1,30,'var(--good)')+'<span class="chestchip claimed">🎁 claimed</span></span>';
+  if(c.eligible) return '<button class="chestring ready" onclick="claimChest()" aria-label="All dailies cleared. Open the chest">'+miniRing(1,30,'var(--brand)')+'<span class="chestchip ready">🎁 Open</span></button>';
+  return '<button class="chestring" onclick="openChestPreview()" title="What could be inside?" aria-label="Daily chest, '+c.done+' of '+c.total+' dailies cleared. See what is inside">'+miniRing(pct,30,'var(--brand)')+'<span class="chestchip">🎁 '+c.done+'/'+c.total+'</span></button>';
 }
 /* peek inside: what the chest can drop today, with live odds (Fortune shifts them) */
 function openChestPreview(){
@@ -694,54 +727,164 @@ function agendaPanel(){
   return out;
 }
 
+/* ---------- Today: the productivity dashboard ----------
+   The order IS the product. Greeting, then only what is on fire (downed,
+   wounded, atonement), two slim one-line slots (cloud nudge, Sage's line),
+   the quick actions, then Now, Coming up, Habits today and the log card.
+   The first row of Now has to be on screen at 375x812 without scrolling;
+   anything added above it costs exactly that height, so new banners go
+   below Now or into a slot, never above it. Every class the tests read
+   (.todayhead, .downbar, .woundbar, .redeembar, .nudgebar, .chestchip,
+   .ag.overdue, .quick button.potion, #jNote, .hrbtn, #slHours) still renders
+   here; move one and grep test-ui.js first. */
 function renderToday(){
   var today=RPG.todayKey();
   var h=new Date().getHours();
   var greet=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
-  var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,new Date());});
-  var habits=state.habits.filter(function(x){return x.type==='good';});
-  var todo=habits.filter(function(x){return x.lastDoneOn!==today;});
-  var j=state.journal[today], sl=state.sleep[today];
   var wounded=state.hero.woundedOn===today;
-  var due=A.agenda(state).filter(function(it){return it.bucket==='overdue'||it.bucket==='today';});
-
+  var boss=state.boss&&!state.boss.doneOn?state.boss:null;
   $('#view').innerHTML=
-    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span><span class="dt">Today · '+new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</span>'+
-    (state.boss&&!state.boss.doneOn?'<span class="bosschip" style="cursor:pointer" onclick="go(\'quests\')">🐲 boss: '+A.bossDaysLeft(state)+'d left</span>':'')+'</div>'+
+    '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span>'+
+      '<span class="dt">'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</span>'+
+      (boss?'<button class="bosschip" onclick="go(\'quests\')" title="Weekly boss: '+esc(boss.title)+'. Tap to see it">🐲 '+esc(boss.title)+' · '+A.bossDaysLeft(state)+'d</button>':'')+'</div>'+
     (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
       '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
       :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
-    (cloudNudgeDue()?'<div class="nudgebar">☁️ <b>Protect your progress</b> - your save lives only in this browser. Free cloud sync keeps it safe on every device.'+
+    /* the nudge is one line now: the text truncates, the two buttons never do.
+       The .ghost dismiss and the cloudNudgeOff flag are what the test clicks. */
+    (cloudNudgeDue()?'<div class="nudgebar">☁️ <span class="grow"><b>Protect your progress.</b> Your save lives only in this browser; free cloud sync keeps it safe.</span>'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
-    (due.length?'<div class="panel" style="border-color:var(--orange);margin-bottom:14px"><h3 style="color:var(--orange)">🔥 Due today</h3>'+
-      due.map(function(it){
-        var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
-        var mainTag=mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'';
-        return '<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+mainTag+'</div><span class="when">'+(it.days<0?(-it.days)+'d late':'today')+'</span>'+
-        '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
-      }).join('')+'</div>':'')+
-    '<div class="panel" style="margin-bottom:14px"><h3>⚡ Quick Add</h3><div class="quick">'+
-      '<button class="'+((j&&sl)?'done':'')+'" onclick="go(\'journal\')">'+((j&&sl)?'📔 Mood &amp; sleep ✓':'📔 Log mood &amp; sleep · +15xp, heals ❤️')+'</button>'+
-      '<button onclick="go(\'focus\')">⏳ Start a focus run</button>'+
-      '<button onclick="go(\'quests\')">📌 Add a side quest</button>'+
-      ((state.inventory.potion||0)>0?'<button class="potion" onclick="usePotion()">🧪 Focus Elixir ×'+state.inventory.potion+' · ×2 XP today</button>':'')+
-    '</div></div>'+
-    '<div class="grid two">'+
-    '<div class="panel"><h3>☀️ Daily quests <span class="cnt">'+dailies.filter(function(q){return q.doneOn===today;}).length+'/'+dailies.length+'</span>'+chestChip()+'</h3>'+
-      (dailies.map(questRow).join('')||emptyState('🔁','Nothing to clear today','Add repeating quests in the Quests tab and they line up here every morning.','<button class="btn small" onclick="go(\'quests\')">📜 To the Quests tab</button>'))+'</div>'+
-    '<div class="panel"><h3>🌱 Habits to check <span class="cnt">'+(habits.length-todo.length)+'/'+habits.length+'</span></h3>'+
-      (habits.map(function(hb){
-        var done=hb.lastDoneOn===today;
-        var wk=hb.target<7?' <span class="wk">'+A.weekCount(hb)+'/'+hb.target+' wk</span>':'';
-        return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(hb.title)+'</div>'+
-          '<div class="meta">'+habitDots(hb)+wk+'</div></div>'+
-          (done?'<span style="color:var(--good);font-weight:700">✓</span>'
-            :'<button class="btn go small" onclick="doHabit(\''+hb.id+'\')">Done</button>')+'</div>';
-      }).join('')||emptyState('🌱','No habits planted','Grow good habits (and name your monsters) in the Habits tab.','<button class="btn small" onclick="go(\'habits\')">🌱 To the Habits tab</button>'))+
-    '</div></div>'+
-    (A.agenda(state).length?'<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div>':'');
+    sageLine()+
+    quickActions()+
+    nowPanel()+
+    comingUp()+
+    habitsToday()+
+    logCard()+
+    /* On a phone the quick actions row is fixed above the tab bar, so the
+       last card needs this much room to scroll clear of it. Empty on desktop
+       (see .qaspace in styles.css). */
+    '<div class="qaspace" aria-hidden="true"></div>';
+}
+/* Sage's daily line: the once-a-day greeting that used to pop the bubble over
+   the screen. One line, the first briefing line, and More opens the bubble
+   with the rest. sageLineDay is set by mascotDailyGreet() and only ever
+   equals today, so the line disappears by itself at midnight. */
+function sageLine(){
+  if(sageLineDay!==RPG.todayKey() || !mascotOn()) return '';
+  var b=RPG.briefing(state), l=b.lines[0];
+  if(!l) return '';
+  return '<div class="sageline"><span class="sowl" aria-hidden="true">🦉</span>'+
+    '<span class="grow" title="'+esc(l.text)+'">'+l.icon+' '+esc(l.text)+'</span>'+
+    '<button class="btn ghost small" onclick="toggleMascot(true)" aria-label="More from Sage">More</button></div>';
+}
+/* Three 44px buttons, plus the Focus Elixir when one is held (a test looks
+   for .quick button.potion). Add lands on the Quests form for now; phase 6
+   swaps quickAdd() for the smart add sheet and nothing else here changes. */
+function quickActions(){
+  var potion=state.inventory.potion||0;
+  return '<div class="quick qa" role="group" aria-label="Quick actions">'+
+    '<button class="qab" onclick="quickAdd()">'+svgIcon('plus')+'<span>Add</span></button>'+
+    '<button class="qab" onclick="go(\'focus\')">'+svgIcon('timer')+'<span>Focus</span></button>'+
+    '<button class="qab" onclick="askSage()">'+svgIcon('sparkles')+'<span>Ask Sage</span></button>'+
+    (potion>0?'<button class="qab potion" onclick="usePotion()" title="Focus Elixir: ×2 XP for the rest of today">🧪<span>Elixir ×'+potion+'</span></button>':'')+
+    '</div>';
+}
+function quickAdd(){
+  go('quests');
+  var el=$('#qTitle'); if(!el) return;
+  /* jsdom has no scrollIntoView, and an old WebView may throw on the options
+     object, so both are guarded: focusing the field is the part that matters */
+  if(el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
+  el.focus();
+}
+/* Chat needs the Edge Function, which needs a signed-in user. Signed out, the
+   owl still answers with the offline briefing. */
+function askSage(){ if(cloudOn()) openSageChat(); else toggleMascot(true); }
+/* Now: today's active dailies and the one-offs due today, as full quest rows
+   (Clear, Focus, edit, delete all come from questRow). A one-off cleared today
+   stays in the list with its check so the count reads 3/3 instead of the row
+   vanishing under the user's thumb. */
+function nowPanel(){
+  var today=RPG.todayKey(), now=new Date();
+  var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,now);});
+  var due=state.quests.filter(function(q){return !q.recurring && q.due===today && (!q.doneOn||q.doneOn===today);});
+  var rows=dailies.concat(due);
+  var done=rows.filter(function(q){return q.doneOn===today;}).length;
+  var body=rows.length?rows.map(questRow).join('')
+    :emptyState('☀️','Nothing due right now','Add a quest, or bank some deep work.',
+      '<div class="erow"><button class="btn go" onclick="quickAdd()">'+svgIcon('plus')+' Add a quest</button>'+
+      '<button class="btn" onclick="go(\'focus\')">'+svgIcon('timer')+' Start focus</button></div>');
+  return '<div class="panel now"><h3>Now'+(rows.length?' <span class="cnt">'+done+'/'+rows.length+'</span>':'')+chestRing()+'</h3>'+body+'</div>';
+}
+/* Coming up: Late (only when something is overdue), Tomorrow, This week. The
+   Today group the spec lists is deliberately not here: a quest due today is
+   already a full row in Now, and the same title twice on one screen makes
+   both counts lie. Anything past seven days stays on the Quests tab agenda,
+   which has the room for it. .ag and .ag.overdue are what the tests read. */
+function comingUp(){
+  var items=A.agenda(state).filter(function(it){return it.bucket!=='today' && it.days<=7;});
+  var out='', last='';
+  items.forEach(function(it){
+    var grp=it.days<0?'Late':it.days===1?'Tomorrow':'This week';
+    if(grp!==last){ out+='<div class="logday">'+grp+'</div>'; last=grp; }
+    var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
+    var when=it.days<0?(-it.days)+'d late':it.days===1?'tomorrow':it.days<7?DOW[new Date(it.q.due+'T00:00:00').getDay()]:'in '+it.days+'d';
+    out+='<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+(mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'')+'</div>'+
+      '<span class="when">'+when+'</span>'+
+      '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
+  });
+  return '<div class="panel comingup"><h3>Coming up'+(items.length?' <span class="cnt">'+items.length+'</span>':'')+'</h3>'+
+    (out||'<div class="empty">Nothing due this week. Give a quest a due date and it lines up here.</div>')+'</div>';
+}
+/* Habits today: the good habits as the same rows the Habits tab draws, then
+   the monsters folded behind one "Slipped?" row. slippedOpen survives the
+   re-render that follows a logged slip, so two slips in a row do not mean
+   reopening the fold in between. */
+var slippedOpen=false;
+function habitsToday(){
+  var today=RPG.todayKey();
+  var good=state.habits.filter(function(x){return x.type==='good';});
+  var bad=state.habits.filter(function(x){return x.type==='bad';});
+  var kept=good.filter(function(x){return x.lastDoneOn===today;}).length;
+  return '<div class="panel habits"><h3>Habits today'+(good.length?' <span class="cnt">'+kept+'/'+good.length+'</span>':'')+'</h3>'+
+    (good.map(goodHabitRow).join('')||emptyState('🌱','No habits yet','Something small you want to do most days.','<button class="btn" onclick="go(\'habits\')">Plant one</button>'))+
+    (bad.length?'<details class="slipped"'+(slippedOpen?' open':'')+' ontoggle="slippedOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+'Slipped? <span class="hint">'+bad.length+' monster'+(bad.length===1?'':'s')+', log it honestly</span></summary>'+
+      bad.map(monsterRow).join('')+'</details>':'')+
+    '</div>';
+}
+/* Log your day. Three looks for one card: collapsed to a row while nothing is
+   logged, the form while open, a summary with Edit once something is saved.
+   The form itself is dailyLogForm(), shared with the Journal view, which is
+   why saveDailyLog() can read the same ids from either screen. */
+function logCard(){
+  var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
+  var archive='<button class="btn ghost small archivebtn" onclick="openJournalArchive()">Archive</button>';
+  var open=logOpen || pendingMood!=null || pendingNote!=null || pendingHours!=null || pendingQuality!=null;
+  if(open){
+    var anim=logAnim?' anim':''; logAnim=false;
+    return '<div class="panel logcard open'+anim+'"><h3>Log your day'+(entry?' <span class="cnt">saved ✓</span>':'')+'<span class="right">'+archive+'</span></h3>'+dailyLogForm()+'</div>';
+  }
+  if(entry||sl){
+    var mo=entry?RPG.MOODS.find(function(m){return m.key===entry.mood;}):null;
+    var bits=[];
+    if(sl) bits.push(sl.hours+'h sleep'+(sl.quality?' '+Array(sl.quality+1).join('⭐'):''));
+    if(entry&&entry.note) bits.push(esc(entry.note));
+    return '<div class="panel logcard logged"><div class="logrow"><span class="lmood" aria-hidden="true">'+(mo?mo.emoji:'🌙')+'</span>'+
+      '<div class="grow"><div class="title">'+(mo?'Mood: '+esc(mo.label):'Sleep logged')+'</div><div class="meta">'+(bits.join(' · ')||'logged')+'</div></div>'+
+      '<button class="btn ghost" title="Edit" aria-label="Edit today\'s log" onclick="openLog()">'+svgIcon('pencil','sm')+'</button>'+archive+'</div></div>';
+  }
+  return '<div class="panel logcard"><div class="logrow"><button class="logmain" onclick="openLog()"><span class="lmood" aria-hidden="true">📔</span>'+
+    '<span class="grow"><span class="title">Log your day</span><span class="meta">Mood, one honest line, sleep · +15 XP</span></span>'+svgIcon('chevron-down')+'</button>'+archive+'</div></div>';
+}
+function openLog(){ logOpen=true; logAnim=true; render(); }
+function openJournalArchive(){
+  var n=Object.keys(state.journal).length;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box"><h2>📔 ARCHIVE</h2><div class="hint" style="margin-bottom:8px">'+n+' entr'+(n===1?'y':'ies')+'</div>'+
+    journalArchive()+
+    '<div class="setrow" style="margin-top:14px"><button class="btn" onclick="closeModal()">Close</button></div></div>';
 }
 
 function habitDots(h){
@@ -754,54 +897,59 @@ function habitDots(h){
   }
   return '<span class="hdots">'+out+'</span>';
 }
+/* One good-habit row, drawn identically on the Habits tab and on Today. Same
+   rule as questRow: the 7-day dots, one meta sentence, one state chip (the
+   weekly count, with a small ring once the habit has a weekly target). The
+   payout sits in the tooltip. "n/N this wk" is asserted by a test. */
+function goodHabitRow(h){
+  var today=RPG.todayKey(), done=h.lastDoneOn===today;
+  var bits=[];
+  if(h.skillId&&skillName(h.skillId)) bits.push(skillName(h.skillId));
+  bits.push(h.target>=7?'every day':h.target+'× a week');
+  bits.push(h.target<7
+    ? '🔥 '+A.weekStreak(h)+' wk'+(A.weekStreak(h)===1?'':'s')
+    : '🔥 '+h.streak+' day'+(h.streak===1?'':'s'));
+  var wk=h.target<7?'<span class="wkring">'+miniRing(A.weekCount(h)/h.target,20,'var(--info)')+'<span class="wk">'+A.weekCount(h)+'/'+h.target+' this wk</span></span>':'';
+  return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
+    '<div class="meta" title="Keeping it pays +'+(12+Math.min(10,h.streak+1))+' XP and 6 coins">'+habitDots(h)+
+    '<span>'+bits.join(', ')+'</span>'+wk+'</div></div>'+
+    (done?'<span style="color:var(--good);font-weight:700">'+svgIcon('check')+' today</span>'
+      :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
+    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
+    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+}
+/* One monster row: clean days, the honest cost of a slip, the menace meter
+   once it has grown, and the I slipped control. Shared by the Habits tab and
+   Today's "Slipped?" fold. */
+function monsterRow(h){
+  var days=A.cleanDays(h);
+  var best=Math.max(h.bestClean||0,days);
+  var men=RPG.menaceOf(h);
+  var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
+  var dmg=Math.round(12*men*damp);
+  var menPct=Math.round((men-1)/(2.5-1)*100);
+  var menClass=men>=2?' hot':men>1.3?' warm':'';
+  return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
+    '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
+    '<span>best: '+best+', slips: '+h.slips+'</span>'+
+    '<span class="chip late" title="What one honest slip costs you right now">−'+dmg+' ❤️ −10 💰</span></div>'+
+    (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
+    '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
+    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
+    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+}
 function renderHabits(){
-  var today=RPG.todayKey();
   var good=state.habits.filter(function(h){return h.type==='good';});
   var bad=state.habits.filter(function(h){return h.type==='bad';});
   $('#view').innerHTML='<div class="grid two">'+
     '<div class="panel"><h3>🌱 Grow - good habits <span class="hint" style="margin-left:auto">checkable again every morning</span></h3>'+
-    (good.map(function(h){
-      var done=h.lastDoneOn===today;
-      /* same rule as questRow: the 7-day dots, one meta sentence, one state
-         chip (the weekly count). The payout sits in the tooltip. */
-      var bits=[];
-      if(h.skillId&&skillName(h.skillId)) bits.push(skillName(h.skillId));
-      bits.push(h.target>=7?'every day':h.target+'× a week');
-      bits.push(h.target<7
-        ? '🔥 '+A.weekStreak(h)+' wk'+(A.weekStreak(h)===1?'':'s')
-        : '🔥 '+h.streak+' day'+(h.streak===1?'':'s'));
-      return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
-        '<div class="meta" title="Keeping it pays +'+(12+Math.min(10,h.streak+1))+' XP and 6 coins">'+habitDots(h)+
-        '<span>'+bits.join(', ')+'</span>'+
-        (h.target<7?'<span class="wk">'+A.weekCount(h)+'/'+h.target+' this wk</span>':'')+
-        '</div></div>'+
-        (done?'<span style="color:var(--good);font-weight:700">'+svgIcon('check')+' today</span>'
-          :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
-        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
-        '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
-    }).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
+    (good.map(goodHabitRow).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
     '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
     '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
     '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
     '<button class="btn go" onclick="addHabit(\'good\')">+ Add</button></div>'+presetChips('good')+'</div></div>'+
     '<div class="panel"><h3>👾 Fight - bad habits <button class="btn small right" onclick="openDefeatInfo()" title="What happens if a monster knocks you out?">💀 What if I lose?</button></h3>'+
-    (bad.map(function(h){
-      var days=A.cleanDays(h);
-      var best=Math.max(h.bestClean||0,days);
-      var men=RPG.menaceOf(h);
-      var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
-      var dmg=Math.round(12*men*damp);
-      var menPct=Math.round((men-1)/(2.5-1)*100);
-      var menClass=men>=2?' hot':men>1.3?' warm':'';
-      return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
-        '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
-        '<span>best: '+best+', slips: '+h.slips+'</span>'+
-        '<span class="chip late" title="What one honest slip costs you right now">−'+dmg+' ❤️ −10 💰</span></div>'+
-        (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
-        '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
-        '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
-        '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
-    }).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
+    (bad.map(monsterRow).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
     '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
     '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
 }
@@ -1127,12 +1275,17 @@ function renderMarket(){
 }
 function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
 
-function renderJournal(){
+/* The daily log form: mood faces, the note, the sleep row (quick hours, the
+   free field, the stars) and the one Save. Today embeds it inside the log
+   card and the Journal view draws it in its panel; saveDailyLog() reads
+   #jNote and #slHours by id, which is why only one of the two screens can be
+   on the page at a time and why these ids must not change. The pending*
+   drafts keep typed text alive across the re-render every mood tap causes. */
+function dailyLogForm(){
   var today=RPG.todayKey(), entry=state.journal[today], sl=state.sleep[today];
   var hrs=pendingHours!=null?String(pendingHours):((sl||{}).hours!=null?String(sl.hours):'');
   var q=pendingQuality!=null?pendingQuality:((sl||{}).quality||3);
-  $('#view').innerHTML=viewBackHead('Journal')+'<div class="grid two">'+
-    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+  return '<div class="logform">'+
     '<div class="flabel">Mood</div>'+
     '<div class="moods">'+RPG.MOODS.map(function(m){
       var on=(pendingMood||((entry||{}).mood))===m.key;
@@ -1140,7 +1293,7 @@ function renderJournal(){
     }).join('')+'</div>'+
     '<textarea id="jNote" rows="3" placeholder="One honest line about today… (optional)" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
     '<div class="flabel">🌙 Sleep last night '+(sl?'<span class="cnt" style="font-size:10px">logged ✓</span>':'')+'</div>'+
-    '<div class="row" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+
+    '<div class="row sleeprow">'+
     [7,8,9].map(function(n){
       var on=hrs!==''&&Number(hrs)===n;
       return '<button type="button" class="hrbtn'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingHours='+n+';render()">'+n+'h</button>';
@@ -1150,7 +1303,13 @@ function renderJournal(){
       var on=n<=q;
       return '<button class="'+(on?'on':'')+'" title="Sleep quality '+n+'/5" aria-pressed="'+(on?'true':'false')+'" onclick="pendingQuality='+n+';render()">⭐</button>';}).join('')+'</div></div>'+
     '<div class="hint" style="margin-top:2px">Pick a quick 7-9h button or type your own. Stars = how rested you feel.</div>'+
-    '<button class="btn wide go" style="margin-top:10px" onclick="saveDailyLog()">'+((entry||sl)?'Update entry':'Log entry')+'</button></div>'+
+    '<button class="btn wide go" style="margin-top:10px" onclick="saveDailyLog()">'+((entry||sl)?'Update entry':'Log entry')+'</button></div>';
+}
+function renderJournal(){
+  var entry=state.journal[RPG.todayKey()];
+  $('#view').innerHTML=viewBackHead('Journal')+'<div class="grid two">'+
+    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+    dailyLogForm()+'</div>'+
     '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
     journalArchive()+'</div></div>';
 }
@@ -1168,6 +1327,7 @@ function saveDailyLog(){
     r2=A.logSleep(state,hrs,q);
   }
   pendingMood=null; pendingNote=null; pendingHours=null; pendingQuality=null;
+  logOpen=false;   /* Today's card folds back to its summary row after a save */
   persist(); render(); fx(r); if(r2&&r2.hp) fx({hp:r2.hp}); afterAction();
 }
 
@@ -1774,7 +1934,11 @@ function heroSheetTop(){
     (h.title
       ?'<div><span class="herotitle" role="button" tabindex="0" title="Change your title" aria-label="Title: '+esc(h.title)+'. Change it." onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">✦ '+esc(h.title)+' ✦</span></div>'
       :'<div><span class="herotitle empty" role="button" tabindex="0" title="Pick a title to wear" aria-label="Pick a title to wear" onclick="openTitlePicker()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openTitlePicker()}">☆ pick a title</span></div>')+
-    '<div class="hint">'+(nr?'▲ Rank '+nr.code+' at Lv.'+nr.min:'✦ Max rank - you can ascend into a new season')+'</div>'+
+    /* the rank progress line is a button: the ranks sheet explains what the
+       next rank is, and at max rank the same tap starts the ascension flow */
+    (nr
+      ?'<button class="btn ghost small ranknext" aria-label="Next rank '+nr.code+' at level '+nr.min+'. See all ranks" onclick="openRanks()">▲ Rank '+nr.code+' at Lv.'+nr.min+' '+svgIcon('chevron-right','sm')+'</button>'
+      :'<button class="btn ghost small ranknext" aria-label="Max rank reached. Ascend into a new season" onclick="openAscend()">✦ Max rank. Ascend into a new season '+svgIcon('chevron-right','sm')+'</button>')+
     '<div class="hpline"><span>❤️ HP '+h.hp+' / '+maxHp+'</span>'+
       '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button></div>'+
     todayGlance()+
@@ -2835,6 +2999,10 @@ function mascotMoodSync(){
   var aura=host.querySelector('.maura'); if(aura) aura.textContent=MASCOT_AURA[b.mood]||'';
   updateSageCue();
 }
+/* Once a day, on the first open: Sage's line appears under Today's greeting
+   (sageLine()) instead of the bubble popping over the screen. The bubble is
+   one tap away through the line's More control. The sml.mascot.day key is the
+   once-per-day rule; clear it in devtools to see the line again today. */
 function mascotDailyGreet(){
   if(!mascotOn()) return;
   var k='sml.mascot.day';
@@ -2842,7 +3010,8 @@ function mascotDailyGreet(){
     if(localStorage.getItem(k)===RPG.todayKey()) return;
     localStorage.setItem(k,RPG.todayKey());
   }catch(e){ return; }
-  setTimeout(function(){ if(state && !document.querySelector('.modal.show')) toggleMascot(true); }, 1600);
+  sageLineDay=RPG.todayKey();
+  if(state && tab==='today') render();
 }
 function toggleMascotSetting(){
   state.settings.mascot=state.settings.mascot===false?true:false;

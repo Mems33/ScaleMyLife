@@ -58,7 +58,7 @@ setTimeout(async function () {
   console.log('\nToday tab (default home)');
   ok(w.tab === 'today', 'app opens on the Today tab');
   ok(d.querySelector('.todayhead') !== null, 'today header renders');
-  ok(d.querySelector('#view').textContent.indexOf('Daily quests') >= 0 && d.querySelector('#view').textContent.indexOf('Habits to check') >= 0, 'dailies and habit checks merged in one view');
+  ok(d.querySelector('#view .panel.now') !== null && d.querySelector('#view .panel.habits') !== null, 'dailies (Now) and habit checks (Habits today) merged in one view');
   ok(d.querySelector('.chestchip') !== null, 'chest chip visible on today');
   var th = w.state.habits.find(function (x) { return x.type === 'good'; });
   w.doHabit(th.id);
@@ -426,7 +426,7 @@ setTimeout(async function () {
   ok(w.state.goals.some(function (g) { return g.title === 'Promote me'; }), 'side quest promoted to main quest from UI');
   ok(d.querySelector('#view').textContent.indexOf('Promote me') >= 0, 'promoted goal visible in main quests');
   w.go('today');
-  ok(d.querySelector('#view').textContent.indexOf('Due today') >= 0, 'today tab surfaces overdue work');
+  ok(d.querySelector('#view .comingup .ag.overdue') !== null && d.querySelector('#view .comingup').textContent.indexOf('Late') >= 0, 'today tab surfaces overdue work under Coming up > Late');
 
   console.log('\nWeekly-target habits UI');
   w.go('habits');
@@ -1529,6 +1529,100 @@ setTimeout(async function () {
     d.dispatchEvent(new w.Event('visibilitychange'));
     ok(w.state.lastSeenDay === w.RPG.todayKey(), 'foreground resume immediately corrects the stale day (no reload, no waiting on the poll interval)');
     ok(daily.doneOn !== yKey, 'yesterday\'s completed daily is reset on resume, not stuck showing done');
+  })();
+
+  console.log('\nToday as the productivity dashboard (revamp 4)');
+  (function () {
+    var today = w.RPG.todayKey();
+    function dOff(n) { var dt = new w.Date(); dt.setDate(dt.getDate() + n); return w.RPG.todayKey(dt); }
+    var dueQ = w.A.addQuest(w.state, { title: 'Hand in the case study', diff: 'normal', due: today });
+    var tomQ = w.A.addQuest(w.state, { title: 'Book the train to Lille', diff: 'easy', due: dOff(1) });
+    w.state.settings.cloudNudgeOff = true;
+    w.go('today');
+    // order and the Now panel
+    var firstPanel = d.querySelector('#view .panel');
+    ok(firstPanel !== null && firstPanel.classList.contains('now'), 'Now is the first panel on Today (the tour spotlights #view .panel)');
+    var now = d.querySelector('#view .panel.now');
+    ok(now && now.querySelector('.item') !== null && now.textContent.indexOf('Hand in the case study') >= 0, 'a quest due today is a full row in Now');
+    ok(now && now.querySelector('.item .btn.go') !== null && now.querySelector('.item .btn.ghost[aria-label="Focus on this quest"]') !== null, 'Now rows keep the Clear and Focus controls from questRow');
+    ok(now && now.querySelector('h3 .chestring .chestchip') !== null, 'the chest ring label carries the chestchip class');
+    ok(d.querySelector('#view').textContent.indexOf('Quick Add') < 0 && d.querySelector('#view').textContent.indexOf('Daily quests') < 0, 'the old Quick Add and Daily quests panels are gone');
+    // Coming up
+    var cu = d.querySelector('#view .panel.comingup');
+    ok(cu !== null && cu.textContent.indexOf('Book the train to Lille') >= 0 && cu.textContent.indexOf('Tomorrow') >= 0, 'a quest due tomorrow lists under Coming up > Tomorrow');
+    ok(cu && cu.textContent.indexOf('Hand in the case study') < 0, 'a due-today quest is not repeated under Coming up');
+    // Habits today
+    var hp = d.querySelector('#view .panel.habits');
+    ok(hp !== null && hp.querySelector('.item .btn.go') !== null && hp.querySelector('.hdots') !== null, 'Habits today lists the good habits with the Done control and the dots');
+    ok(hp && hp.querySelector('details.slipped') !== null && hp.querySelector('details.slipped .item.monster .btn.slip') !== null, 'monsters sit behind a Slipped? fold with the I slipped control');
+    ok(hp && hp.textContent.indexOf('this wk') >= 0 && hp.querySelector('.wkring .ring') !== null, 'a weekly-target habit shows its ring and count on Today');
+    // quick actions
+    var qa = d.querySelectorAll('#view .quick.qa button.qab:not(.potion)');
+    ok(qa.length === 3, 'quick actions row has three buttons (' + qa.length + ')');
+    var qaTxt = d.querySelector('#view .quick.qa').textContent;
+    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') >= 0, 'they read Add, Focus, Ask Sage');
+    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 3, 'each quick action carries a sprite icon');
+    w.quickAdd();
+    ok(w.tab === 'quests' && d.activeElement === d.querySelector('#qTitle'), 'Add lands on the Quests form with the title field focused');
+    w.go('today');
+    // Log your day: collapsed, expanded, saved, summary, archive
+    delete w.state.journal[today]; delete w.state.sleep[today]; w.render();
+    var lc = d.querySelector('#view .panel.logcard');
+    ok(lc !== null && lc.textContent.indexOf('+15 XP') >= 0 && d.querySelector('#view #jNote') === null, 'the log card starts collapsed with the XP promise');
+    d.querySelector('#view .logcard .logmain').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .moods button[aria-pressed]') !== null && d.querySelector('#view .hrbtn') !== null && d.querySelector('#view #slHours') !== null, 'tapping the row expands the same journal form on Today');
+    d.querySelector('#view .moods button[aria-label="Mood: Good"]').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .moods button.on') !== null, 'picking a mood re-renders with the card still open');
+    d.querySelector('#view #jNote').value = 'dashboard day';
+    d.querySelector('#view #slHours').value = '7.5';
+    w.saveDailyLog();
+    var je = w.state.journal[today], se = w.state.sleep[today];
+    ok(je && je.mood === 'good' && je.note === 'dashboard day' && se && se.hours === 7.5, 'saveDailyLog() saves mood, note and sleep from the Today form');
+    lc = d.querySelector('#view .panel.logcard');
+    ok(lc && lc.classList.contains('logged') && lc.textContent.indexOf('Good') >= 0 && lc.textContent.indexOf('7.5h') >= 0, 'once saved the row shows the logged mood and sleep');
+    ok(lc && lc.querySelector('[aria-label="Edit today\'s log"]') !== null, 'the saved row offers Edit');
+    lc.querySelector('[aria-label="Edit today\'s log"]').click();
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view #jNote').value === 'dashboard day', 'Edit reopens the form with the saved note');
+    w.go('today');
+    d.querySelector('#view .logcard .archivebtn').click();
+    ok(d.querySelector('#modal.show') !== null && d.querySelector('#modal #jSearch') !== null && d.querySelector('#modal details.jmonth') !== null, 'Archive opens the journal archive in the modal');
+    w.closeModal();
+    // Journal view still draws the same form
+    w.go('journal');
+    ok(d.querySelector('#view #jNote') !== null && d.querySelector('#view .hrbtn') !== null && d.querySelector('#view').textContent.indexOf('saved ✓') >= 0, 'the Journal view renders the shared form with its saved state');
+    w.go('today');
+    // Sage's daily line
+    w.localStorage.removeItem('sml.mascot.day');
+    w.toggleMascot(false);
+    w.mascotDailyGreet();
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'the daily greet renders one Sage line under the greeting');
+    ok(d.querySelector('#mBubble').hidden === true, 'the greet no longer pops the bubble');
+    ok(d.querySelector('#view .sageline').textContent.indexOf(w.RPG.briefing(w.state).lines[0].text) >= 0, 'the line is the first briefing line');
+    w.mascotDailyGreet();
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'greeting again on the same day still renders one line');
+    d.querySelector('#view .sageline .btn').click();
+    ok(d.querySelector('#mBubble').hidden === false && d.querySelector('#mBubble .mline') !== null, 'the More control opens the briefing bubble');
+    w.toggleMascot(false);
+    w.go('quests'); w.go('today');
+    ok(d.querySelectorAll('#view .sageline').length === 1, 'the line survives navigation for the rest of the day');
+    // empty Now
+    var keep = w.state.quests;
+    w.state.quests = w.state.quests.filter(function (q) { return !q.recurring && q.due !== today; });
+    w.render();
+    var nowEmpty = d.querySelector('#view .panel.now .ebox');
+    ok(nowEmpty !== null && nowEmpty.textContent.indexOf('Nothing due right now') >= 0 && nowEmpty.querySelectorAll('.btn').length === 2, 'an empty Now offers Add a quest and Start focus');
+    w.state.quests = keep; w.render();
+    // header carry-overs
+    ok(d.querySelector('#hud .who .nm') !== null, 'the header name sits in its truncating element');
+    var css = fs2.readFileSync(__dirname + '/styles.css', 'utf8');
+    ok(/\.hud \.nm\{[^}]*text-overflow:ellipsis/.test(css) && /\.hud \.nm\{[^}]*min-width:0/.test(css) && /\.hud \.side\{[^}]*flex-wrap:wrap/.test(css), 'stylesheet truncates the name and lets the pills wrap instead of clipping');
+    w.openCharacter();
+    var rn = d.querySelector('#modal .ranknext');
+    ok(rn !== null && rn.tagName === 'BUTTON' && /rank/i.test(rn.getAttribute('aria-label') || ''), 'the Hero sheet rank line is a labelled button');
+    rn.click();
+    ok(d.querySelector('#modal.show') !== null && d.querySelector('#modal').textContent.indexOf('RANKS') >= 0, 'tapping it opens the ranks sheet');
+    w.closeModal();
+    w.A.deleteQuest(w.state, dueQ.id); w.A.deleteQuest(w.state, tomQ.id); w.render();
   })();
 
   console.log('\nRuntime errors during session: ' + errors.length);
