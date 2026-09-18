@@ -297,7 +297,7 @@ function defeatScreen(res){
     '<div class="sub">The monsters dragged you down. You’re <b style="color:var(--hp)">Downed</b>.</div>'+
     (cost>0?'<div class="sub" style="color:var(--hp)">You lost <b>'+cost+' 💰</b> in the fall.</div>':'')+
     '<div class="sub" style="color:var(--muted)">While downed: <b>half XP</b> and <b>no coins</b> earned. Rest back to <b>full HP</b> - sleep well or heal at the 🛏️ Hotel - to <b>rise</b>.</div>'+
-    '<button class="btn go" onclick="closeOverlay();go(\'market\');shopTab=\'hotel\';render()">🛏️ Go rest</button>'+
+    '<button class="btn go" onclick="closeOverlay();goMarket(\'hotel\')">🛏️ Go rest</button>'+
     '<button class="btn" onclick="closeOverlay()">Get up</button></div>';
 }
 function riseScreen(cb){
@@ -444,6 +444,18 @@ function viewBackHead(title){
     '<h2>'+esc(title)+'</h2></div>';
 }
 function go(t){ tab=t; pendingNote=null; pendingHours=null; pendingDays=[]; logOpen=false; navAnim=true; render(); }
+/* Rewards is one scrolling page now (revamp 7), so shopTab no longer picks
+   which grid renders - all three (market/hotel/black) are always on the
+   page. It still names which section a link should land on: the "Rest"
+   buttons on the defeat/wounded banners call this instead of hand-rolling
+   go('market');shopTab=...;render(), and it scrolls the matching #shop-*
+   panel into view once the page is up. */
+function goMarket(section){
+  go('market');
+  shopTab=section;
+  var el=document.getElementById('shop-'+section);
+  if(el) el.scrollIntoView({block:'start'});
+}
 
 /* One icon from the sprite in index.html. `cls` adds a modifier, 'sm' for the
    14px version used inside meta text. Icons inherit the surrounding text colour
@@ -474,24 +486,50 @@ var PRESETS={
   ],
   good:['Read 20 pages','Gym / 30 min walk','Study / practice 20 min','Plan tomorrow (5 min)','In bed by 23:30','Drink 2L water','Batch-cook Sunday'],
   bad:['Instagram before 1 PM','Doomscrolling','Late-night YouTube','Snoozing alarm','Gaming before work is done'],
+  /* market items carry a 6th element, tags: path ids (student/athlete/founder/
+     coder/gamer/creative), 'all' for anything universal, or a struggle id
+     (phone/procrastination/sleep/junk) the item answers. suggestedRewards()
+     in the Rewards screen reads this; hotel/black never needed it so they
+     stay 5-wide. Keep the Streak Shield at market[0] - the shield-purchase
+     flow (usePreset('shop',0,'market')) and its test depend on that index. */
   shop:{
-    market:[['🛡 Streak Shield - auto-saves one missed day',200,0,0,'shield'],['Gaming: 1 hour',60],['Gaming: full evening',150],['1 episode of a series',40],['Movie night',80],['Café treat',35],['Sweet treat',30],['Takeaway',120],['Sleep-in Saturday',100],['New game (save up!)',600]],
+    market:[['🛡 Streak Shield - auto-saves one missed day',200,0,0,'shield'],
+      ['Gaming: 1 hour',60,0,0,null,['gamer','coder']],
+      ['Gaming: full evening',150,0,0,null,['gamer']],
+      ['1 episode of a series',40,0,0,null,['all']],
+      ['Movie night',80,0,0,null,['all']],
+      ['Café treat',35,0,0,null,['all']],
+      ['Sweet treat',30,0,0,null,['all']],
+      ['Takeaway',120,0,0,null,['junk']],
+      ['Sleep-in Saturday',100,0,0,null,['sleep','procrastination']],
+      ['New game (save up!)',600,0,0,null,['gamer']],
+      ['Phone-free evening treat',50,0,0,null,['phone']],
+      ['New book',35,0,0,null,['student','creative']],
+      ['Post-workout treat',45,0,0,null,['athlete']],
+      ['New tool or plugin',90,0,0,null,['coder','founder']],
+      ['Night out with friends',150,0,0,null,['founder','student']]],
     hotel:[['Power nap (20 min)',25,15],['Walk outside',15,10],['Long shower / bath',40,20],['Full rest evening',90,40],['Massage / spa',200,60]],
     black:[['Instagram before 1 PM (1h)',120,0,8],['Gaming before work is done (1h)',100,0,8],['Junk food feast',90,0,10],['Netflix past midnight',110,0,12],['Skip-the-gym pass',70,0,6]]
   }
 };
-function presetChips(kind){
-  var arr = kind==='shop' ? PRESETS.shop[shopTab] : PRESETS[kind];
+/* tabId picks which PRESETS.shop.{market,hotel,black} array a 'shop' kind
+   reads; the other kinds (quest/good/bad) ignore it. Rewards now shows all
+   three shop forms on one page at once, so each one passes its own tabId
+   instead of relying on the single shared shopTab global. Omitting tabId
+   (the Quests/Habits call sites below never pass one) falls back to shopTab
+   for backward compatibility. */
+function presetChips(kind,tabId){
+  var arr = kind==='shop' ? PRESETS.shop[tabId||shopTab] : PRESETS[kind];
   var chips = arr.map(function(p,i){
-    return '<button onclick="usePreset(\''+kind+'\','+i+')">+ '+esc(kind==='quest'||kind==='shop'?p[0]:p)+(kind==='shop'?' · '+p[1]+'💰':'')+'</button>';
+    return '<button onclick="usePreset(\''+kind+'\','+i+(kind==='shop'?',\''+(tabId||shopTab)+'\'':'')+')">+ '+esc(kind==='quest'||kind==='shop'?p[0]:p)+(kind==='shop'?' · '+p[1]+'💰':'')+'</button>';
   }).join('');
   return '<div class="presets"><span class="plabel">quick add:</span>'+chips+'</div>';
 }
-function usePreset(kind,i){
+function usePreset(kind,i,tabId){
   if(kind==='quest'){ var p=PRESETS.quest[i]; if(dupe(state.quests,p[0]))return; A.addQuest(state,{title:p[0],diff:p[1]}); }
   if(kind==='good'){ var t=PRESETS.good[i]; if(dupe(state.habits,t))return; A.addHabit(state,{title:t,type:'good'}); }
   if(kind==='bad'){ var t2=PRESETS.bad[i]; if(dupe(state.habits,t2))return; A.addHabit(state,{title:t2,type:'bad'}); }
-  if(kind==='shop'){ var s=PRESETS.shop[shopTab][i]; if(dupe(state.shop,s[0]))return; A.addShopItem(state,{title:s[0],price:s[1],tab:shopTab,hp:s[2]||0,dmg:s[3]||0,special:s[4]||null}); }
+  if(kind==='shop'){ var tb=tabId||shopTab; var s=PRESETS.shop[tb][i]; if(dupe(state.shop,s[0]))return; A.addShopItem(state,{title:s[0],price:s[1],tab:tb,hp:s[2]||0,dmg:s[3]||0,special:s[4]||null}); }
   persist(); render();
 }
 function dupe(list,title){ return list.some(function(x){return x.title===title;}); }
@@ -748,7 +786,7 @@ function renderToday(){
       '<span class="dt">'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</span>'+
       (boss?'<button class="bosschip" onclick="go(\'quests\')" title="Weekly boss: '+esc(boss.title)+'. Tap to see it">🐲 '+esc(boss.title)+' · '+A.bossDaysLeft(state)+'d</button>':'')+'</div>'+
     (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
-      '<span class="nb"><button class="btn small go" onclick="go(\'market\');shopTab=\'hotel\';render()" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
+      '<span class="nb"><button class="btn small go" onclick="goMarket(\'hotel\')" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
       :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
     /* the nudge is one line now: the text truncates, the two buttons never do.
@@ -1231,49 +1269,172 @@ function shopIcon(title,tab){
   for(var i=0;i<SHOP_ICONS.length;i++){ if(SHOP_ICONS[i][0].test(title)) return SHOP_ICONS[i][1]; }
   return tab==='hotel'?'🛏️':tab==='black'?'🕶️':'🎁';
 }
+/* Rewards (revamp 7): one scrolling page of sections instead of a tab
+   switcher. market/hotel/black stay as internal ids (shopTab, item.tab,
+   PRESETS.shop.*) but every section is always on the page at once now - see
+   goMarket() for how a link still lands on one of them. */
 function renderMarket(){
-  var tabs=[['market','🛒 Market'],['hotel','🛏️ Hotel'],['black','🕶️ Black Market']];
-  var items=state.shop.filter(function(i){return i.tab===shopTab;});
-  var escOn=state.settings.escalate!==false;
-  var blurb={market:'Everyday treats. Earn them, then enjoy them guilt-free - that is the whole point.'+(escOn?' Repeat the same treat in one day and its price climbs - indulge, don’t binge.':''),
-    hotel:'Rest and recovery. Hotel items restore ❤️ HP - no surge, rest all you like.',
-    black:'Break your own rules - the deal costs coins AND HP, the price climbs each time, and you can only cave a couple times a day.'}[shopTab];
-  $('#view').innerHTML='<div class="panel"><h3>Reward shop · balance <span class="cnt">💰 '+state.hero.coins+'</span>'+
-    '<button class="btn small right" onclick="toggleEscalate()" title="Escalating prices stop a coin hoard from buying unlimited indulgences">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
-    '<div class="shoptabs">'+tabs.map(function(t){return '<button class="'+(shopTab===t[0]?'on':'')+'" onclick="shopTab=\''+t[0]+'\';render()">'+t[1]+'</button>';}).join('')+'</div>'+
-    '<div class="hint" style="margin-bottom:10px">'+blurb+'</div>'+
-    (items.length?'<div class="shopgrid">'+items.map(function(i){
-      var isShield=i.special==='shield';
-      var info=isShield?{price:i.price,capped:false,limit:0,count:0,surge:0}:A.buyInfo(state,i);
-      var haveS=isShield&&(state.hero.shields||0)>=1;
-      var can=state.hero.coins>=info.price && !info.capped && !haveS;
-      var effects=[];
-      if(isShield) effects.push('<span style="color:var(--gold)">auto-saves one missed day</span>');
-      if(i.hp) effects.push('<span style="color:var(--good)">+'+i.hp+' ❤️</span>');
-      if(i.dmg) effects.push('<span style="color:var(--hp)">−'+i.dmg+' ❤️</span>');
-      if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap hit':info.count+'/'+info.limit+' today')+'</span>');
-      else if(info.count>0 && info.surge>0) effects.push('<span class="cap">'+info.count+'× today</span>');
-      var surgedPrice=info.price>i.price;
-      // affordability meter: how close your purse is to this price
-      var aff=can||haveS?'':'<div class="affbar" title="'+(info.price-state.hero.coins)+' 💰 to go"><i style="width:'+Math.min(100,Math.round(state.hero.coins/info.price*100))+'%"></i></div>';
-      return '<div class="scard'+(can?'':' locked')+(shopTab==='black'?' shady':'')+'">'+
-        '<button class="del" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button>'+
-        '<div class="sicon" aria-hidden="true">'+shopIcon(i.title,i.tab)+'</div>'+
-        '<div class="stitle">'+esc(i.title)+'</div>'+
-        (effects.length?'<div class="sfx">'+effects.join(' · ')+'</div>':'')+
-        aff+
-        '<div class="srow"><span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
-        '<button class="btn buy small" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':info.capped?'Capped':'Buy')+'</button></div></div>';
-    }).join('')+'</div>'
-    :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
-    '<div class="form"><input id="sTitle" placeholder="New reward… (e.g. Cinema night)">'+
-    '<div class="row"><input id="sPrice" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
-    (shopTab==='hotel'?'<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">':'')+
-    (shopTab==='black'?'<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">':'')+
-    (shopTab!=='hotel'?'<input id="sLimit" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">':'')+
-    '<button class="btn buy" onclick="addShop()">+ Stock it</button></div>'+presetChips('shop')+'</div></div>';
+  $('#view').innerHTML='<div>'+balanceHero()+suggestedSection()+yourRewardsSection()+protectionSection()+guiltyPleasuresSection()+restSection()+'</div>';
 }
 function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
+
+/* Balance hero: the coin total plus what moved today. Both read straight off
+   state.log - actions.buy() (core.js) logs every purchase with a negative
+   coins field, same log entry type XP/coin grants use with a positive one,
+   so earned/spent both fall out of one pass with no extra bookkeeping. Surge
+   lives here as a small toggle: it changes prices in every section below, so
+   it belongs with the balance, not repeated three times. */
+function balanceHero(){
+  var today=RPG.todayKey(), earned=0, spent=0;
+  state.log.forEach(function(e){
+    if(e.day!==today) return;
+    if(e.coins>0) earned+=e.coins; else if(e.coins<0) spent+=-e.coins;
+  });
+  var escOn=state.settings.escalate!==false;
+  return '<div class="panel" id="shop-balance"><h3>Reward shop'+
+    '<button class="btn small ghost right" onclick="toggleEscalate()">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
+    '<div class="balnum" id="balCoins">💰 '+state.hero.coins+'</div>'+
+    '<div class="balrow"><span>Earned today <b style="color:var(--ok)">+'+earned+' 💰</b></span>'+
+    '<span>Spent today <b style="color:var(--text-2)">'+spent+' 💰</b></span></div>'+
+    '<div class="hint">You earn coins by clearing quests and keeping habits. Spend them here, guilt free.</div>'+
+    '<div class="hint">Surge raises the price each time you repeat the same treat in one day, so a coin hoard cannot buy the whole shelf in one sitting. Turn it off any time.</div>'+
+    '</div>';
+}
+
+/* Suggested for you: PRESETS.shop.market items whose tags overlap the
+   user's onboarding picks. state.settings.onboard ({paths,struggle}) is
+   written by the onboarding wizard (phase 5); until that phase is merged
+   into this branch, or for a save made before it existed, there is no such
+   record, so this falls back to guessing which paths are active from the
+   life areas already on the board - RPG.PATHS[n].skills lists the names
+   each path renames the board to. The Streak Shield is excluded (it lives
+   in Protection) and anything already stocked is hidden so the row only
+   ever offers something new. Returns indices into PRESETS.shop.market,
+   capped at six. */
+function suggestedRewards(){
+  var ob=state.settings&&state.settings.onboard;
+  var paths=ob&&ob.paths?ob.paths:null;
+  var struggle=ob&&ob.struggle?ob.struggle:null;
+  if(!paths){
+    paths=RPG.PATHS.filter(function(p){
+      return p.skills && p.skills.some(function(n){ return state.skills.some(function(s){ return s.name===n; }); });
+    }).map(function(p){ return p.id; });
+  }
+  var out=[];
+  for(var i=0;i<PRESETS.shop.market.length;i++){
+    var it=PRESETS.shop.market[i];
+    if(it[4]) continue; // special (Streak Shield) - shown in Protection, not here
+    if(dupe(state.shop,it[0])) continue;
+    var tags=it[5]||[];
+    var match=tags.indexOf('all')>=0 || (struggle&&tags.indexOf(struggle)>=0) || paths.some(function(p){return tags.indexOf(p)>=0;});
+    if(match){ out.push(i); if(out.length>=6) break; }
+  }
+  return out;
+}
+function suggestedSection(){
+  var idxs=suggestedRewards();
+  if(!idxs.length) return '';
+  return '<div class="panel" id="shop-suggested" style="margin-top:14px"><h3>✨ Suggested for you</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Matched to what is already on your board. One tap stocks it below.</div>'+
+    '<div class="shopgrid">'+idxs.map(function(i){
+      var it=PRESETS.shop.market[i];
+      return '<div class="scard sugg"><div class="sicon" aria-hidden="true">'+shopIcon(it[0],'market')+'</div>'+
+        '<div class="stitle">'+esc(it[0])+'</div>'+
+        '<div class="srow"><span class="price">💰 '+it[1]+'</span>'+
+        '<button class="btn buy small" onclick="usePreset(\'shop\','+i+',\'market\')">Stock it</button></div></div>';
+    }).join('')+'</div></div>';
+}
+
+/* One reward card: shared by Your rewards, Guilty pleasures, Rest and the
+   Streak Shield in Protection once it has a real state.shop row. i.tab picks
+   the shady tint, so the same function always renders the right look no
+   matter which section calls it. */
+function shopCard(i){
+  var isShield=i.special==='shield';
+  var info=isShield?{price:i.price,capped:false,limit:0,count:0,surge:0}:A.buyInfo(state,i);
+  var haveS=isShield&&(state.hero.shields||0)>=1;
+  var can=state.hero.coins>=info.price && !info.capped && !haveS;
+  var effects=[];
+  if(isShield) effects.push('<span style="color:var(--brand)">auto-saves one missed day</span>');
+  if(i.hp) effects.push('<span style="color:var(--ok)">+'+i.hp+' ❤️</span>');
+  if(i.dmg) effects.push('<span style="color:var(--danger)">−'+i.dmg+' ❤️</span>');
+  if(info.limit>0) effects.push('<span class="cap'+(info.capped?' hit':'')+'">'+(info.capped?'daily cap hit':info.count+'/'+info.limit+' today')+'</span>');
+  else if(info.count>0 && info.surge>0) effects.push('<span class="cap">'+info.count+'× today</span>');
+  var surgedPrice=info.price>i.price;
+  // affordability meter: how close your purse is to this price
+  var aff=can||haveS?'':'<div class="affbar" title="'+(info.price-state.hero.coins)+' 💰 to go"><i style="width:'+Math.min(100,Math.round(state.hero.coins/info.price*100))+'%"></i></div>';
+  return '<div class="scard'+(can?'':' locked')+(i.tab==='black'?' shady':'')+'">'+
+    '<button class="del" aria-label="Delete reward" onclick="delShop(\''+i.id+'\')">✕</button>'+
+    '<div class="sicon" aria-hidden="true">'+shopIcon(i.title,i.tab)+'</div>'+
+    '<div class="stitle">'+esc(i.title)+'</div>'+
+    (effects.length?'<div class="sfx">'+effects.join(' · ')+'</div>':'')+
+    aff+
+    '<div class="srow"><span class="price'+(surgedPrice?' surged':'')+'">💰 '+info.price+(surgedPrice?'<small> ('+i.price+')</small>':'')+'</span>'+
+    '<button class="btn buy small" '+(can?'':'disabled')+' onclick="buy(\''+i.id+'\')">'+(haveS?'Held':info.capped?'Capped':'Buy')+'</button></div></div>';
+}
+
+function yourRewardsSection(){
+  var items=state.shop.filter(function(i){return i.tab==='market' && !i.special;});
+  return '<div class="panel" id="shop-market" style="margin-top:14px"><h3>🛒 Your rewards</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Everyday treats. Earn them, then enjoy them guilt-free, that is the whole point.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
+    '<div class="form"><input id="sTitle-market" placeholder="New reward… (e.g. Cinema night)">'+
+    '<div class="row"><input id="sPrice-market" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sLimit-market" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'market\')">+ Stock it</button></div></div>'+
+    presetChips('shop','market')+'</div>';
+}
+
+/* Protection: the Streak Shield always shows here, even before it has ever
+   been stocked - a fresh seed() hero has no state.shop row for it yet (only
+   seedPreset() adds one up front), so this falls back to the PRESETS price
+   and usePreset() (which calls addShopItem) until a real row exists, then
+   switches to the live buy/Held card like any other reward. */
+function protectionSection(){
+  var shieldItem=state.shop.find(function(i){return i.special==='shield';});
+  var shieldCard=shieldItem?shopCard(shieldItem):
+    '<div class="scard"><div class="sicon" aria-hidden="true">🛡️</div>'+
+    '<div class="stitle">Streak Shield</div>'+
+    '<div class="srow"><span class="price">💰 '+PRESETS.shop.market[0][1]+'</span>'+
+    '<button class="btn buy small" onclick="usePreset(\'shop\',0,\'market\')">Stock it</button></div></div>';
+  var potion=state.inventory.potion||0;
+  var elixirCard=potion<=0?'':
+    '<div class="scard"><div class="sicon" aria-hidden="true">🧪</div>'+
+    '<div class="stitle">Focus Elixir ×'+potion+'</div>'+
+    '<div class="sfx">×2 XP for the rest of today</div>'+
+    '<div class="srow"><span></span><button class="btn buy small" onclick="usePotion()">Use</button></div></div>';
+  return '<div class="panel" id="shop-protection" style="margin-top:14px"><h3>🛡️ Protection</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Used automatically the first day you miss, so the streak survives.</div>'+
+    '<div class="shopgrid">'+shieldCard+elixirCard+'</div></div>';
+}
+
+function guiltyPleasuresSection(){
+  var items=state.shop.filter(function(i){return i.tab==='black';});
+  return '<div class="panel" id="shop-black" style="margin-top:14px"><h3>🕶️ Guilty pleasures</h3>'+
+    '<div class="hint" style="margin-bottom:10px">The treats you would rather not have right now. One costs coins and HP, the price climbs, and you can only cave twice a day. It beats lying to yourself.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🕶️','Nothing stocked here','Add the treat you already reach for anyway - naming it is more honest than pretending.'))+
+    '<div class="form"><input id="sTitle-black" placeholder="New guilty pleasure…">'+
+    '<div class="row"><input id="sPrice-black" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">'+
+    '<input id="sLimit-black" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'black\')">+ Stock it</button></div></div>'+
+    presetChips('shop','black')+'</div>';
+}
+
+function restSection(){
+  var items=state.shop.filter(function(i){return i.tab==='hotel';});
+  return '<div class="panel" id="shop-hotel" style="margin-top:14px"><h3>🛏️ Rest</h3>'+
+    '<div class="hint" style="margin-bottom:10px">Heals HP, never surges, never capped.</div>'+
+    (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
+      :emptyState('🛏️','Nothing stocked here','Add a way to heal up - a nap, a walk, an early night.'))+
+    '<div class="form"><input id="sTitle-hotel" placeholder="New way to rest…">'+
+    '<div class="row"><input id="sPrice-hotel" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
+    '<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">'+
+    '<button class="btn buy" onclick="addShop(\'hotel\')">+ Stock it</button></div></div>'+
+    presetChips('shop','hotel')+'</div>';
+}
 
 /* The daily log form: mood faces, the note, the sleep row (quick hours, the
    free field, the stars) and the one Save. Today embeds it inside the log
@@ -1717,12 +1878,17 @@ function buy(id){
   if(r&&r.shield){ persist(); render(); toast('🛡 <span class="c">Streak Shield equipped - one missed day is covered</span>'); SND.buy(); afterAction(); return; }
   persist(); render(); fx(r); afterAction();
 }
-function addShop(){
-  var t=$('#sTitle').value.trim(), p=Number($('#sPrice').value); if(!t||!p) return;
-  var hp=shopTab==='hotel'?Number(($('#sHp')||{}).value||0):0;
-  var dmg=shopTab==='black'?Number(($('#sDmg')||{}).value||0):0;
-  var limEl=$('#sLimit'), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
-  A.addShopItem(state,{title:t,price:p,tab:shopTab,hp:hp,dmg:dmg,limit:lim}); persist(); render();
+/* tabId comes from which of the three add forms was submitted (Rewards now
+   shows all three - market/hotel/black - on one page, so there is no single
+   ambient "current tab" left to read). #sTitle/#sPrice/#sLimit are suffixed
+   per section for that reason; #sHp and #sDmg stay bare since only one
+   section (Rest, Guilty pleasures) ever has one on the page. */
+function addShop(tabId){
+  var t=$('#sTitle-'+tabId).value.trim(), p=Number($('#sPrice-'+tabId).value); if(!t||!p) return;
+  var hp=tabId==='hotel'?Number(($('#sHp')||{}).value||0):0;
+  var dmg=tabId==='black'?Number(($('#sDmg')||{}).value||0):0;
+  var limEl=$('#sLimit-'+tabId), lim=limEl&&limEl.value!==''?Number(limEl.value):undefined;
+  A.addShopItem(state,{title:t,price:p,tab:tabId,hp:hp,dmg:dmg,limit:lim}); persist(); render();
 }
 function delShop(id){
   var it=state.shop.find(function(x){return x.id===id;});

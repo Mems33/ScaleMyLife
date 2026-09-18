@@ -109,12 +109,14 @@ setTimeout(async function () {
   console.log('\nMarket tab');
   w.go('market');
   w.state.hero.coins = 200; w.render();
+  ok(d.querySelector('#balCoins') !== null && d.querySelector('#balCoins').textContent.indexOf('200') >= 0, 'balance hero shows the coin total');
   var buyable = w.state.shop.find(function (i) { return i.tab === 'market'; });
   var cB = w.state.hero.coins;
   w.buy(buyable.id);
   ok(w.state.hero.coins === cB - buyable.price, 'purchase deducted coins');
   w.shopTab = 'hotel'; w.render();
   ok(/\+\d+ ❤️/.test(d.querySelector('#view').textContent), 'hotel items show HP restore');
+  ok(d.querySelector('#sHp') !== null, 'the rest section form has the HP field');
   w.state.hero.hp = 40;
   var nap = w.state.shop.find(function (i) { return i.tab === 'hotel'; });
   w.buy(nap.id);
@@ -241,6 +243,16 @@ setTimeout(async function () {
   var sCount = w.state.shop.length;
   w.usePreset('shop', 0);
   ok(w.state.shop.length === sCount + 1 || w.state.shop.some(function(i){return i.title==='Gaming: 1 hour';}), 'shop preset adds gaming reward');
+
+  console.log('\nSuggested for you (revamp 7)');
+  var suggIdx = w.suggestedRewards();
+  ok(suggIdx.length > 0, 'suggested rewards row has at least one match (no onboarding record falls back to skill-name matching)');
+  var pickIdx = suggIdx[0], pickTitle = w.PRESETS.shop.market[pickIdx][0];
+  ok(d.querySelector('#shop-suggested').textContent.indexOf(pickTitle) >= 0, 'a suggested reward renders by title');
+  w.usePreset('shop', pickIdx, 'market');
+  ok(w.state.shop.some(function (i) { return i.title === pickTitle; }), 'tapping Stock it adds the suggested reward to Your rewards');
+  ok(w.suggestedRewards().indexOf(pickIdx) === -1, 'a stocked reward drops out of the suggestions row (dupe() hides it)');
+
   w.go('habits');
   var hCount = w.state.habits.length;
   w.usePreset('bad', 0);
@@ -394,12 +406,12 @@ setTimeout(async function () {
   var mon = w.state.habits.find(function (h) { return h.type === 'bad'; });
   ok(d.querySelector('#view').textContent.indexOf('best:') >= 0, 'monster best record shown');
 
-  console.log('\nBlack market rework');
+  console.log('\nGuilty pleasures (revamp 7 - formerly Black market)');
   w.go('market');
   w.shopTab = 'black'; w.render();
-  ok(d.querySelector('#view').textContent.indexOf('costs coins AND HP') >= 0, 'new black market blurb');
-  ok(d.querySelector('#sDmg') !== null, 'HP-cost input in black tab form');
-  w.usePreset('shop', 0);
+  ok(d.querySelector('#shop-black').textContent.indexOf('It beats lying to yourself') >= 0, 'guilty pleasures framing renders');
+  ok(d.querySelector('#sDmg') !== null, 'HP-cost input in the guilty pleasures form');
+  w.usePreset('shop', 0, 'black');
   var sinItem = w.state.shop.find(function (i) { return i.tab === 'black' && i.dmg > 0; });
   ok(!!sinItem, 'black preset carries HP cost');
   w.state.hero.coins = 500;
@@ -450,13 +462,14 @@ setTimeout(async function () {
   ok(d.querySelector('.downbar') !== null, 'today tab explains the defeat (downed banner)');
   w.state.hero.woundedOn = null; w.state.hero.downed = null;
   w.go('market');
-  w.usePreset('shop', 0); // streak shield preset
+  w.usePreset('shop', 0, 'market'); // streak shield preset
   var shieldItem = w.state.shop.find(function (i) { return i.special === 'shield'; });
   ok(!!shieldItem, 'streak shield stocked from preset');
   w.state.hero.coins = 300; w.render();
   w.buy(shieldItem.id);
   ok(w.state.hero.shields === 1, 'shield equipped via UI');
   ok(d.querySelector('#hud').textContent.indexOf(String.fromCodePoint(0x1F6E1)) >= 0, 'shield icon in HUD');
+  ok(d.querySelector('#shop-protection').textContent.indexOf('Held') >= 0, 'the Protection shield card shows Held once equipped');
 
   console.log('\nTutorial replay');
   w.openSettings();
@@ -466,6 +479,7 @@ setTimeout(async function () {
   w.closeModal();
   w.go('market');
   ok(d.querySelector('.royaltab') === null, 'market has no Royal Chamber entry point');
+  ok(d.querySelector('.shoptabs') === null, 'market has no tab switcher - sections scroll instead (revamp 7)');
   w.openSettings();
   w.tut(0);
   ok(d.querySelector('.tdots') !== null, 'tutorial replays');

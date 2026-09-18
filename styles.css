@@ -303,9 +303,6 @@ input:focus,select:focus,textarea:focus{border-color:var(--skill)}
 .chest .hint{font-size:12px;color:var(--muted)}
 
 /* market */
-.shoptabs{display:flex;gap:6px;margin-bottom:12px}
-.shoptabs button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);padding:9px;border-radius:7px;font-weight:700;font-size:13px}
-.shoptabs button.on{color:var(--ink);border-color:var(--gold)}
 .price{font-family:var(--mono);font-weight:700;color:var(--gold);font-size:15px;white-space:nowrap}
 .afford{font-family:var(--mono);font-size:11px;color:var(--muted)}
 
@@ -1273,4 +1270,26 @@ body.light .quick.qa button{background:#fff}
   .qaspace{height:calc(60px + env(safe-area-inset-bottom))}
   .panel.now h3 .chestring{margin-left:auto}
   .logrow{flex-wrap:nowrap}
+}
+
+/* Revamp 7: rewards */
+/* Rewards is a scrolling stack of .panel sections now (renderMarket in
+   app.js), not a tab switcher, so this only adds what those sections need
+   on top of the existing .scard/.shopgrid/.form rules: the big balance
+   number, the earned/spent line, a warn tint for Guilty pleasures (never
+   red - the design system reserves red for damage/late), a smaller
+   treatment for the Suggested row, and a hard floor of two cards per row
+   on a phone even if auto-fill would ever round down to one. */
+.balnum{font:700 34px var(--mono);color:var(--brand);font-variant-numeric:tabular-nums;margin:6px 0}
+.balrow{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--text-2);margin-bottom:10px}
+.balrow b{font-family:var(--mono);font-variant-numeric:tabular-nums}
+/* same recipe as the original .scard.shady (this file, "v24" block above)
+   but warn instead of the hp/danger red; declared after that rule so it
+   wins the cascade without needing to touch the earlier line. */
+.scard.shady{background:linear-gradient(180deg,color-mix(in srgb,var(--warn) 10%,var(--surface-2)),var(--surface-2))}
+.scard.sugg{padding:10px 8px 8px}
+.scard.sugg .sicon{font-size:26px;margin-top:0}
+.scard.sugg .stitle{font-size:12.5px;min-height:2.2em}
+@media(max-width:400px){
+  .shopgrid{grid-template-columns:repeat(2,1fr)}
 }
