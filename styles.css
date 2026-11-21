@@ -2079,3 +2079,30 @@ details.panel>summary{min-height:44px}
 .obsteps li.more{list-style:none;margin-left:-14px}
 #intro .introsub.two{flex-direction:column;gap:2px}
 #intro .introsub.two b{font:700 20px/1.3 var(--font-display);color:var(--ink)}
+
+/* ========== ready for testers (Nov 2026) ========== */
+/* the account sheet (openAuth in app.js): sign in, create account, reset,
+   new password, and the two-saves question */
+.authsheet h2{margin-bottom:4px}
+.authsheet .authcopy{font-size:15px;line-height:1.4;color:var(--text-2);margin:0 0 6px}
+.authform{display:flex;flex-direction:column}
+.authform input{width:100%}
+.authform .authmsg{min-height:1.4em;margin:10px 0 6px}
+.authlinks{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:6px}
+.authlinks .btn.ghost{color:var(--text-2)}
+.authlinks .btn.ghost:hover,.authlinks .btn.ghost:focus-visible{color:var(--brand)}
+.authsave{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;padding:10px 12px;margin-bottom:8px;
+  border:1px solid var(--border);border-radius:12px;background:var(--surface-2)}
+.authsave>span:first-child{color:var(--text-2);font-size:13px;min-width:118px}
+.authpick{display:flex;flex-direction:column;gap:8px;margin:12px 0 10px}
+/* "I already have an account" under the wizard's first Continue and on the intro */
+.obnav.obacct{justify-content:center}
+#intro .introacct{min-height:44px;margin-top:-12px;color:var(--text-2);font-size:15px}
+#intro .introacct:hover,#intro .introacct:focus-visible{color:var(--brand)}
+/* the install card shares the cloud nudge's slot, but its steps must be read
+   in full, so its text wraps instead of truncating */
+.nudgebar.installcard{align-items:flex-start;padding-top:8px;padding-bottom:8px;
+  border-color:color-mix(in srgb,var(--brand) 50%,var(--line));
+  background:linear-gradient(90deg,var(--brand-soft),transparent),color-mix(in srgb,var(--panel) 86%,transparent)}
+.nudgebar.installcard>.i{flex:none;margin-top:2px}
+.nudgebar.installcard .grow{white-space:normal;overflow:visible;line-height:1.4}

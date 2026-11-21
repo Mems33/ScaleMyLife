@@ -917,7 +917,7 @@ setTimeout(async function () {
   ok(w.SMLCloud.session() === null, 'no session until the user signs in');
   w.openSettings();
   var setTxt = d.querySelector('#modal').textContent;
-  ok(setTxt.indexOf('Cloud sync') >= 0 && d.querySelector('#cEmail') !== null && d.querySelector('#cPw') !== null, 'settings shows the sign-in form when configured');
+  ok(setTxt.indexOf('Cloud sync') >= 0 && setTxt.indexOf('Create account') >= 0 && setTxt.indexOf('Sign in') >= 0, 'settings offers Create account and Sign in when configured');
   ok(setTxt.indexOf('Reminders OFF') >= 0, 'reminders toggle present (off by default)');
   w.closeModal();
   w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.go('today');
@@ -2278,6 +2278,164 @@ setTimeout(async function () {
     w.capAdd();
     ok(w.state.goals.some(function (g) { return g.title.indexOf('internship') >= 0 || g.title.indexOf('Internship') >= 0; }), 'Add on the sheet with the pack form open adds the pack');
     w.state = keep; w.render();
+  })();
+
+  console.log('\nReady for testers: the account sheet, the owl, the install card, privacy');
+  await (async function () {
+    var keep = w.state, SESS = 'sml.cloud.session.v1';
+    var calls = [], cloudSave = null, failPull = false;
+    function reply(body, status) { status = status || 200; return Promise.resolve({ status: status, ok: status < 300, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
+    w.SMLCloud.configure({ fetch: function (url, opts) {
+      calls.push(((opts && opts.method) || 'GET') + ' ' + url);
+      if (url.indexOf('/auth/v1/token?grant_type=password') >= 0) return reply({ access_token: 'tt', refresh_token: 'rr', user: { id: 'u-1', email: 'tester@example.com' } });
+      if (url.indexOf('/auth/v1/signup') >= 0) return reply({});   // email confirmation on: no token yet
+      if (url.indexOf('/auth/v1/recover') >= 0) return reply({});
+      if (url.indexOf('/auth/v1/user') >= 0) return reply({ id: 'u-1', email: 'tester@example.com' });
+      if (url.indexOf('saves?select=data') >= 0) return failPull ? reply({ message: 'offline' }, 503) : reply(cloudSave ? [{ data: cloudSave, updated_at: cloudSave.updatedAt }] : []);
+      return reply({});
+    } });
+    function tick() { return new Promise(function (r) { setTimeout(r, 30); }); }
+    function fill(email, pw) { d.querySelector('#cEmail').value = email; d.querySelector('#cPw').value = pw; }
+    function btn(root, label) { return [].filter.call(root.querySelectorAll('button'), function (b) { return b.textContent.trim() === label; })[0]; }
+    var promptUsed = false; w.prompt = function () { promptUsed = true; return ''; };
+    w.localStorage.removeItem(SESS);
+    w.state = w.RPG.migrate(w.RPG.newState('Local')); w.state.hero.level = 6; w.persist();
+
+    // Settings, signed out: two buttons; the fields live in the sheet
+    w.openSettings();
+    var sm = d.querySelector('#modal');
+    ok(sm.querySelector('#cEmail') === null && btn(sm, 'Create account') && btn(sm, 'Sign in'), 'signed-out Settings shows two buttons, no inline form');
+    btn(sm, 'Sign in').click();
+    ok(d.querySelector('.authsheet form.authform') !== null && d.querySelector('#cEmail') !== null && d.querySelector('#cPw').getAttribute('autocomplete') === 'current-password', 'Sign in opens the account sheet: a real form with email and password');
+    d.querySelector('#cEmail').value = 'tester@example.com'; d.querySelector('#cEmail').dispatchEvent(new w.Event('input'));
+    btn(d.querySelector('.authlinks'), 'Forgot password?').click();
+    ok(d.querySelector('#cEmail').value === 'tester@example.com' && d.querySelector('#cPw') === null, 'Forgot password keeps the typed email and asks for nothing else');
+    d.querySelector('.authform').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    await tick();
+    ok(calls.some(function (c) { return c.indexOf('/auth/v1/recover') >= 0; }) && d.querySelector('#cMsg').textContent.indexOf('Link sent') >= 0, 'submitting the form sends the reset link');
+    d.querySelector('.authsheet .obnav .btn').click();
+    ok(d.querySelector('#modal').textContent.indexOf('SETTINGS') >= 0, 'Back from a sheet opened in Settings returns to Settings');
+
+    // sign-up waiting on the confirmation email
+    w.openAuth('signup', 'settings'); fill('new@example.com', 'longenough'); w.authSubmit(); await tick();
+    ok(w.authMode === 'signin' && d.querySelector('#cMsg').textContent.indexOf('Confirm the email') >= 0 && d.querySelector('#cEmail').value === 'new@example.com', 'a sign-up waiting on email confirmation lands on Sign in, email kept');
+
+    // a save on both sides: an in-app question replaces confirm()
+    cloudSave = w.RPG.migrate(w.RPG.newState('Cloudy')); cloudSave.hero.level = 2; cloudSave.updatedAt = '2026-01-01T00:00:00.000Z';
+    fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    var box = d.querySelector('.authsheet');
+    ok(box && box.classList.contains('locked') && box.textContent.indexOf('Two saves found') >= 0 && box.textContent.indexOf('Cloudy') >= 0 && box.textContent.indexOf('Local') >= 0, 'with a save on both sides, the sheet asks which to keep and names both');
+    ok(box.querySelector('.authpick .btn.go').textContent.indexOf('Keep this device') >= 0, 'the side further along is the recommended first choice');
+    d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    ok(d.querySelector('#modal.show .authsheet') !== null, 'Escape cannot dismiss that question');
+    calls = [];
+    box.querySelector('.authpick .btn.go').click(); await tick();
+    ok(w.state.hero.name === 'Local' && calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'Keep this device pushes it up');
+    ok(d.querySelector('#modal').textContent.indexOf('Synced as') >= 0, 'and lands back in Settings, signed in');
+    w.closeModal();
+
+    // the owl, signed out
+    w.localStorage.removeItem(SESS);
+    w.state.settings.mascot = true; w.toggleMascot(true);
+    var lock = d.querySelector('.mchat-lock');
+    ok(lock !== null && d.querySelector('.mchat-entry') === null && lock.textContent.indexOf('free account') >= 0, 'signed out, the owl says chat needs a free account');
+    lock.click();
+    ok(w.authMode === 'signup' && w.authFrom === 'owl' && d.querySelector('#cEmail') !== null, 'that line opens the sign-up sheet');
+    cloudSave = null;
+    w.openAuth('signin'); fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(!d.querySelector('#modal').classList.contains('show') && d.querySelector('#mChatInput') !== null, 'signing in from the owl opens the chat it promised');
+    w.toggleMascot(false);
+
+    // email links: a stranger's link never syncs anything by itself
+    w.localStorage.removeItem(SESS); w.localStorage.removeItem('sml.auth.pending');
+    calls = [];
+    w.location.hash = '#access_token=evil-tok&refresh_token=evil-rt&type=signup';
+    var rec = w.handleRecoveryHash(); await tick();
+    ok(rec === true && w.location.hash === '' && w.authMode === 'linkcheck' && d.querySelector('#modal.show').textContent.indexOf('tester@example.com') >= 0, 'a link this device did not ask for asks whose account it is, naming the email');
+    ok(w.SMLCloud.session() === null && !calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'while it asks, the link’s session is set aside and nothing is pushed');
+    btn(d.querySelector('.authpick'), 'No, cancel').click(); await tick();
+    ok(w.SMLCloud.session() === null && !calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'No, cancel leaves the device signed out with nothing synced');
+    // an existing session survives a stranger's link
+    var own = { access_token: 'own-tok', refresh_token: 'own-rt', user: { id: 'own-uid', email: 'me@example.com' } };
+    w.localStorage.setItem(SESS, JSON.stringify(own));
+    w.location.hash = '#access_token=evil-tok&type=signup';
+    w.handleRecoveryHash(); await tick();
+    ok(w.SMLCloud.session() && w.SMLCloud.session().access_token === 'own-tok', 'a signed-in player stays in their own account while the question is up');
+    w.authLinkReject(); w.localStorage.removeItem(SESS);
+    // a reset link this device asked for: straight to the new-password sheet
+    w.openAuth('forgot', 'settings'); d.querySelector('#cEmail').value = 'Tester@Example.com'; w.authSubmit(); await tick();
+    ok(JSON.parse(w.localStorage.getItem('sml.auth.pending')).email === 'tester@example.com', 'sending a reset link remembers which email this device asked for');
+    w.closeModal();
+    w.location.hash = '#access_token=rec-tok&refresh_token=rec-rt&type=recovery';
+    w.handleRecoveryHash(); await tick();
+    ok(w.authMode === 'newpw' && d.querySelector('#cPw2') !== null && d.querySelector('.authsheet.locked') !== null && d.querySelector('.authsheet').textContent.indexOf('tester@example.com') >= 0, 'the matching reset link opens the new-password sheet, naming the account');
+    ok(w.localStorage.getItem('sml.auth.pending') === null && w.SMLCloud.session().access_token === 'rec-tok', 'the marker is used once and the link’s session is now in use');
+    d.querySelector('#cPw').value = 'newpass123'; d.querySelector('#cPw2').value = 'different1'; w.authSubmit();
+    ok(d.querySelector('#cMsg').textContent.indexOf('different') >= 0, 'two different passwords are caught before anything is sent');
+    calls = [];
+    d.querySelector('#cPw2').value = 'newpass123'; w.authSubmit(); await tick();
+    ok(calls.some(function (c) { return c.indexOf('PUT') === 0 && c.indexOf('/auth/v1/user') >= 0; }) && !promptUsed, 'Save password sends it; prompt() is never used');
+    // a link opened in another browser (no marker): the player says yes, then it works
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.location.hash = '#access_token=conf-tok&type=signup';
+    w.handleRecoveryHash(); await tick();
+    btn(d.querySelector('.authpick'), 'Yes, it is mine').click(); await tick();
+    ok(d.querySelector('#modal.show #cPw2') === null && w.SMLCloud.session() !== null && w.SMLCloud.session().access_token === 'conf-tok', 'Yes, it is mine signs in, and a confirmation link asks for no new password');
+
+    // a new device: no hero yet, "I already have an account"
+    w.localStorage.removeItem(SESS);
+    w.state = null; w.ob = w.obFresh(); w.cap = null; w.renderHUDShell(); w.onboarding();
+    var acct = d.querySelector('.obacct .btn');
+    ok(acct !== null && acct.textContent.indexOf('already have an account') >= 0, 'step 1 of the wizard offers I already have an account');
+    acct.click();
+    ok(w.authMode === 'signin' && d.querySelector('#cEmail') !== null, 'which opens Sign in');
+    d.querySelector('.authsheet .obnav .btn').click();
+    ok(d.querySelector('#obName') !== null && w.obStep === 1, 'Back returns to step 1 of the wizard');
+    d.querySelector('.obacct .btn').click();
+    failPull = true; fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(w.state === null && d.querySelector('#cMsg') !== null && d.querySelector('#cMsg').textContent.indexOf('did not load') >= 0, 'a failed load keeps the player on Sign in instead of starting a hero that would overwrite the account');
+    failPull = false; cloudSave = w.RPG.migrate(w.RPG.newState('Returner')); cloudSave.hero.level = 7;
+    w.authSubmit(); await tick();
+    ok(w.state && w.state.hero.name === 'Returner' && w.state.hero.level === 7 && !d.querySelector('#modal').classList.contains('show') && d.querySelector('#hud').textContent.indexOf('Returner') >= 0, 'signing in on a new device loads the account’s hero, no question asked');
+    w.localStorage.removeItem(SESS);
+    w.state = null; w.renderHUDShell(); w.onboarding(); d.querySelector('.obacct .btn').click();
+    cloudSave = null; fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(w.state === null && w.obStep === 1 && d.querySelector('#obName') !== null, 'an account with no save yet goes on to make a hero');
+
+    // the install card
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.state = w.RPG.migrate(w.RPG.newState('Installer')); w.persist(); w.go('today');
+    ok(d.querySelector('.installcard') === null, 'no install card on a desktop browser');
+    var ev = new w.Event('beforeinstallprompt', { cancelable: true }), prompted = false;
+    ev.prompt = function () { prompted = true; }; ev.userChoice = Promise.resolve({ outcome: 'accepted' });
+    w.dispatchEvent(ev);
+    ok(ev.defaultPrevented && d.querySelector('.installcard') === null, 'the browser’s install offer is held, and no card before the first XP');
+    w.state.hero.xp = 10; w.render();
+    var card = d.querySelector('.installcard');
+    ok(card !== null && card.textContent.indexOf('Home Screen') >= 0 && card.querySelector('.btn.go').textContent === 'Install', 'after the first XP, Android gets an Install card');
+    w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.render();
+    ok(d.querySelector('.installcard') !== null && d.querySelector('.nudgebar:not(.installcard)') === null, 'one reminder at a time: the install card holds the slot over the cloud nudge');
+    d.querySelector('.installcard .btn.go').click(); await tick();
+    ok(prompted && w.state.settings.installOff === true && d.querySelector('.installcard') === null, 'Install replays the browser prompt; accepting retires the card');
+    ok(d.querySelector('.nudgebar') !== null, 'and the cloud nudge gets its slot back');
+    w.state.settings.installOff = false;
+    Object.defineProperty(w.navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', configurable: true });
+    w.render();
+    card = d.querySelector('.installcard');
+    ok(card !== null && card.textContent.indexOf('Add to Home Screen') >= 0 && card.querySelector('.btn.go') === null, 'on iPhone the card spells out the Share steps instead');
+    card.querySelector('.ghost').click();
+    ok(w.state.settings.installOff === true && d.querySelector('.installcard') === null, 'Got it hides it for good');
+    delete w.navigator.userAgent;
+
+    // what the site runs, the privacy page says; the counter is server-only
+    var priv = fs.readFileSync(path.join(__dirname, 'privacy.html'), 'utf8');
+    ok(html.indexOf('/_vercel/insights/script.js') < 0 || (priv.indexOf('Web Analytics') >= 0 && priv.indexOf('Speed Insights') >= 0 && priv.indexOf('No analytics') < 0), 'the privacy page discloses the visit counts the site loads');
+    ok(priv.indexOf('Anthropic') >= 0, 'the privacy page says where Sage chat messages go');
+    var sageSql = fs.readFileSync(path.join(__dirname, 'supabase', 'sage.sql'), 'utf8');
+    ok(/revoke execute on function public\.increment_sage_usage\(uuid, date\) from anon, authenticated;/.test(sageSql), 'sage.sql takes the chat counter away from anon and authenticated');
+
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.state = keep; w.persist(); w.render();
   })();
 
   console.log('\nRuntime errors during session: ' + errors.length);

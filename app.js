@@ -1020,9 +1020,12 @@ function renderToday(){
     habitsToday()+
     /* the cloud nudge is a reminder, not today's work, so it sits under the
        habits. One line: the text truncates, the two buttons never do. The
-       .ghost dismiss and the cloudNudgeOff flag are what the test clicks. */
-    (cloudNudgeDue()?'<div class="nudgebar">☁️ <span class="grow"><b>Protect your progress.</b> Your save lives only in this browser; free cloud sync keeps it safe.</span>'+
-      '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
+       .ghost dismiss and the cloudNudgeOff flag are what the test clicks.
+       The install card takes the same slot and wins when both are due, so
+       Today never shows two reminders at once. */
+    installCard()+
+    (!installDue()&&cloudNudgeDue()?'<div class="nudgebar">☁️ <span class="grow"><b>Protect your progress.</b> Your save lives only in this browser; free cloud sync keeps it safe.</span>'+
+      '<span class="nb"><button class="btn small go" onclick="openAuth(\'signup\',\'nudge\')">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
     logCard()+
     /* On a phone the quick actions row is fixed above the tab bar, so the
@@ -2783,6 +2786,47 @@ function mendStreak(){
   afterAction();
 }
 
+/* ---------- install card: put the app on the Home Screen ----------
+   On iPhone, Safari can erase a website's saved data after seven days of
+   browsing without opening it. An app added to the Home Screen is exempt,
+   so a tester who skips a week still finds their hero. It also puts the app
+   one tap away, which is most of what brings people back.
+   Android Chrome fires beforeinstallprompt: we hold on to it and replay it
+   from the card's Install button. iPhone has no such event, so the card
+   spells out the Share steps instead. Elsewhere (desktop, Firefox) there is
+   nothing to offer and the card stays away.
+   The card waits for the hero's first XP so day one stays clean, never
+   shows inside the installed app, and Got it / Later hides it for good
+   (state.settings.installOff, which syncs with the save). */
+var installEvt=null;
+window.addEventListener('beforeinstallprompt',function(e){ e.preventDefault(); installEvt=e; if(state) render(); });
+window.addEventListener('appinstalled',function(){ installEvt=null; if(state){ state.settings.installOff=true; persist(); render(); } });
+function isStandalone(){
+  try{ return !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); }catch(e){ return false; }
+}
+/* iPadOS reports itself as a Mac, so a touch screen on "MacIntel" counts too */
+function isIOS(){ var u=navigator.userAgent||''; return /iPhone|iPad|iPod/.test(u) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+function installDue(){
+  return !!state && !state.settings.installOff && !isStandalone() &&
+    (state.hero.xp>0 || state.hero.level>1) && (!!installEvt || isIOS());
+}
+function installCard(){
+  if(!installDue()) return '';
+  var ios=!installEvt;
+  return '<div class="nudgebar installcard">'+svgIcon('phone')+'<span class="grow"><b>Put ScaleMyLife on your Home Screen.</b> '+
+    (ios?'Tap Share (the square with an arrow), then Add to Home Screen. iPhone keeps your save safe there.':'It opens like an app, one tap away.')+'</span>'+
+    '<span class="nb">'+(ios?'':'<button class="btn small go" onclick="installApp()">Install</button>')+
+    '<button class="btn small ghost" onclick="installHide()">'+(ios?'Got it':'Later')+'</button></span></div>';
+}
+/* the browser lets a held prompt be shown once, so it is dropped either way */
+function installApp(){
+  var e=installEvt; if(!e) return; installEvt=null;
+  try{ e.prompt(); }catch(err){ render(); return; }
+  if(e.userChoice && e.userChoice.then) e.userChoice.then(function(c){ if(c && c.outcome==='accepted'){ state.settings.installOff=true; persist(); } render(); });
+  else render();
+}
+function installHide(){ state.settings.installOff=true; persist(); render(); }
+
 function cloudNudgeDue(){
   return typeof SMLCloud!=='undefined' && !SMLCloud.session() && !state.settings.cloudNudgeOff &&
     (state.hero.level>=3 || state.hero.streak>=3);
@@ -2899,15 +2943,13 @@ function cloudSection(){
       '<div class="setrow" style="margin-top:6px"><input id="cKey" placeholder="sb_publishable_… or anon key"><button class="btn" onclick="cloudSaveKey()">Enable</button></div>';
   }
   var sess=SMLCloud.session();
+  /* signed out: two buttons that open the account sheet (openAuth below),
+     which holds the email and password fields */
   if(!sess){
     return '<div class="flabel">☁️ Cloud sync</div>'+
-      '<div class="hint">Your save currently lives only in this browser. Sign in and it follows you everywhere.</div>'+
-      '<input id="cEmail" type="email" placeholder="email" style="margin-top:6px">'+
-      '<input id="cPw" type="password" placeholder="password (8+ characters)" style="margin-top:6px">'+
-      '<div class="setrow" style="margin-top:8px"><button class="btn go" onclick="cloudSignIn()">Sign in</button>'+
-      '<button class="btn" onclick="cloudSignUp()">Create account</button>'+
-      '<button class="btn ghost" onclick="cloudForgot()">Forgot password?</button></div>'+
-      '<div class="hint" id="cMsg"></div>';
+      '<div class="hint">Your save lives only in this browser. A free account keeps a copy safe, syncs your devices and opens chat with Sage.</div>'+
+      '<div class="setrow" style="margin-top:8px"><button class="btn go" onclick="openAuth(\'signup\',\'settings\')">Create account</button>'+
+      '<button class="btn" onclick="openAuth(\'signin\',\'settings\')">Sign in</button></div>';
   }
   var ls=SMLCloud.lastSync();
   return '<div class="flabel">☁️ Cloud sync</div>'+
@@ -2929,47 +2971,185 @@ function cloudSaveKey(){
   SMLCloud.setKey(k); openSettings();
   toast('☁️ <span class="p">Cloud sync enabled - now create your account</span>');
 }
+/* ---------- account sheet: sign in, create account, reset, new password ----------
+   Every account step is one sheet in #modal, in the app's own style, so the
+   browser's prompt() and confirm() boxes are gone from the sign-in path.
+   authMode picks what the sheet shows:
+     'signin', 'signup', 'forgot'  the three forms
+     'newpw'     arriving from a reset email: choose a new password
+     'conflict'  this device and the account both hold a save: pick one
+     'linkcheck' an email link this device did not ask for: whose account?
+   authFrom remembers who opened it ('wizard', 'settings', 'owl', 'nudge',
+   'recovery') so Back and the finish land in the right place.
+   The handlers read #cEmail, #cPw and #cPw2 by id: rename an input and its
+   button silently stops working. #cMsg is where every message lands. */
+var authMode='signin', authFrom='settings', authEmail='', authCloud=null;
+var AUTH_TITLE={signin:'Sign in',signup:'Create your account',forgot:'Reset your password',newpw:'Choose a new password',conflict:'Two saves found',linkcheck:'Is this your account?'};
+function authAvailable(){ return typeof SMLCloud!=='undefined' && SMLCloud.configured(); }
+function openAuth(mode, from){
+  authMode=AUTH_TITLE[mode]?mode:'signin';
+  if(from) authFrom=from; else if(!state) authFrom='wizard';
+  var m=$('#modal'); m.className='modal show';
+  m.removeAttribute('aria-labelledby'); m.setAttribute('aria-label',AUTH_TITLE[authMode]);
+  /* .locked: Escape cannot close these two. Closing the conflict question
+     without an answer would let the next autosave overwrite the account's
+     save; newpw has its own Not now button that runs the same check. */
+  var locked=authMode==='conflict'||authMode==='newpw';
+  m.innerHTML='<div class="box authsheet'+(locked?' locked':'')+'">'+authBody()+'</div>';
+  var f=authMode==='newpw'?$('#cPw'):$('#cEmail');
+  if(f && !f.value){ try{ f.focus(); }catch(e){} }
+  else if($('#cPw')){ try{ $('#cPw').focus(); }catch(e){} }
+}
+function authBody(){
+  var mode=authMode, h='<h2>'+AUTH_TITLE[mode]+'</h2>';
+  if(mode==='conflict') return h+authConflictBody();
+  if(mode==='linkcheck'){
+    var le=(authLinkSess&&authLinkSess.user&&authLinkSess.user.email)||'an account';
+    return h+'<p class="authcopy">This link signs you in as <b>'+esc(le)+'</b>. Continue only if that is your own email. Nothing syncs until you say yes.</p>'+
+      '<div class="authpick"><button type="button" class="btn go wide" onclick="authLinkAccept()">Yes, it is mine</button>'+
+      '<button type="button" class="btn wide" onclick="authLinkReject()">No, cancel</button></div>';
+  }
+  var email='<label class="flabel" for="cEmail">Email</label>'+
+    '<input id="cEmail" type="email" autocomplete="username" autocapitalize="off" spellcheck="false" inputmode="email" value="'+esc(authEmail)+'" oninput="authEmail=this.value">';
+  function pw(id,label,ac){ return '<label class="flabel" for="'+id+'">'+label+'</label><input id="'+id+'" type="password" autocomplete="'+ac+'">'; }
+  /* password managers file a new password under the account's email, so the
+     newpw form carries it in a hidden username field */
+  var who=(SMLCloud.session()&&SMLCloud.session().user&&SMLCloud.session().user.email)||'';
+  var copy={signin:'Your save follows you to every device.',
+    signup:'Free. Keeps a copy of your save safe and opens chat with Sage.',
+    forgot:'We email you a link. Open it on this device to choose a new password.',
+    newpw:(who?'For <b>'+esc(who)+'</b>. ':'')+'Use 8 characters or more.'}[mode];
+  var fields={signin:email+pw('cPw','Password','current-password'),
+    signup:email+pw('cPw','Password (8+ characters)','new-password'),
+    forgot:email,
+    newpw:'<input type="email" autocomplete="username" value="'+esc(who)+'" hidden>'+pw('cPw','New password','new-password')+pw('cPw2','Type it again','new-password')}[mode];
+  var go={signin:'Sign in',signup:'Create account',forgot:'Send the link',newpw:'Save password'}[mode];
+  var links={signin:authLink('forgot','Forgot password?')+authLink('signup','Create an account'),
+    signup:authLink('signin','I already have an account'),
+    forgot:authLink('signin','Back to sign in'),
+    newpw:''}[mode];
+  var back=mode==='newpw'
+    ?'<button type="button" class="btn ghost" onclick="afterCloudSignIn()">Not now</button>'
+    :'<button type="button" class="btn ghost" onclick="authBack()">'+svgIcon('chevron-left','sm')+' Back</button>';
+  /* a real <form>: Enter submits from any field, and phones and password
+     managers treat it as a sign-in form. onsubmit returns false, so the page
+     never navigates (the CSP's form-action would block it anyway). */
+  return h+'<p class="authcopy">'+copy+'</p>'+
+    '<form class="authform" novalidate onsubmit="authSubmit();return false">'+fields+
+    '<div class="hint authmsg" id="cMsg" role="status"></div>'+
+    '<button type="submit" class="btn go wide">'+go+'</button></form>'+
+    (links?'<div class="authlinks">'+links+'</div>':'')+
+    '<div class="obnav">'+back+'</div>';
+}
+function authLink(mode,label){ return '<button type="button" class="btn ghost" onclick="openAuth(\''+mode+'\')">'+label+'</button>'; }
+function authSubmit(){
+  if(authMode==='signin') cloudSignIn();
+  else if(authMode==='signup') cloudSignUp();
+  else if(authMode==='forgot') cloudForgot();
+  else if(authMode==='newpw') cloudNewPw();
+}
+/* Back: to the wizard when there is no hero yet, to Settings when that is
+   where the sheet was opened, otherwise just close it */
+function authBack(){
+  if(!state){ onboarding(obStep||1); return; }
+  if(authFrom==='settings') openSettings(); else closeModal();
+}
+/* the finish after a successful sign-in: the owl's link opens the chat it
+   promised, Settings shows "Synced as", anything else closes */
+function authDone(){
+  if(authFrom==='owl'){ closeModal(); openSageChat(); }
+  else if(authFrom==='settings') openSettings();
+  else closeModal();
+}
 function cloudForgot(){
-  var e=($('#cEmail').value||'').trim();
-  if(!e){ cloudMsg('Type your email above first, then press Forgot password', true); return; }
-  cloudMsg('Sending reset link…');
+  var e=($('#cEmail').value||'').trim(); authEmail=e;
+  if(!e){ cloudMsg('Type your email first', true); return; }
+  cloudMsg('Sending the link…');
   SMLCloud.resetPassword(e, location.origin+location.pathname).then(function(r){
-    cloudMsg(r.ok?'Reset link sent - check your inbox, open the link on THIS device, and you’ll be asked for a new password.':(r.error||'Could not send the reset email'), !r.ok);
+    if(r.ok) authMarkPending(e);
+    cloudMsg(r.ok?'Link sent. Open it on this device to choose a new password.':(r.error||'Could not send the reset email'), !r.ok);
   });
 }
-/* arriving from a reset-password email: the URL hash holds a recovery session */
+/* ---------- email links (sign-up confirmation, password reset) ----------
+   Arriving from an email link, the URL hash holds a session. Anyone can mint
+   such a link for THEIR OWN account and send it around, so a link is never
+   trusted on sight: opened blindly, it would sign this device into the
+   sender's account and the next autosave would copy the player's whole save
+   (journal included) into it.
+   So the link's session is checked (whoAmI), then set aside straight away and
+   the previous session put back. It is used only once accepted:
+   - automatically, when this device asked for that link with the same email
+     (authMarkPending, set by sign-up and Forgot password, kept 3 days);
+   - otherwise by the player, on a sheet that names the account's email.
+   A reset link (type=recovery) then opens the new-password sheet; any other
+   link just signs in. The hash is wiped first so a reload cannot replay it.
+   Change the order of whoAmI / restoreSession here and the protection goes. */
+var AUTH_PENDING='sml.auth.pending', authLinkSess=null, authLinkRecovery=false;
+function authMarkPending(email){
+  try{ localStorage.setItem(AUTH_PENDING, JSON.stringify({ email:String(email||'').toLowerCase(), at:Date.now() })); }catch(e){}
+}
+/* one use: the marker is cleared whether it matches or not */
+function authPendingMatches(email){
+  var p=null;
+  try{ p=JSON.parse(localStorage.getItem(AUTH_PENDING)||'null'); localStorage.removeItem(AUTH_PENDING); }catch(e){}
+  return !!(p && email && p.email===String(email).toLowerCase() && (Date.now()-p.at) < 3*86400000);
+}
 function handleRecoveryHash(){
-  if(typeof SMLCloud==='undefined' || !SMLCloud.configured()) return false;
+  if(!authAvailable()) return false;
+  var prev=SMLCloud.session();
   var r=SMLCloud.recoverFromHash(location.hash);
   if(!r.signedIn) return false;
   try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
-  SMLCloud.whoAmI().then(function(){
-    var p1=prompt('Welcome back! Choose a new password (8+ characters):')||'';
-    if(p1.length<8){ toast('<span class="h">Password not changed - it needs 8+ characters. Use Forgot password to try again.</span>','dmg'); return; }
-    SMLCloud.updatePassword(p1).then(function(u){
-      if(!u.ok){ toast('<span class="h">'+esc(u.error||'Could not update the password')+'</span>','dmg'); return; }
-      toast('🔑 <span class="p">Password updated - you’re signed in</span>'); SND.ach();
-      if(state){ afterCloudSignIn(); return; }
-      SMLCloud.pull().then(function(r){   // fresh device: just take the cloud save
-        if(r.ok && r.exists && r.data && r.data.hero){ state=RPG.migrate(r.data); RPG.save(state,localStorage); applyTheme(); render(); toast('☁️ <span class="p">Cloud save loaded</span>'); }
-        else onboarding();   // no save anywhere: same first run as boot()
-      });
-    });
+  authLinkRecovery=!!r.recovery;
+  SMLCloud.whoAmI().then(function(w){
+    var link=SMLCloud.session();
+    SMLCloud.restoreSession(prev);   // nothing runs on the link's account until it is accepted
+    if(!w.ok){
+      toast('<span class="h">That link has expired or was already used. Sign in, or ask for a new one.</span>','dmg');
+      if(!state) onboarding();
+      return;
+    }
+    authLinkSess=link;
+    if(authPendingMatches(w.user && w.user.email)) authLinkAccept();
+    else openAuth('linkcheck','recovery');
   });
   return true;
 }
+function authLinkAccept(){
+  var s=authLinkSess; authLinkSess=null; if(!s) return;
+  SMLCloud.restoreSession(s); authFrom='recovery';
+  if(authLinkRecovery){ openAuth('newpw','recovery'); return; }
+  toast('☁️ <span class="p">Email confirmed. You are signed in.</span>');
+  afterCloudSignIn();
+}
+function authLinkReject(){
+  authLinkSess=null;
+  toast('☁️ Not signed in. Nothing was synced.');
+  if(!state) onboarding(); else closeModal();
+}
+function cloudNewPw(){
+  var p1=$('#cPw').value||'', p2=$('#cPw2').value||'';
+  if(p1.length<8){ cloudMsg('Use 8 characters or more', true); return; }
+  if(p1!==p2){ cloudMsg('The two passwords are different', true); return; }
+  cloudMsg('Saving…');
+  SMLCloud.updatePassword(p1).then(function(u){
+    if(!u.ok){ cloudMsg(u.error||'Could not update the password', true); return; }
+    toast('🔑 <span class="p">Password updated. You are signed in.</span>'); SND.ach();
+    afterCloudSignIn();
+  });
+}
 function cloudSignUp(){
-  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
-  if(!e||p.length<8){ cloudMsg('Enter an email and a password of at least 8 characters', true); return; }
-  cloudMsg('Creating account…');
+  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||''; authEmail=e;
+  if(!e||p.length<8){ cloudMsg('Enter an email and a password of 8 characters or more', true); return; }
+  cloudMsg('Creating your account…');
   SMLCloud.signUp(e,p).then(function(r){
     if(!r.ok){ cloudMsg(r.error,true); return; }
-    if(r.needsConfirm){ cloudMsg('Almost there - confirm the email we sent you, then press Sign in.'); return; }
+    if(r.needsConfirm){ authMarkPending(e); openAuth('signin'); cloudMsg('Almost there. Confirm the email we sent you, then sign in here.'); return; }
     afterCloudSignIn();
   });
 }
 function cloudSignIn(){
-  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||'';
+  var e=($('#cEmail').value||'').trim(), p=$('#cPw').value||''; authEmail=e;
   if(!e||!p){ cloudMsg('Enter your email and password', true); return; }
   cloudMsg('Signing in…');
   SMLCloud.signIn(e,p).then(function(r){
@@ -2977,23 +3157,64 @@ function cloudSignIn(){
     afterCloudSignIn();
   });
 }
-/* after an explicit sign-in: if a cloud save exists, let the user pick a side.
-   The recommended (progress-preserving) choice is spelled out so nobody
-   accidentally overwrites a more-advanced save. */
+/* After any sign-in, decide which save wins.
+   - No hero on this device yet (the wizard's "I already have an account", or
+     a link opened on a new phone): take the account's save as it is, or go
+     make a hero, which then syncs from its first save.
+   - Both sides hold a save: ask, with the progress-keeping side marked
+     recommended so nobody overwrites a more advanced hero by accident.
+   - Only this device has one: push it up. */
 function afterCloudSignIn(){
+  cloudMsg('Loading your save…');
   SMLCloud.pull().then(function(r){
-    if(r.ok && r.exists && r.data && r.data.hero){
-      var lv=r.data.hero.level||1, when=(r.data.updatedAt||'').slice(0,10);
-      var cloudAhead=cloudAheadOf(r.data)>0;
-      var msg=cloudAhead
-        ? 'Your cloud account has a MORE ADVANCED save ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', '+when:'')+') than this device.\n\nOK = load it here (recommended)\nCancel = keep THIS device and overwrite the cloud'
-        : 'Your cloud account has a save ('+(r.data.hero.name||'Hero')+', Lv.'+lv+(when?', '+when:'')+'), but THIS device looks further along.\n\nOK = load the cloud save anyway\nCancel = keep this device (recommended) - it will update the cloud';
-      if(confirm(msg)){ adoptCloud(r.data); openSettings(); toast('☁️ <span class="p">Cloud save loaded</span>'); SND.ach(); return; }
-      // keeping this device: push it up so the cloud matches
+    var has=r.ok && r.exists && r.data && r.data.hero;
+    if(!state){
+      /* a failed pull must not lead to a new hero: its first autosave would
+         replace the save in the account */
+      if(!r.ok){ if(!$('#cMsg')) openAuth('signin'); cloudMsg('Signed in, but your save did not load. Check your connection and sign in again.', true); return; }
+      if(has){ loadCloudFresh(r.data); return; }
+      onboarding(obStep||1);
+      toast('☁️ <span class="p">Signed in. Create your hero and it syncs from the start.</span>');
+      return;
     }
-    persist(); pushCloudNow(); applyTheme(); render(); openSettings();
-    toast('☁️ <span class="p">Cloud sync is on</span>'); SND.ach();
+    if(has && cloudAheadOf(r.data)!==0){ authCloud=r.data; openAuth('conflict'); return; }
+    authKeepDevice();
   });
+}
+/* a device with no hero takes the account's save: nothing local to protect,
+   so no question and no backup copy */
+function loadCloudFresh(data){
+  state=RPG.migrate(data);
+  if(state.activeFocus && !state.activeFocus.pausedAt && (Date.now()-state.activeFocus.phaseEnd) > 6*3600000) state.activeFocus=null;
+  RPG.save(state, localStorage);
+  seenDay=state.lastSeenDay;
+  closeModal(); applyTheme(); render(); mascotMoodSync();
+  toast('☁️ <span class="p">Welcome back, '+esc(state.hero.name)+'</span>'); SND.ach();
+}
+function authConflictBody(){
+  var c=authCloud, ahead=cloudAheadOf(c)>0;
+  /* every value here comes from a save, so all of it is escaped */
+  function line(label,s){
+    var hh=s.hero||{};
+    return '<div class="authsave"><span>'+label+'</span><b>'+esc(hh.name||'Hero')+'</b> Lv.'+esc(String(hh.level||1))+
+      (s.updatedAt?' <span class="hint">'+esc(String(s.updatedAt).slice(0,10))+'</span>':'')+'</div>';
+  }
+  var load='<button type="button" class="btn '+(ahead?'go ':'')+'wide" onclick="authLoadCloud()">Load my account’s save'+(ahead?' (recommended)':'')+'</button>';
+  var keep='<button type="button" class="btn '+(ahead?'':'go ')+'wide" onclick="authKeepDevice()">Keep this device'+(ahead?'':' (recommended)')+'</button>';
+  return '<p class="authcopy">'+(ahead?'Your account is further along than this device.':'This device is further along than your account.')+' Pick the one to keep.</p>'+
+    line('In your account',c)+line('On this device',state)+
+    '<div class="authpick">'+(ahead?load+keep:keep+load)+'</div>'+
+    '<div class="hint">Loading your account keeps a copy of this device’s save that Settings can bring back. Keeping this device replaces the save in your account.</div>';
+}
+function authLoadCloud(){
+  var d=authCloud; authCloud=null; if(!d) return;
+  adoptCloud(d); authDone();
+  toast('☁️ <span class="p">Your account’s save is loaded</span>'); SND.ach();
+}
+function authKeepDevice(){
+  authCloud=null;
+  persist(); pushCloudNow(); applyTheme(); render(); authDone();
+  toast('☁️ <span class="p">Cloud sync is on</span>'); SND.ach();
 }
 function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out - save stays on this device'); }); }
 function toggleBoard(){
@@ -3150,8 +3371,9 @@ document.addEventListener('keydown', function(e){
   var m=document.getElementById('modal');
   if(!m || !m.classList.contains('show')) return;
   /* Escape closes a sheet, but never the wizard before a hero exists: there
-     would be nothing behind it but an empty app until a reload */
-  if(e.key==='Escape'){ e.preventDefault(); if(state) closeModal(); return; }
+     would be nothing behind it but an empty app until a reload. Nor a sheet
+     marked .locked (see openAuth): those need a real answer. */
+  if(e.key==='Escape'){ e.preventDefault(); if(state && !m.querySelector('.locked')) closeModal(); return; }
   if(e.key!=='Tab') return;
   var f=modalFocusables(m); if(!f.length) return;
   var first=f[0], last=f[f.length-1];
@@ -3610,6 +3832,8 @@ function onboarding(step){
       '<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button></div>';
   } else {
     nav='<button class="btn go wide" id="obNext" onclick="obNext()">'+(s===3?'Build my board':'Continue')+'</button>'+
+      /* step 1 only: a returning player signs in instead of making a hero */
+      (s===1&&authAvailable()?'<div class="obnav obacct"><button type="button" class="btn ghost" onclick="openAuth(\'signin\',\'wizard\')">I already have an account</button></div>':'')+
       (s>1?'<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button>'+
         '<button type="button" class="btn ghost" onclick="obSkip()">Skip</button></div>':'');
   }
@@ -4469,9 +4693,14 @@ function updateSageCue(){
 }
 function mascotBriefingHtml(){
   var b=RPG.briefing(state);
-  var chatEntry=(typeof SMLCloud!=='undefined'&&SMLCloud.configured()&&cloudOn())
+  /* signed in: the chat entry. Signed out: a line saying chat needs a free
+     account, which opens the sign-up sheet and, once signed in, the chat
+     (authDone). The tests tell the two apart by .mchat-entry / .mchat-lock. */
+  var chatEntry=(authAvailable()&&cloudOn())
     ?'<button class="mline mchat-entry" onclick="openSageChat()"><span>💬</span><span class="grow">Ask me anything</span><span class="mgo">▶</span></button>'
-    :'';
+    :authAvailable()
+      ?'<button class="mline mchat-lock" onclick="toggleMascot(false);openAuth(\'signup\',\'owl\')"><span>💬</span><span class="grow">Want to chat with me? Make a free account first.</span><span class="mgo">▶</span></button>'
+      :'';
   return '<div class="mhead"><b>'+esc(b.greeting)+'</b><button class="btn ghost small" aria-label="Close" onclick="toggleMascot(false)">✕</button></div>'+
     '<div class="mlines">'+b.lines.map(function(l){
       return '<button class="mline" onclick="toggleMascot(false);go(\''+l.tab+'\')"><span>'+l.icon+'</span><span class="grow">'+esc(l.text)+'</span><span class="mgo">▶</span></button>';
@@ -4723,7 +4952,9 @@ function drawArt(){
    the test harness), or when art.js or fx.js did not load. Nothing in the
    game waits on it: the app is already rendered underneath. */
 function introPlay(returning, then){
-  function finish(){ if(then) then(); }
+  /* then(true) when the new player chose "I already have an account" */
+  var wantAuth=false;
+  function finish(){ if(then) then(wantAuth); }
   var ok=window.PX && window.FX && !FX.reduced() && document.body && typeof document.body.animate==='function';
   var seen=false; try{ seen=sessionStorage.getItem('sml.intro')==='1'; }catch(e){}
   if(!ok || (returning && seen)){ finish(); return; }
@@ -4735,7 +4966,8 @@ function introPlay(returning, then){
   el.innerHTML='<div class="introin">'+PX.text('SCALE MY LIFE','introtitle')+
     (returning
       ?'<div class="introsub"><span class="introav">'+avHtml(state.hero.avatar)+'</span>Welcome back, '+esc(state.hero.name)+'</div>'
-      :'<div class="introsub two"><b>Get more done.</b><span>Play your life like an RPG.</span></div><button type="button" class="btn go introgo">Start your adventure</button>')+
+      :'<div class="introsub two"><b>Get more done.</b><span>Play your life like an RPG.</span></div><button type="button" class="btn go introgo">Start your adventure</button>'+
+        (authAvailable()?'<button type="button" class="btn ghost introacct">I already have an account</button>':''))+
     '</div>';
   document.body.appendChild(el);
   /* while the title plays, the app underneath is hidden so the mosaic sky is
@@ -4754,7 +4986,7 @@ function introPlay(returning, then){
       ],{ duration:1300, delay:rnd(0,700), easing:'cubic-bezier(.16,1,.3,1)', fill:'backwards' });
     }catch(e){}
   });
-  var sub=el.querySelectorAll('.introsub,.introgo');
+  var sub=el.querySelectorAll('.introsub,.introgo,.introacct');
   for(var i=0;i<sub.length;i++){ try{ sub[i].animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{duration:700,delay:900+i*140,easing:'cubic-bezier(.2,.9,.3,1)',fill:'backwards'}); }catch(e){} }
   /* a few tiles catch the accent, the way the template's headline does */
   var shimmer=setTimeout(function(){
@@ -4790,10 +5022,12 @@ function introPlay(returning, then){
   } else {
     var startBtn=el.querySelector('.introgo');
     startBtn.addEventListener('click',function(){ if(SND.resume) SND.resume(); leave(); });
+    var acctBtn=el.querySelector('.introacct');
+    if(acctBtn) acctBtn.addEventListener('click',function(){ wantAuth=true; leave(); });
     setTimeout(function(){ try{ startBtn.focus(); }catch(e){} },1100);
   }
 }
-function boot(){ drawArt(); applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); if(!rec) introPlay(true); } else { renderHUDShell(); if(!rec) introPlay(false, function(){ onboarding(); }); } }
+function boot(){ drawArt(); applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); if(!rec) introPlay(true); } else { renderHUDShell(); if(!rec) introPlay(false, function(acct){ if(acct) openAuth('signin','wizard'); else onboarding(); }); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);

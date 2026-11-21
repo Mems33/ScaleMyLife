@@ -8,7 +8,7 @@ ScaleMyLife is a fast, offline-capable web app (a PWA). It installs to a phone h
 
 - **Try it instantly:** open `index.html` in a browser and create your hero.
 - **Host it:** it's plain static files — deploy the folder to Netlify, Vercel or GitHub Pages and share a public URL.
-- **Install on a phone:** once hosted, Android Chrome shows an "Install" prompt; on iPhone use Safari → Share → "Add to Home Screen". It runs fullscreen and works offline.
+- **Install on a phone:** once hosted, Android Chrome shows an "Install" prompt; on iPhone use Safari → Share → "Add to Home Screen". It runs fullscreen and works offline. After the hero's first XP, Today shows an install card in the cloud nudge's slot: an Install button on Android, the Share steps on iPhone (where Safari can erase a site's save after a week away, and a Home Screen app is exempt). Got it hides it for good.
 
 Saves live in the browser (localStorage) and — once you sign in — in your cloud account too. Old LiFE RPG saves migrate automatically.
 
@@ -122,11 +122,11 @@ Dark, game-flavoured, and deliberately not generic. Everything is drawn in **pix
 
 ## Files
 
-`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `fx.js` (motion layer: flying XP chips, combo pill, counters; no game logic, the app runs without it) · `art.js` (every drawing in pixel tiles: icons, heroes, the title, and the emoji swap; no game logic) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` + `supabase/perf.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `privacy.html` + `terms.html` + `robots.txt` + `sitemap.xml` (launch pages & SEO) · `test.js` + `test-cloud.js` + `test-ui.js` (1,374 tests).
+`index.html` (markup) · `styles.css` (styles) · `app.js` (UI logic) · `core.js` (game engine, no DOM) · `fx.js` (motion layer: flying XP chips, combo pill, counters; no game logic, the app runs without it) · `art.js` (every drawing in pixel tiles: icons, heroes, the title, and the emoji swap; no game logic) · `gradient.js` (WebGL background) · `cloud.js` (Supabase sync client) · `supabase/schema.sql` + `supabase/leaderboard.sql` + `supabase/friends.sql` + `supabase/invites.sql` + `supabase/perf.sql` (database schema & migrations) · `sw.js` + `manifest.json` + icons (PWA) · `privacy.html` + `terms.html` + `robots.txt` + `sitemap.xml` (launch pages & SEO) · `test.js` + `test-cloud.js` + `test-ui.js` (1,415 tests).
 
 ## Security
 
-The app is a static PWA with no server of its own; Supabase Postgres **Row Level Security is the security boundary** (the publishable key in `cloud.js` is public by design — it can only do what RLS policies allow). A `Content-Security-Policy` meta tag pins scripts, connections, frames and fonts to the exact origins the app uses, so injected external scripts can't load or phone home. Every piece of remote or user-entered text is HTML-escaped before rendering. Sign-in has a full **forgot-password flow** (reset email → new password on return). Only a six-field profile card is ever shared; the save itself is readable by its owner alone.
+The app is a static PWA with no server of its own; Supabase Postgres **Row Level Security is the security boundary** (the publishable key in `cloud.js` is public by design, and it can only do what RLS policies allow). A `Content-Security-Policy` meta tag pins scripts, connections, frames and fonts to the exact origins the app uses, so injected external scripts can't load or phone home. Every piece of remote or user-entered text is HTML-escaped before rendering. Every account step is one in-app sheet (sign in, create account, forgot password, the new password after a reset email, and "two saves found" when the device and the account disagree), so no browser prompt() or confirm() box is left on that path. Email links are never trusted on sight: anyone can mint a link for their own account, and opening one blindly would sync the player's save into it. The link's session is set aside until it is accepted, automatically when this device asked for that link with the same email, otherwise on an "Is this your account?" sheet that names the email. A new device can sign in from the intro or step 1 of the wizard ("I already have an account") and loads the account's hero directly. Signed out, the owl says chat needs a free account and opens the sign-up sheet. `supabase/sage.sql` also takes the chat counter function away from the anon and authenticated roles, so only the Edge Function can spend a player's daily chats. Only a six-field profile card is ever shared; the save itself is readable by its owner alone.
 
 ## Production readiness
 
@@ -134,7 +134,7 @@ The app is a static PWA with no server of its own; Supabase Postgres **Row Level
 - **Monitoring** — a global error hook stores the last 20 runtime errors in a local ring buffer; ⚙️ Settings grows a **🩺 Diagnostics** button whenever something was captured (view / copy / clear), so bug reports come with real evidence. Server-side, the Supabase dashboard provides API/DB logs and usage alerts.
 - **Recovery** — the save exists in three places (browser localStorage, cloud row, manual JSON export), sync conflicts resolve by game progress with a pre-sync backup you can restore from Settings, and deploys are plain static files on git — rollback is `git revert`.
 - **Updates reach phones** — installed PWAs rarely hard-reload, so the app re-checks for a new service worker every time it returns to the foreground and refreshes itself once when a new version takes over. Desktop and mobile now update on the same day you deploy.
-- **Launch pages** — meta description, Open Graph / Twitter link previews, `robots.txt`, `sitemap.xml`, and honest [privacy](privacy.html) / [terms](terms.html) pages (no ads, no analytics, export & delete rights) linked from ⚙️ Settings.
+- **Launch pages:** meta description, Open Graph / Twitter link previews, `robots.txt`, `sitemap.xml`, and honest [privacy](privacy.html) / [terms](terms.html) pages (no ads, no tracking cookies, the anonymous visit counts and Sage chat spelled out, export & delete rights) linked from ⚙️ Settings.
 
 ## Development
 
