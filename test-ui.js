@@ -723,17 +723,24 @@ setTimeout(async function () {
     var grandma = w.obPlate.findIndex(function (it) { return it.title === 'Call grandma'; });
     w.obPlateToggle(grandma);
     ok(w.obPlate[grandma].off === true && d.querySelectorAll('.obgroup')[2].querySelector('.obitem.on') !== null, 'a plate row toggles off right on the board');
-    w.obToggle('habits', 0);
-    ok(w.ob.habitsOff[habitTitles[0]] === true, 'a starter habit row toggles off');
-    w.obTarget(1, 5);
-    ok(w.ob.targets[habitTitles[1]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
+    // the packs bring habits for some life areas: the starter habits there start off, and say why
+    var covIdx = [], freeIdx = [];
+    w.obSug.habits.forEach(function (h, i) { (w.obCovers('habits', h) ? covIdx : freeIdx).push(i); });
+    ok(covIdx.length >= 1 && freeIdx.length >= 2 && covIdx.every(function (i) { return !w.obOn('habits', w.obSug.habits[i], i); }) && d.querySelector('#modal').textContent.indexOf('Off: you added') >= 0, 'a starter habit in a life area the plate already covers starts off, with a "you added" note');
+    w.obToggle('habits', covIdx[0]);
+    ok(w.obOn('habits', w.obSug.habits[covIdx[0]], covIdx[0]) === true, 'and one tap switches it back on');
+    w.obToggle('habits', freeIdx[0]);
+    ok(w.ob.habitsOff[habitTitles[freeIdx[0]]] === true, 'a starter habit row toggles off');
+    w.obTarget(freeIdx[1], 5);
+    ok(w.ob.targets[habitTitles[freeIdx[1]]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
     ok(d.querySelector('#obStart') !== null, 'the board step carries Start');
     d.querySelector('#obStart').click();
     var s = w.state;
     ok(s && s.hero.name === 'Wiz', 'Start creates the hero');
-    ok(!s.habits.some(function (h) { return h.title === habitTitles[0]; }), 'the habit toggled off on the board is absent');
+    ok(!s.habits.some(function (h) { return h.title === habitTitles[freeIdx[0]]; }), 'the habit toggled off on the board is absent');
+    ok(s.habits.some(function (h) { return h.title === habitTitles[covIdx[0]]; }) && covIdx.slice(1).every(function (i) { return !s.habits.some(function (h) { return h.title === habitTitles[i]; }); }), 'the covered habit switched back on exists, the ones left off do not');
     ok(!s.quests.some(function (q) { return q.title === 'Call grandma'; }), 'the plate task toggled off on the board is absent');
-    var targeted = s.habits.find(function (h) { return h.title === habitTitles[1]; });
+    var targeted = s.habits.find(function (h) { return h.title === habitTitles[freeIdx[1]]; });
     ok(targeted && targeted.target === 5, 'the picked weekly target is applied through editHabit');
     ok(s.habits.filter(function (h) { return h.type === 'bad' && h.title === 'Doomscrolling'; }).length === 1, 'the struggle monster exists as a bad habit, once (the plate named it again)');
     ok(s.quests.filter(function (q) { return q.recurring; }).length <= 2, 'with 15 minutes at most two dailies exist');
@@ -1765,10 +1772,10 @@ setTimeout(async function () {
     ok(hp && hp.textContent.indexOf('this wk') >= 0 && hp.querySelector('.wkring') === null, 'a weekly-target habit shows its count in the meta line (the ring is gone: the week tiles show the same thing)');
     // quick actions
     var qa = d.querySelectorAll('#view .quick.qa button.qab:not(.potion)');
-    ok(qa.length === 3, 'quick actions row has three buttons (' + qa.length + ')');
+    ok(qa.length === 2, 'quick actions row has two buttons (' + qa.length + ')');
     var qaTxt = d.querySelector('#view .quick.qa').textContent;
-    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') >= 0, 'they read Add, Focus, Ask Sage');
-    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 3, 'each quick action carries a sprite icon');
+    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') < 0, 'they read Add and Focus; Sage is the owl in the corner, not a third button');
+    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 2, 'each quick action carries a sprite icon');
     w.quickAdd();
     ok(w.tab === 'today' && d.querySelector('#modal.show .capsheet #capText') !== null && d.querySelector('#capGo') !== null && d.querySelector('#capGo').disabled === true, 'Add opens the capture sheet over Today, with nothing to add yet');
     w.capClose();
@@ -1815,12 +1822,15 @@ setTimeout(async function () {
     w.go('quests'); w.go('today');
     ok(d.querySelectorAll('#view .sageline').length === 1, 'the line survives navigation for the rest of the day');
     // empty Now
-    var keep = w.state.quests;
+    var keep = w.state.quests, keepPlan = w.state.plan;
     w.state.quests = w.state.quests.filter(function (q) { return !q.recurring && q.due !== today; });
-    w.render();
+    w.state.plan = null; w.render();
+    var hasPicks = w.RPG.dailyDraft(w.state).items.length > 0;
+    ok(hasPicks ? (d.querySelector('#view .panel.now.drafting .draft') !== null && d.querySelector('#view .panel.now .ebox') === null) : d.querySelector('#view .panel.now .ebox') !== null, 'while Sage has picks (habits count) the draft is the list, not an empty state');
+    w.A.setPlan(w.state, []); w.render();   // "Not today": the plain Now panel
     var nowEmpty = d.querySelector('#view .panel.now .ebox');
     ok(nowEmpty !== null && nowEmpty.textContent.indexOf('Nothing due right now') >= 0 && nowEmpty.querySelectorAll('.btn').length === 2, 'an empty Now offers Add a quest and Start focus');
-    w.state.quests = keep; w.render();
+    w.state.quests = keep; w.state.plan = keepPlan; w.render();
     // header carry-overs
     ok(d.querySelector('#hud .who .nm') !== null, 'the header name sits in its truncating element');
     var css = fs2.readFileSync(__dirname + '/styles.css', 'utf8');
@@ -1926,7 +1936,7 @@ setTimeout(async function () {
     w.go('today');
     var draft = d.querySelector('#view .draft');
     ok(draft !== null && draft.querySelectorAll('.drow').length === 4 && draft.querySelectorAll('.drow.on').length === 4, 'Today opens on a draft of four picks, all kept');
-    ok(d.querySelector('#view .panel').classList.contains('now') && d.querySelector('#view .panel.now.plan') === null, 'the draft is not a panel: Now is still the first panel, and it is not a plan yet');
+    ok(d.querySelector('#view .panel').classList.contains('now') && d.querySelector('#view .panel.now .draft') === draft && d.querySelector('#view .panel.now.plan') === null, 'the draft sits inside Now, still the first panel, and it is not a plan yet');
     ok(draft.querySelector('.dw') !== null && draft.querySelector('.dw').textContent.length > 3 && draft.querySelector('.dsub').textContent.indexOf('4 picks') >= 0, 'each pick carries its reason and the header totals the picks');
     w.draftToggle(3);
     ok(d.querySelectorAll('#view .draft .drow.on').length === 3 && d.querySelector('#view .draft .dsub').textContent.indexOf('3 picks') >= 0 && d.querySelectorAll('#view .draft .drow')[3].getAttribute('aria-pressed') === 'false', 'a pick can be switched off');
@@ -2134,6 +2144,7 @@ setTimeout(async function () {
     var keep = w.state, today = w.RPG.todayKey();
     var s = w.state = w.RPG.seedPreset(w.RPG.newState('Rows', '@knight'), ['student']);
     var q = w.A.addQuest(s, { title: 'Write the intro', diff: 'hard', due: today });
+    w.A.setPlan(s, []);   // no plan today ("Not today"), so Now lists full rows rather than Sage's picks
     w.go('today');
     var row = [].filter.call(d.querySelectorAll('#view .item'), function (it) { return it.textContent.indexOf('Write the intro') >= 0; })[0];
     ok(row && row.querySelectorAll('button').length === 2 && row.querySelector('.btn.tick') && row.querySelector('.btn.more'), 'a quest row has exactly two controls: the tick and the ⋯');
@@ -2218,6 +2229,54 @@ setTimeout(async function () {
     rec.onend();
     ok(w.cap.lines.length === 1 && w.cap.text === '' && d.querySelectorAll('#capList .capcard').length >= 1, 'when listening ends, what was said goes into the list');
     w.capClose(); delete w.webkitSpeechRecognition;
+    w.state = keep; w.render();
+  })();
+
+  console.log('\nToday as one list');
+  (function () {
+    var keep = w.state, today = w.RPG.todayKey();
+    var s = w.state = w.RPG.seedPreset(w.RPG.newState('One', '🧙'), ['student']);
+    s.firstQuestCelebrated = true;
+    for (var i = 0; i < 8; i++) w.A.addQuest(s, { title: 'Errand ' + i, diff: 'easy', due: today });   // more than the draft can pick
+    w.go('today');
+    var now = d.querySelector('#view .panel.now');
+    ok(now.classList.contains('drafting') && now.querySelector('.draft') !== null && d.querySelectorAll('#view .draft').length === 1, 'Sage\'s draft is drawn inside the Now panel, once');
+    ok(now.querySelector('.dsub').textContent.indexOf('Untick what can wait') >= 0, 'the draft says what its ticks mean');
+    var picks = w.RPG.dailyDraft(s).items.map(function (it) { return it.title; });
+    var also = now.querySelector('details.alsotoday');
+    ok(also !== null && !also.open && also.querySelectorAll('.item').length > 0, 'what else is due today waits under one closed Also today line');
+    ok(now.querySelectorAll('.item').length === also.querySelectorAll('.item').length, 'no tickable row sits next to the picks before the day is planned');
+    ok([].every.call(also.querySelectorAll('.item .title'), function (t) { return picks.indexOf(t.textContent.trim()) < 0; }), 'nothing under Also today repeats a pick');
+    d.querySelector('#draftLock').click();
+    if (d.querySelector('#overlay.show')) w.closeOverlay();
+    var plan = d.querySelector('#view .panel.now.plan');
+    ok(plan !== null && d.querySelector('#view .draft') === null && plan.querySelector('details.alsotoday') !== null && !plan.querySelector('details.alsotoday').open, 'once locked, the plan is the list and the rest stays folded under Also today');
+    // Habits today: what can wait this week folds away
+    var hLater = w.A.addHabit(s, { title: 'Call a friend', type: 'good', target: 1 });
+    hLater.history = [today];   // this week's one time is already on the history, and it was not ticked today
+    w.A.addHabit(s, { title: 'Stretch', type: 'good', target: 7 });
+    w.render();
+    var hp = d.querySelector('#view .panel.habits');
+    var pace = hp.querySelector('details.onpace');
+    ok(pace !== null && !pace.open && pace.textContent.indexOf('Call a friend') >= 0, 'a habit on pace for the week folds under Later this week');
+    var inView = [].filter.call(hp.querySelectorAll('.item'), function (it) { return !it.closest('details'); }).map(function (it) { return it.textContent; }).join('|');
+    ok(inView.indexOf('Stretch') >= 0 && inView.indexOf('Call a friend') < 0, 'a daily habit stays in view');
+    // the plate: a pack form left open is kept, not dropped
+    w.state = null; w.ob = w.obFresh(); w.cap = null; w.renderHUDShell(); w.onboarding();
+    var nm = d.querySelector('#obName'); nm.value = 'Keeper'; w.obNameCheck();
+    nm.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    ok(w.obStep === 2, 'Enter in the hero name goes on to the next step');
+    w.obNext();
+    w.capPack('internship');
+    ok(d.querySelector('#pkDate') !== null && w.cap.packs.length === 0, 'Internship hunt opens its deadline form');
+    w.obNext();
+    ok(w.obStep === 4 && w.cap.packs.length === 1 && [].some.call(d.querySelectorAll('.obgroup .obghead'), function (g) { return g.textContent.indexOf('Internship hunt') >= 0; }), 'Build my board with the form still open keeps the pack');
+    w.closeModal(); w.cap = null; w.ob = w.obFresh();
+    // the capture sheet does the same with Add
+    w.state = w.RPG.seedPreset(w.RPG.newState('Sheet', '🧙'), ['student']);
+    w.openCapture(); w.capPack('internship');
+    w.capAdd();
+    ok(w.state.goals.some(function (g) { return g.title.indexOf('internship') >= 0 || g.title.indexOf('Internship') >= 0; }), 'Add on the sheet with the pack form open adds the pack');
     w.state = keep; w.render();
   })();
 

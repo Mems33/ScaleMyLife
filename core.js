@@ -1268,6 +1268,18 @@
     var m = state.settings && state.settings.onboard && state.settings.onboard.minutes;
     return m === 15 ? 3 : m === 60 ? 5 : 4;
   }
+  /* Where a good habit stands this week (Monday start). `pressing` is true
+     when it asks for today: a daily habit always does, a weekly one only once
+     the days left in the week are no more than the times still needed (a 3x
+     habit not done yet becomes pressing on Friday). The draft below and the
+     Habits today panel on the Today screen both read it, so the two never
+     disagree about what can wait. */
+  function habitWeek(h, now) {
+    now = now || new Date();
+    var done = actions.weekCount(h, todayKey(now)), need = h.target - done;
+    var daysLeft = 7 - (now.getDay() + 6) % 7;   // today included
+    return { done: done, need: need, daysLeft: daysLeft, pressing: h.target >= 7 || (need > 0 && need >= daysLeft) };
+  }
   /* The Daily Draft: the short list Sage proposes for today, most pressing
      first. Each candidate gets a score and a reason:
        100+  overdue          90  due today        70  next step of a main quest
@@ -1319,16 +1331,15 @@
           score: age >= 7 ? 30 : 20, why: age >= 7 ? 'Waiting ' + age + ' days' : 'On your list' });
       }
     });
-    var wdMon = (now.getDay() + 6) % 7, daysLeft = 7 - wdMon;   // days left this Monday-start week, today included
     (state.habits || []).forEach(function (h) {
       if (h.type !== 'good' || h.lastDoneOn === today) return;
       var ref = 'h:' + h.id, o = { kind: 'habit', id: h.id, title: h.title, diff: null, minutes: DRAFT_HABIT_MIN };
       if (h.target >= 7) { o.score = 45; o.why = h.streak > 0 ? 'Keeps a ' + h.streak + '-day streak' : 'Daily habit'; }
       else {
-        var doneWk = actions.weekCount(h, today), need = h.target - doneWk;
-        if (need <= 0) return;                     // this week's target is already met
-        o.score = need >= daysLeft ? 65 : 40;
-        o.why = need >= daysLeft ? 'Needed today to hit ' + h.target + ' this week' : doneWk + ' of ' + h.target + ' this week';
+        var wk = habitWeek(h, now);
+        if (wk.need <= 0) return;                  // this week's target is already met
+        o.score = wk.pressing ? 65 : 40;
+        o.why = wk.pressing ? 'Needed today to hit ' + h.target + ' this week' : wk.done + ' of ' + h.target + ' this week';
       }
       add(ref, o);
     });
@@ -2333,7 +2344,7 @@
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
     uid: uid, todayKey: todayKey, clamp: clamp, parseTask: parseTask,
     parseDump: parseDump, captureItem: captureItem, captureDue: captureDue, CAPTURE_KINDS: CAPTURE_KINDS, PACKS: PACKS, packById: packById, buildPack: buildPack,
-    dailyDraft: dailyDraft, debrief: debrief, suggestBoss: suggestBoss, chronicle: chronicle, PLAN_XP: PLAN_XP, PLAN_COINS: PLAN_COINS,
+    dailyDraft: dailyDraft, habitWeek: habitWeek, debrief: debrief, suggestBoss: suggestBoss, chronicle: chronicle, PLAN_XP: PLAN_XP, PLAN_COINS: PLAN_COINS,
     STAGES: STAGES, stageById: stageById, staged: staged, isUnlocked: isUnlocked, checkUnlocks: checkUnlocks, unlockAll: unlockAll, nextUnlock: nextUnlock,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     progressKey: progressKey, compareProgress: compareProgress,

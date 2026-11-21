@@ -1258,6 +1258,16 @@ ok(RPG.dailyDraft(ds).items.some(function (it) { return it.ref === 'q:' + qNew.i
 hDaily.lastDoneOn = null;
 delete ds.settings.onboard;
 ok(A.planStatus(ds).active === false, 'a plan locked yesterday is not today\'s plan');
+// habitWeek: which habits ask for today (the draft and Habits today share it)
+var hw3 = { type: 'good', target: 3, history: [] }, hw7 = { type: 'good', target: 7, history: [] };
+var MON = new Date(2026, 10, 16, 10), FRI = new Date(2026, 10, 20, 10), SUN = new Date(2026, 10, 22, 10);
+ok(RPG.habitWeek(hw3, MON).daysLeft === 7 && RPG.habitWeek(hw3, MON).pressing === false, 'a 3x habit not done yet can wait on Monday (7 days left)');
+ok(RPG.habitWeek(hw3, FRI).daysLeft === 3 && RPG.habitWeek(hw3, FRI).pressing === true, 'and asks for Friday, when 3 days are left for 3 times');
+ok(RPG.habitWeek(hw7, MON).pressing === true, 'a daily habit always asks for today');
+hw3.history = ['2026-11-16', '2026-11-17', '2026-11-18'];
+ok(RPG.habitWeek(hw3, SUN).need === 0 && RPG.habitWeek(hw3, SUN).pressing === false, 'a weekly target already met never asks, even on Sunday');
+hw3.history = ['2026-11-16'];
+ok(RPG.habitWeek(hw3, SUN).done === 1 && RPG.habitWeek(hw3, SUN).pressing === true, 'two still needed with one day left: it asks');
 
 var st0 = A.setPlan(ds, dr.items.map(function (it) { return it.ref; }));
 ok(st0.active && st0.total === 4 && st0.done === 0 && !st0.complete && !st0.won, 'locking the draft makes it today\'s plan');

@@ -1221,14 +1221,18 @@ button.chestring:hover{background:var(--brand-soft)}
 /* --- Habits today: the weekly ring next to the count, monsters behind one fold --- */
 .wkring{display:inline-flex;align-items:center;gap:4px}
 .wkring .ring{flex:none}
-details.slipped{margin-top:10px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);overflow:hidden}
-details.slipped summary{cursor:pointer;list-style:none;min-height:44px;padding:8px 12px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--text-1)}
-details.slipped summary::-webkit-details-marker{display:none}
-details.slipped summary .i{transition:transform .16s var(--ease)}
-details.slipped[open] summary .i{transform:rotate(180deg)}
-details.slipped summary .hint{margin:0;font-weight:400}
-details.slipped .item{margin:0 8px 8px}
+/* details.fold is the same closed line for "Also today" (Now panel) and
+   "Later this week" (Habits today) */
+details.slipped,details.fold{margin-top:10px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);overflow:hidden}
+details.slipped summary,details.fold summary{cursor:pointer;list-style:none;min-height:44px;padding:8px 12px;display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;color:var(--text-1)}
+details.slipped summary::-webkit-details-marker,details.fold summary::-webkit-details-marker{display:none}
+details.slipped summary .i,details.fold summary .i{transition:transform .16s var(--ease)}
+details.slipped[open] summary .i,details.fold[open] summary .i{transform:rotate(180deg)}
+details.slipped summary .hint,details.fold summary .hint{margin:0;font-weight:400}
+details.fold summary .cnt{color:var(--brand);font-family:var(--mono);font-variant-numeric:tabular-nums}
+details.slipped .item,details.fold .item{margin:0 8px 8px}
 details.slipped .ebox{margin:0 8px 8px}
+details.fold .foldmore{margin:0 8px 8px}
 
 /* --- Log your day: a row while empty, the form while open, a summary once saved --- */
 .logrow{display:flex;align-items:center;gap:10px;min-height:44px}
@@ -1581,15 +1585,16 @@ button.capchip:active{transform:scale(.95)}
 .avpick button.locked .lk{position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);font:700 10px/1.4 var(--mono);
   background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-pill);padding:0 6px;color:var(--text-2);white-space:nowrap}
 
-/* ---------- the Daily Draft ---------- */
-.draft{border:1px solid color-mix(in srgb,var(--brand) 50%,var(--border));border-radius:var(--r-card);padding:14px;margin-bottom:14px;
-  background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 10%,var(--surface-1)),var(--surface-1) 72%);
-  box-shadow:inset 0 1px 0 var(--hair),var(--elev1)}
-.dhead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-.dhead .sowl{font-size:26px;line-height:1;flex:none}
-.dhead .grow{flex:1;min-width:0}
-.dtitle{font:700 18px/1.2 var(--font-display);letter-spacing:-.01em;color:var(--text-1)}
-.dsub{font:500 12.5px var(--mono);color:var(--text-2);margin-top:2px;font-variant-numeric:tabular-nums}
+/* ---------- the Daily Draft ----------
+   It lives inside the Now panel (.panel.now.drafting), which carries the
+   brand tint while the day is not planned yet. The .draft itself is flat. */
+.panel.now.drafting{border-color:color-mix(in srgb,var(--brand) 50%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 10%,var(--surface-1)),var(--surface-1) 72%)}
+.panel.now.drafting h3{margin-bottom:4px}
+.panel.now.drafting h3 .sowl{font-size:24px;line-height:1;flex:none}
+.panel.now.drafting h3 .chestring{margin-left:auto}
+.draft{margin:0}
+.dsub{font:500 13px/1.4 var(--body);color:var(--text-2);margin:0 0 10px}
 .drows{display:grid;gap:8px}
 .drow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;text-align:left;padding:8px 12px;border:1px solid var(--border);
   border-radius:var(--r-row);background:var(--surface-2);color:var(--text-1);transition:transform .15s var(--spring),border-color .15s}
@@ -1614,7 +1619,7 @@ button.capchip:active{transform:scale(.95)}
 .planring{display:inline-flex}
 .panel.now h3 .planedit{color:var(--text-2)}
 .panel.now h3 .planedit:hover{color:var(--brand)}
-.panel.now .alsotoday{margin:14px 0 8px}
+.panel.now .alsotoday{margin:12px 0 0}
 /* a row added a moment ago: a brand outline that fades (opacity only) */
 .item.fresh,.goal.fresh{position:relative}
 .item.fresh::after,.goal.fresh::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:2px solid var(--brand);
@@ -1760,7 +1765,6 @@ body.light .fx-fly{color:#157a47;border-color:#157a47}
   32%{transform:translate(-50%,-50%) scale(1) rotate(-6deg)}75%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-6deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.04) rotate(-6deg)}}
 
 @media(max-width:640px){
-  .draft{padding:12px}
   .dact{flex-wrap:wrap}
   .seg button{font-size:12.5px;padding:0 4px}
   #overlay .levelbox.cer{padding:26px 16px 16px;border-radius:22px}

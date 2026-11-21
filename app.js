@@ -1014,7 +1014,6 @@ function renderToday(){
     redemptionBar()+
     sageLine()+
     quickActions()+
-    draftCard()+
     nowPanel()+
     nextLine()+
     comingUp()+
@@ -1043,15 +1042,17 @@ function sageLine(){
     '<span class="grow" title="'+esc(l.text)+'">'+l.icon+' '+esc(l.text)+'</span>'+
     '<button class="btn ghost small" onclick="toggleMascot(true)" aria-label="More from Sage">More</button></div>';
 }
-/* Three 44px buttons, plus the Focus Elixir when one is held (a test looks
+/* Two 44px buttons, plus the Focus Elixir when one is held (a test looks
    for .quick button.potion). Add is the primary one: it opens the capture
-   sheet, which is the fastest way anything gets onto the board. */
+   sheet, which is the fastest way anything gets onto the board. There is no
+   Ask Sage button here: the owl in the corner opens Sage, and its bubble
+   leads to the chat when the user is signed in. A third button only made
+   the labels too narrow to read on a phone. */
 function quickActions(){
   var potion=state.inventory.potion||0;
   return '<div class="quick qa" role="group" aria-label="Quick actions">'+
     '<button class="qab primary" onclick="quickAdd()">'+svgIcon('plus')+'<span>Add</span></button>'+
     '<button class="qab" onclick="go(\'focus\')">'+svgIcon('timer')+'<span>Focus</span></button>'+
-    '<button class="qab" onclick="askSage()">'+svgIcon('sparkles')+'<span>Ask Sage</span></button>'+
     (potion>0?'<button class="qab potion" onclick="usePotion()" title="Focus Elixir: ×2 XP for the rest of today">🧪<span>Elixir ×'+potion+'</span></button>':'')+
     '</div>';
 }
@@ -1060,9 +1061,6 @@ function quickActions(){
    to fill every field by hand. The name quickAdd is kept because the empty
    Now panel and older markup call it. */
 function quickAdd(){ openCapture(); }
-/* Chat needs the Edge Function, which needs a signed-in user. Signed out, the
-   owl still answers with the offline briefing. */
-function askSage(){ if(cloudOn()) openSageChat(); else toggleMascot(true); }
 /* Now: today's active dailies and the one-offs due today, as full quest rows
    (Clear, Focus, edit, delete all come from questRow). A one-off cleared today
    stays in the list with its check so the count reads 3/3 instead of the row
@@ -1084,6 +1082,16 @@ function nowPanel(){
   /* a plan locked today takes over the panel (planPanel, further down) */
   var st=A.planStatus(state);
   if(st.active && !st.skipped && st.total) return planPanel(st, rows);
+  /* No plan yet today: Sage's draft is the list. Whatever else is due today
+     waits under one closed "Also today" line, so Today never shows two
+     different lists of what to do now. A pick switched off in the draft is
+     still a draft row, which is why every draft ref is left out of the fold. */
+  var draft=draftCard();
+  if(draft){
+    var inDraft={}; RPG.dailyDraft(state).items.forEach(function(it){ inDraft[it.ref]=1; });
+    return '<div class="panel now drafting"><h3><span class="sowl" aria-hidden="true">🦉</span>Sage’s draft for today'+chestRing()+'</h3>'+
+      draft+alsoToday(rows.filter(function(q){ return !inDraft['q:'+q.id]; }))+'</div>';
+  }
   var done=rows.filter(function(q){return q.doneOn===today;}).length;
   var body=rows.length?foldRows(rows.map(questRow),'now')
     :emptyState('☀️','Nothing due right now','Add a quest, or bank some deep work.',
@@ -1118,7 +1126,7 @@ function comingUp(){
    the monsters folded behind one "Slipped?" row. slippedOpen survives the
    re-render that follows a logged slip, so two slips in a row do not mean
    reopening the fold in between. */
-var slippedOpen=false;
+var slippedOpen=false, paceOpen=false;
 function habitsToday(){
   var today=RPG.todayKey();
   /* a habit that is in today's plan is drawn there, not twice on one screen */
@@ -1126,13 +1134,24 @@ function habitsToday(){
   if(st.active && !st.skipped) st.items.forEach(function(it){ if(it.kind==='habit') inPlan[it.id]=1; });
   var allGood=state.habits.filter(function(x){return x.type==='good';});
   var good=allGood.filter(function(x){return !inPlan[x.id];});
+  /* What asks for today stays in view: daily habits, weekly ones that can no
+     longer wait (RPG.habitWeek, the same rule the draft uses), and anything
+     already ticked today, so a tick never makes a row jump into the fold.
+     Weekly habits with room left this week sit in one closed fold. */
+  var now=new Date();
+  var asks=good.filter(function(x){ return x.lastDoneOn===today || RPG.habitWeek(x,now).pressing; });
+  var later=good.filter(function(x){ return asks.indexOf(x)<0; });
   /* monsters appear here only once HP and monsters are open (never in Calm) */
   var bad=sysOn('stakes')?state.habits.filter(function(x){return x.type==='bad';}):[];
-  var kept=good.filter(function(x){return x.lastDoneOn===today;}).length;
-  return '<div class="panel habits"><h3>Habits today'+(good.length?' <span class="cnt">'+kept+'/'+good.length+'</span>':'')+'</h3>'+
-    ((good.length?foldRows(good.map(goodHabitRow),'habits'):'')||(allGood.length
+  var kept=asks.filter(function(x){return x.lastDoneOn===today;}).length;
+  return '<div class="panel habits"><h3>Habits today'+(asks.length?' <span class="cnt">'+kept+'/'+asks.length+'</span>':'')+'</h3>'+
+    ((asks.length?foldRows(asks.map(goodHabitRow),'habits'):'')||(good.length
+      ?'<div class="empty">Nothing needed today. You are on pace for the week.</div>'
+      :allGood.length
       ?'<div class="empty">Your habits for today are in the plan above.</div>'
       :emptyState('🌱','No habits yet','Something small you want to do most days.','<button class="btn" onclick="go(\'habits\')">Plant one</button>')))+
+    (later.length?'<details class="fold onpace"'+(paceOpen?' open':'')+' ontoggle="paceOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+
+      'Later this week <span class="hint">'+later.length+' on pace</span></summary>'+later.map(goodHabitRow).join('')+'</details>':'')+
     (bad.length?'<details class="slipped"'+(slippedOpen?' open':'')+' ontoggle="slippedOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+'Slipped? <span class="hint">'+bad.length+' monster'+(bad.length===1?'':'s')+', log it honestly</span></summary>'+
       bad.map(monsterRow).join('')+'</details>':'')+
     '</div>';
@@ -3399,8 +3418,11 @@ function obBudget(min){ return min===15?2:(min===30?3:Infinity); }
    kept: change the filter here and the two go out of sync. */
 function obLists(st){
   var habits=[], quests=[], rewards=[], di=0;
-  st.habits.forEach(function(h){ if(h.type==='good') habits.push({id:h.id,title:h.title,target:h.target}); });
-  st.quests.forEach(function(q){ quests.push({id:q.id,title:q.title,recurring:!!q.recurring,di:q.recurring?di++:-1}); });
+  /* area: the life area's NAME, not its id. The preview board and the real
+     hero get different ids for the same areas, and obCovers compares the two. */
+  function area(id){ var n=''; st.skills.forEach(function(k){ if(k.id===id) n=k.name; }); return n; }
+  st.habits.forEach(function(h){ if(h.type==='good') habits.push({id:h.id,title:h.title,target:h.target,area:area(h.skillId)}); });
+  st.quests.forEach(function(q){ quests.push({id:q.id,title:q.title,recurring:!!q.recurring,di:q.recurring?di++:-1,area:area(q.skillId)}); });
   /* market items only, minus the protection items (Streak Shield): those are
      not "rewards you picked", the Rewards screen shows them under Protection */
   st.shop.forEach(function(s){ if(s.tab==='market'&&!s.special) rewards.push({id:s.id,title:s.title,price:s.price}); });
@@ -3415,8 +3437,36 @@ function obSuggest(){ return obLists(RPG.seedPreset(RPG.newState('preview', ob.a
 function obOn(kind,it,i){
   var off=ob[kind+'Off'], t=it.title;
   if(off && Object.prototype.hasOwnProperty.call(off,t)) return !off[t];
+  if(obCovers(kind,it)) return false;
   if(kind==='quests') return it.di<0 || it.di<obBudget(ob.minutes);
   return true;
+}
+/* A starter habit, or a starter daily quest, starts switched off when the
+   user's own list already has one of that kind in the same life area:
+   whoever typed "Gym 3 times a week" does not also need "Workout / walk 30
+   min" on day one. Returns the user's title (for the "you added" note) or ''.
+   obCover is rebuilt from the plate every time the board step draws, and
+   createHero reads the last one, which is the board the user just saw. A
+   row the user ticks back on is decided by ob.<kind>Off before this runs. */
+var obCover={habits:{},quests:{}};
+function obCovers(kind,it){
+  if(kind==='quests' && !it.recurring) return '';
+  var m=obCover[kind];
+  return (m && it.area && Object.prototype.hasOwnProperty.call(m,it.area)) ? m[it.area] : '';
+}
+function obCoverFrom(plate,skills){
+  obCover={habits:{},quests:{}};
+  plate.forEach(function(it){
+    var k=it.kind==='habit'?'habits':it.kind==='daily'?'quests':null;
+    if(!k || it.off) return;
+    var a=''; skills.forEach(function(s){ if(s.id===it.skillId) a=s.name; });
+    if(a && !Object.prototype.hasOwnProperty.call(obCover[k],a)) obCover[k][a]=it.title;
+  });
+}
+/* the "you added" note on a starter row that obCovers switched off */
+function obCoverNote(kind,it,i){
+  var t=obCovers(kind,it);
+  return (t && !obOn(kind,it,i)) ? 'Off: you added “'+esc(t)+'”' : '';
 }
 /* the toggles pass an index into obSug rather than the title, so no title
    ever lands inside an onclick attribute (an apostrophe would break it) */
@@ -3429,10 +3479,16 @@ function obNext(){
     if(!obNameCheck()){ var e=$('#obNameErr'); if(e) e.style.display=''; var i=$('#obName'); if(i) i.focus(); return; }
     ob.name=$('#obName').value.trim();
   }
+  obKeepPack();
   onboarding(Math.min(OB_STEPS,obStep+1));
 }
 function obBack(){ onboarding(Math.max(1,obStep-1)); }
-function obSkip(){ onboarding(OB_STEPS); }
+function obSkip(){ obKeepPack(); onboarding(OB_STEPS); }
+/* Leaving the plate step with a pack's little form still open (a date or a
+   name asked, "Add this plan" not pressed yet) used to drop the pack without
+   a word. Tapping the pack was the intent, so it is added with whatever the
+   form holds; both fields are optional. */
+function obKeepPack(){ if(obStep===3 && cap && cap.packForm) capPackAdd(); }
 /* one question on the Your day step: the question, its answers, and a line
    saying what the answer changes in the app */
 function obQ(q,controls,hint){ return '<div class="obq"><div class="obqt">'+q+'</div>'+controls+(hint?'<div class="hint obqh">'+hint+'</div>':'')+'</div>'; }
@@ -3510,7 +3566,7 @@ function onboarding(step){
   var s=obStep, title='', copy='', body='', nav='', mon=OB_MONSTERS[ob.struggle];
   if(s===1){
     title='Your hero'; copy='Name your character and pick a look.';
-    body='<input id="obName" placeholder="Hero name" maxlength="24" autocomplete="off" value="'+esc(ob.name)+'" oninput="obNameCheck()">'+
+    body='<input id="obName" placeholder="Hero name" maxlength="24" autocomplete="off" enterkeyhint="next" value="'+esc(ob.name)+'" oninput="obNameCheck()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();obNext();}">'+
       '<div class="hint" id="obNameErr" style="color:var(--danger);display:none">Give your hero a name to continue.</div>'+
       '<div class="flabel">Avatar</div>'+avPickerHtml('onboarding')+
       '<div class="hint">More heroes open as you level up.</div>'+
@@ -3528,6 +3584,7 @@ function onboarding(step){
     obSug=obSuggest();
     title='Your board'; copy='Everything Sage will set up, grouped by where it came from. Untick anything you do not want.';
     obPlate=capBuild(obSug.skills);
+    obCoverFrom(obPlate,obSug.skills);
     var calm=ob.intensity==='calm', groups=[], byPack={}, own=[];
     obPlate.forEach(function(it,i){
       if(it.pack){
@@ -3542,11 +3599,11 @@ function onboarding(step){
     }).join('')+
       (own.length?obGroup('✍️ Your own tasks','What you typed or said',own.join('')):'')+
       obGroup('🌱 Starter set','A few basics so day one is not empty',
-        '<div class="obsub">Habits</div>'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i)); }).join('')+
+        '<div class="obsub">Habits</div>'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i),obCoverNote('habits',it,i)); }).join('')+
         (mon&&!calm?'<div class="obsub">Bad habit to fight</div><div class="obitem'+(ob.habitsOff[mon]?'':' on')+'">'+
           '<button type="button" class="obtog" aria-pressed="'+!ob.habitsOff[mon]+'" onclick="obToggleMonster()">'+
           '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(mon)+'</span><span class="obmeta">from level 3</span></button></div>':'')+
-        '<div class="obsub">Daily quests</div>'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),it.recurring?'daily':''); }).join(''));
+        '<div class="obsub">Daily quests</div>'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),obCoverNote('quests',it,i)||(it.recurring?'daily':'')); }).join(''));
   }
   if(s===OB_STEPS){
     nav='<button class="btn go wide" id="obStart" onclick="createHero()">Start my adventure</button>'+
@@ -4084,6 +4141,7 @@ function capSummary(out){
 }
 function capAdd(){
   if(!cap||!state) return;
+  if(cap.packForm) capPackAdd();   // an open pack form counts, as in the wizard (obKeepPack)
   var items=cap.items.filter(function(it){return !it.off;});
   if(!items.length) return;
   var out=A.addCaptured(state, items);
@@ -4114,10 +4172,11 @@ function gmFlash(ids){
    saved: a reload simply offers the full draft again. draftDay clears it at
    midnight so yesterday's switches never apply to today's draft.
 
-   The draft is the one thing allowed above the Now panel (see the note on
-   renderToday). It earns that: it IS the list of what to do now, and it is
-   gone the moment the plan is locked. It is a .draft, not a .panel, so the
-   first .panel on Today is still Now, which the tour and a test rely on. */
+   The draft is drawn INSIDE the Now panel (nowPanel owns its heading), so
+   Today has one list: the draft until the plan is locked, the plan after.
+   The markup stays a .draft inside .panel.now, which is what the tour (it
+   spotlights the first .panel) and the tests read. The ticks here mean
+   "keep this pick", not "done", hence the instruction in the .dsub line. */
 var draftOff={}, draftDay=null, planFresh=false;
 function draftCard(){
   if(A.planStatus(state).active) return '';
@@ -4127,8 +4186,7 @@ function draftCard(){
   var kept=d.items.filter(function(it){return !draftOff[it.ref];}), mins=0;
   kept.forEach(function(it){ mins+=it.minutes; });
   return '<div class="draft" role="region" aria-label="Sage’s draft for today">'+
-    '<div class="dhead"><span class="sowl" aria-hidden="true">🦉</span><div class="grow"><div class="dtitle">Sage’s draft for today</div>'+
-      '<div class="dsub">'+(kept.length?kept.length+' pick'+(kept.length===1?'':'s')+', about '+fmtHm(mins):'Nothing picked yet')+'</div></div></div>'+
+    '<div class="dsub">'+(kept.length?kept.length+' pick'+(kept.length===1?'':'s')+', about '+fmtHm(mins)+'. Untick what can wait, then lock it in.':'Nothing picked yet. Tick at least one.')+'</div>'+
     '<div class="drows">'+d.items.map(function(it,i){
       var on=!draftOff[it.ref];
       return '<button type="button" class="drow'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="draftToggle('+i+')">'+
@@ -4166,6 +4224,17 @@ function skipDraft(){
    plan away so the draft is offered again. The engine refuses once the day
    bonus has been paid. */
 function editPlan(){ if(A.clearPlan(state)){ persist(); render(); } }
+/* What is due today but not in the draft or the plan: one closed line at the
+   bottom of the Now panel, so the screen keeps a single list. The rows inside
+   are full quest rows (dailies still feed the chest). alsoOpen keeps the fold
+   open across re-renders, like Coming up. */
+var alsoOpen=false;
+function alsoToday(rest){
+  if(!rest.length) return '';
+  var today=RPG.todayKey(), done=rest.filter(function(q){ return q.doneOn===today; }).length;
+  return '<details class="fold alsotoday"'+(alsoOpen?' open':'')+' ontoggle="alsoOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+
+    'Also today <span class="cnt">'+done+'/'+rest.length+'</span></summary>'+foldRows(rest.map(questRow),'also')+'</details>';
+}
 /* the plan as the Now panel: the locked items first, as the same rows the
    rest of the app draws, then whatever else is due today under "Also today"
    so the daily chest is still reachable from here */
@@ -4179,7 +4248,7 @@ function planPanel(st, others){
   var anim=planFresh?' fresh':''; planFresh=false;
   return '<div class="panel now plan'+(st.complete?' won':'')+anim+'"><h3>'+(st.complete?'Day won':'Today’s plan')+' <span class="cnt">'+st.done+'/'+st.total+'</span>'+
     chestRing()+'</h3>'+rows+
-    (rest.length?'<div class="logday alsotoday">Also today</div>'+foldRows(rest.map(questRow),'also'):'')+
+    alsoToday(rest)+
     (st.won?'':'<div class="planfoot"><button class="btn ghost small planedit" onclick="editPlan()">Change the plan</button></div>')+'</div>';
 }
 
