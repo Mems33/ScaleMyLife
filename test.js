@@ -1461,5 +1461,68 @@ section('Release hygiene: service-worker cache freshness');
   ok(/controllerchange/.test(appSrc) && /reg\.update\(\)/.test(appSrc), 'app checks for new versions on foreground and refreshes when one takes over');
 })();
 
+/* app.js pastes ids into inline handlers (onclick="doQuest('<id>')"), so a
+   save file or cloud save with a quote in an id could run its own script.
+   migrate() must hand every unsafe id a fresh one and keep the links. */
+(function () {
+  section('Save ids are safe for inline handlers');
+  var SAFE = /^[A-Za-z0-9_-]{1,64}$/;
+  function deepEqual(a, b) { try { require('assert').deepStrictEqual(a, b); return true; } catch (e) { return false; } }
+  function build() {
+    var s = RPG.migrate(JSON.parse(JSON.stringify(RPG.newState('Ids'))));
+    RPG.seed(s);
+    A.addGoal(s, { title: 'Ship the thesis' });
+    var g = s.goals[s.goals.length - 1];
+    A.addQuest(s, { title: 'Outline chapter 1', diff: 'normal', main: g.id, skillId: s.skills[0].id });
+    A.startFocus(s, { work: 25, brk: 5, skillId: s.skills[0].id, goalId: g.id, questId: s.quests[0].id });
+    A.setPlan(s, ['q:' + s.quests[0].id, 'h:' + s.habits[0].id]);
+    s.log.unshift({ t: new Date().toISOString(), day: RPG.todayKey(), icon: '⏳', text: 'Focus', xp: 0, coins: 0, hp: 0, min: 25, sk: s.skills[0].id });
+    /* seed() and addGoal() leave fields for migrate to default (focusMin,
+       surge...), so a save as it is stored has been through migrate once */
+    return RPG.migrate(s);
+  }
+
+  // a clean save keeps every id and comes out deep-equal
+  var clean = build();
+  var cleanCopy = JSON.parse(JSON.stringify(clean));
+  ok(deepEqual(RPG.migrate(JSON.parse(JSON.stringify(clean))), cleanCopy), 'a clean save migrates unchanged (same ids, deep-equal)');
+
+  // the same save, tampered: quotes and markup in a skill, goal, quest, habit and reward id
+  var bad = build();
+  var BAD_SKILL = "sk');window.__pwned=1;//", BAD_GOAL = 'g" onmouseover="window.__pwned=1',
+      BAD_QUEST = "q');window.__pwned=1;//", BAD_HABIT = "h\\');window.__pwned=1;//", BAD_SHOP = '<img src=x onerror=alert(1)>';
+  var skill = bad.skills[0], goal = bad.goals[bad.goals.length - 1], step = bad.quests[bad.quests.length - 1];
+  var quest = bad.quests[0], habit = bad.habits[0], reward = bad.shop[0];
+  var oldSkill = skill.id;
+  skill.id = BAD_SKILL; goal.id = BAD_GOAL; quest.id = BAD_QUEST; habit.id = BAD_HABIT; reward.id = BAD_SHOP;
+  bad.quests.concat(bad.habits).forEach(function (x) { if (x.skillId === oldSkill) x.skillId = BAD_SKILL; });
+  step.main = BAD_GOAL;
+  bad.activeFocus.skillId = BAD_SKILL; bad.activeFocus.goalId = BAD_GOAL; bad.activeFocus.questId = BAD_QUEST;
+  bad.plan.refs = ['q:' + BAD_QUEST, 'h:' + BAD_HABIT, "q:ghost');window.__pwned=1;//"];
+  bad.log[0].sk = BAD_SKILL;
+  bad.quests[1].skillId = "nobody');window.__pwned=1;//";   // unsafe and points at nothing
+  bad.shop[1].id = 42;                                         // not a string at all
+  var linkedToSkill = bad.quests.concat(bad.habits).filter(function (x) { return x.skillId === BAD_SKILL; });
+  var otherSkillIds = bad.skills.slice(1).map(function (k) { return k.id; });
+
+  var m = RPG.migrate(JSON.parse(JSON.stringify(bad)));
+  var all = [].concat(m.skills, m.goals, m.quests, m.habits, m.shop);
+  ok(all.every(function (x) { return typeof x.id === 'string' && SAFE.test(x.id); }), 'every skill, goal, quest, habit and reward id is letters, digits, _ or - after migrate');
+  ok(JSON.stringify(m).indexOf('__pwned') < 0 && JSON.stringify(m).indexOf('onerror') < 0, 'no trace of the injected script is left anywhere in the save');
+  var mSkill = m.skills[0], mGoal = m.goals[m.goals.length - 1], mStep = m.quests[m.quests.length - 1];
+  var mQuest = m.quests[0], mHabit = m.habits[0];
+  ok(mSkill.id !== oldSkill && m.skills.slice(1).every(function (k, i) { return k.id === otherSkillIds[i]; }), 'only the bad skill id was replaced; the safe ones kept theirs');
+  ok(linkedToSkill.length >= 2 && m.quests.concat(m.habits).filter(function (x) { return x.skillId === mSkill.id; }).length === linkedToSkill.length, 'quests and habits that pointed at the bad skill now point at its new id');
+  ok(mStep.main === mGoal.id, 'the step still sits under its main quest');
+  ok(m.activeFocus.skillId === mSkill.id && m.activeFocus.goalId === mGoal.id && m.activeFocus.questId === mQuest.id, 'the running focus session keeps its life area, main quest and quest');
+  ok(m.log[0].sk === mSkill.id, 'focus history keeps its life area');
+  ok(m.plan.refs.length === 2 && m.plan.refs[0] === 'q:' + mQuest.id && m.plan.refs[1] === 'h:' + mHabit.id, 'today’s plan follows the renamed quest and habit, and drops the ref that points at nothing');
+  ok(A.planStatus(m).total === 2, 'and the plan still counts both items');
+  ok(m.quests[1].skillId === null, 'an unsafe life-area link that points at nothing is dropped');
+  ok(typeof m.shop[1].id === 'string' && SAFE.test(m.shop[1].id) && m.shop[1].id !== m.shop[0].id, 'a reward with a non-string id gets a fresh one of its own');
+  ok(deepEqual(RPG.migrate(JSON.parse(JSON.stringify(m))), JSON.parse(JSON.stringify(m))), 'once fixed, migrating again changes nothing');
+  ok(A.completeQuest(m, mQuest.id) !== null && mQuest.doneOn === RPG.todayKey(), 'the renamed quest can still be cleared by its new id');
+})();
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

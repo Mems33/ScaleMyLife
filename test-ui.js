@@ -2438,6 +2438,56 @@ setTimeout(async function () {
     w.state = keep; w.persist(); w.render();
   })();
 
+  /* A crafted save file whose ids carry a quote or markup. Without the id check
+     in RPG.migrate, onclick="doQuest('<id>')" would run the payload the moment
+     a button is tapped, and value="<id>" would inject an <img onerror>. */
+  console.log('\nAn imported save cannot run script through its ids');
+  await (async function () {
+    var keep = w.state, A = w.RPG.actions;
+    w.__pwned = undefined;
+    var s = w.RPG.newState('Mallory');
+    w.RPG.seed(s); w.RPG.unlockAll(s);
+    A.addGoal(s, { title: 'Big goal' });
+    var g = s.goals[s.goals.length - 1];
+    A.addQuest(s, { title: 'First step', diff: 'normal', main: g.id });
+    A.addQuest(s, { title: 'Side task', diff: 'easy' });
+    var JS = "');window.__pwned=1;//", ATTR = '"><img id="pwnimg" src="x" onerror="window.__pwned=1">';
+    var oldSkill = s.skills[0].id;
+    s.skills[0].id = 'sk' + JS;
+    s.quests.concat(s.habits).forEach(function (x) { if (x.skillId === oldSkill) x.skillId = s.skills[0].id; });
+    g.id = 'g' + ATTR;
+    s.quests.forEach(function (q, i) { if (q.main) q.main = g.id; q.id = 'q' + i + JS; });
+    s.habits.forEach(function (h, i) { h.id = 'h' + i + (i % 2 ? ATTR : JS); });
+    s.shop.forEach(function (it, i) { it.id = 'r' + i + JS; });
+    w.importSave({ files: [new w.File([JSON.stringify(s)], 'save.json', { type: 'application/json' })] });
+    await new Promise(function (r) { setTimeout(r, 50); });
+    ok(w.state.hero.name === 'Mallory', 'the crafted save imports');
+    var SAFE = /^[A-Za-z0-9_-]{1,64}$/;
+    ok([].concat(w.state.skills, w.state.goals, w.state.quests, w.state.habits, w.state.shop).every(function (x) { return SAFE.test(x.id); }), 'every id in it was swapped for a safe one on the way in');
+    var step = w.state.quests.find(function (q) { return q.title === 'First step'; });
+    ok(step && step.main === w.state.goals[w.state.goals.length - 1].id, 'the step still belongs to its main quest');
+    var leaks = [];
+    ['today', 'quests', 'habits', 'market', 'stats', 'focus', 'journal'].forEach(function (t) {
+      w.go(t);
+      if (d.documentElement.innerHTML.indexOf('__pwned') >= 0 || d.getElementById('pwnimg')) leaks.push(t + ' (render)');
+      // tap every ⋯ (rowMenu) and its Edit sheet: the handlers that carry ids
+      Array.prototype.slice.call(d.querySelectorAll('button.more')).forEach(function (b) {
+        b.click();
+        var edit = Array.prototype.slice.call(d.querySelectorAll('#modal .rmact')).filter(function (x) { return x.textContent === 'Edit'; })[0];
+        if (edit) edit.click();
+        if (d.documentElement.innerHTML.indexOf('__pwned') >= 0 || d.getElementById('pwnimg')) leaks.push(t + ' (menu)');
+        w.closeModal();
+      });
+    });
+    w.go('quests');
+    var tick = d.querySelector('button.tick');
+    if (tick) tick.click();
+    ok(leaks.length === 0, 'no tab, ⋯ menu or edit sheet carries the payload' + (leaks.length ? ' -> ' + leaks.join(', ') : ''));
+    ok(w.__pwned === undefined, 'and no injected script ran (window.__pwned stays undefined)');
+    w.closeModal();
+    w.state = keep; w.persist(); w.render();
+  })();
+
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
 

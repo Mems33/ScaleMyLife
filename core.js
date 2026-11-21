@@ -2181,6 +2181,87 @@
   /* ---------- persistence + migration ---------- */
   var KEY = 'liferpg.save.v1';
 
+  /* ---------- safe ids ----------
+     app.js pastes ids straight into inline handlers, for example
+     onclick="doQuest('<id>')", and into attributes such as value="<id>".
+     esc() makes text safe as HTML, but not inside a JS string, so an id is
+     only safe there if it cannot hold anything that ends the string or the
+     attribute. Every id the engine makes comes from uid() above (lowercase
+     letters and digits), so a real save always passes this check.
+
+     SAFE_ID: 1 to 64 letters, digits, "_" or "-", and nothing else. The ^ and
+     $ make the whole id match, not just its start.
+     What breaks if you loosen it: allow a quote, a backslash, "<", ">", a
+     space, "(" or ";" and a crafted save file (Settings > Import) or a
+     tampered cloud save can run its own code the moment a button is tapped.
+     The quote ends doQuest('...') early and whatever follows runs as script,
+     with full access to the player's save and signed-in account. */
+  var SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+  function safeId(v) { return typeof v === 'string' && SAFE_ID.test(v); }
+
+  /* Called from migrate(), so it runs on every save that is loaded, imported,
+     restored or pulled from the cloud. Gives every quest, habit, main quest,
+     life area and reward whose id fails SAFE_ID a fresh uid(), then points
+     every link at the new id so nothing comes apart: a step stays under its
+     main quest, a habit keeps its life area, today's plan keeps its quest.
+     A link that is itself unsafe and matches nothing is dropped. A safe link
+     to something deleted is left alone: the app already ignores those, and
+     changing them would rewrite saves nobody tampered with. */
+  function fixIds(s) {
+    /* old id -> new id, one table per list. Object.create(null) has no
+       built-in keys, so an id such as "constructor" can't match by accident. */
+    function renew(list) {
+      var map = Object.create(null);
+      if (!Array.isArray(list)) return map;
+      list.forEach(function (it) {
+        if (!it || typeof it !== 'object' || safeId(it.id)) return;
+        var fresh = uid(), old = String(it.id);
+        if (!(old in map)) map[old] = fresh;
+        it.id = fresh;
+      });
+      return map;
+    }
+    /* null/undefined means "no link" and stays as it is; a safe link stays;
+       an unsafe one follows its item to the new id, or becomes null */
+    function relink(ref, map) {
+      if (ref == null || safeId(ref)) return ref;
+      var old = String(ref);
+      return old in map ? map[old] : null;
+    }
+    function each(list, fn) { if (Array.isArray(list)) list.forEach(function (x) { if (x && typeof x === 'object') fn(x); }); }
+
+    var skills = renew(s.skills), goals = renew(s.goals), quests = renew(s.quests), habits = renew(s.habits);
+    renew(s.shop);   // rewards: nothing links to them by id
+    each(s.quests, function (q) {
+      if ('skillId' in q) q.skillId = relink(q.skillId, skills);
+      if ('main' in q) q.main = relink(q.main, goals);   // a step's main quest
+    });
+    each(s.habits, function (h) { if ('skillId' in h) h.skillId = relink(h.skillId, skills); });
+    each(s.log, function (e) {   // the focus chart groups minutes by life area
+      if (!('sk' in e)) return;
+      var sk = relink(e.sk, skills);
+      if (sk == null) delete e.sk; else e.sk = sk;
+    });
+    if (s.activeFocus && typeof s.activeFocus === 'object') {
+      var f = s.activeFocus;
+      if ('skillId' in f) f.skillId = relink(f.skillId, skills);
+      if ('goalId' in f) f.goalId = relink(f.goalId, goals);
+      if ('questId' in f) f.questId = relink(f.questId, quests);
+    }
+    /* today's plan holds 'q:<quest id>' and 'h:<habit id>' (see setPlan).
+       Anything else is dropped: setPlan never makes it. */
+    if (s.plan && Array.isArray(s.plan.refs)) {
+      s.plan.refs = s.plan.refs.reduce(function (keep, ref) {
+        var kind = ref.slice(0, 2), id = ref.slice(2);
+        var map = kind === 'q:' ? quests : kind === 'h:' ? habits : null;
+        if (!map) return keep;
+        if (safeId(id)) keep.push(ref);
+        else if (id in map) keep.push(kind + map[id]);
+        return keep;
+      }, []);
+    }
+  }
+
   function migrate(s) {
     if (!s.goals) s.goals = [];
     if (!s.sleep) s.sleep = {};
@@ -2250,6 +2331,7 @@
     var iconFix = { '⚒️': '🔨', '🗣️': '🤝', '💰': '💎' };
     (s.skills || []).forEach(function (k) { if (iconFix[k.icon]) k.icon = iconFix[k.icon]; });
     s.log = (s.log || []).map(function (e) { if (typeof e.min !== 'number') e.min = 0; return e; });
+    fixIds(s);   // last, once every list above exists: see SAFE_ID for why
     s.schema = SCHEMA;
     return s;
   }
