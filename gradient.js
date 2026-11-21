@@ -1,7 +1,7 @@
-/* ScaleMyLife - animated shader-gradient background (vanilla WebGL, no deps).
-   A slow, theme-tinted flowing mesh gradient behind the app, inspired by the
-   shadergradient aesthetic but hand-written so it stays dependency-free,
-   build-free, offline-capable and CSP-safe.
+/* ScaleMyLife - animated mosaic background (vanilla WebGL, no deps).
+   Slow, theme-tinted pools of light drawn as rounded pixel tiles behind the
+   app, hand-written so it stays dependency-free, build-free, offline-capable
+   and CSP-safe.
 
    Progressive enhancement: if WebGL is unavailable (or anything throws) the
    canvas hides itself and the CSS aurora fallback in styles.css shows instead.
@@ -31,27 +31,56 @@
   }
 
   var VERT = 'attribute vec2 p;void main(){gl_Position=vec4(p,0.0,1.0);}';
+  /* The mosaic: soft pools of light that drift behind the app, quantised into
+     rounded tiles, so the background reads as the same pixel tiles as every
+     icon and hero. Three slow light sources, a little noise, and each tile
+     breathing on its own clock. u_c1 is the theme accent (warm light), u_c2
+     the skill colour (cool light), u_bg the page colour everything fades to.
+     The 0.30 in `k` is how bright the brightest tile gets over the page
+     colour; raise it and text on the page starts to fight the background.
+     Adapted from the mosaic sky in "mosaic-prompt-template" by Kedhareswer
+     Naidu (https://kedhar.pages.dev), MIT License. */
   var FRAG = [
+    '#ifdef GL_FRAGMENT_PRECISION_HIGH',
     'precision highp float;',
+    '#else',
+    'precision mediump float;',
+    '#endif',
     'uniform vec2 u_res; uniform float u_time;',
     'uniform vec3 u_bg,u_c1,u_c2,u_c3;',
-    'float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}',
+    'float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}',
     'float noise(vec2 p){vec2 i=floor(p),f=fract(p);vec2 u=f*f*(3.0-2.0*f);',
     ' return mix(mix(hash(i),hash(i+vec2(1.0,0.0)),u.x),mix(hash(i+vec2(0.0,1.0)),hash(i+vec2(1.0,1.0)),u.x),u.y);}',
-    'float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<5;i++){v+=a*noise(p);p*=2.02;a*=0.5;}return v;}',
+    'float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<4;i++){v+=a*noise(p);p=p*2.03+17.0;a*=0.5;}return v;}',
     'void main(){',
-    ' vec2 uv=gl_FragCoord.xy/u_res.xy;',
-    ' vec2 p=uv; p.x*=u_res.x/u_res.y; p*=1.6;',
-    ' float t=u_time*0.035;',
-    ' vec2 q=vec2(fbm(p+vec2(0.0,t)),fbm(p+vec2(5.2,-t)));',
-    ' vec2 r=vec2(fbm(p+2.0*q+vec2(1.7,9.2)+t*0.5),fbm(p+2.0*q+vec2(8.3,2.8)-t*0.4));',
-    ' float f=fbm(p+2.0*r);',
-    ' vec3 col=u_bg;',
-    ' col=mix(col,u_c2,clamp(f*f*1.6,0.0,1.0)*0.5);',   // purple/skill bloom (primary)
-    ' col=mix(col,u_c1,clamp(q.x*r.y*2.4,0.0,1.0)*0.4);',  // gold bloom (accent)
-    ' col=mix(col,u_c3,clamp(r.x*1.1,0.0,1.0)*0.12);',    // green whisper (minimal)
-    ' float vig=smoothstep(1.35,0.05,length(uv-0.5));',
-    ' col=mix(u_bg,col,0.2+0.42*vig);',         // deep & moody: mostly bg, blooms are subtle',
+    ' vec2 frag=gl_FragCoord.xy;',
+    ' float cell=max(u_res.y/34.0,9.0);',
+    ' vec2 id=floor(frag/cell); vec2 f=fract(frag/cell);',
+    ' vec2 p=(id+0.5)*cell/u_res.y;',
+    ' float ax=u_res.x/u_res.y;',
+    ' float t=u_time*0.06;',
+    ' vec2 l1=vec2(ax*0.78+0.22*sin(t*2.1),0.80+0.10*cos(t*1.7));',
+    ' vec2 l2=vec2(ax*0.18-0.20*cos(t*1.3),0.22+0.10*sin(t*2.3));',
+    ' vec2 l3=vec2(ax*0.5+0.5*cos(t*0.9+2.0),0.5+0.2*sin(t*1.1));',
+    ' float L=0.62*exp(-3.0*dot(p-l1,p-l1))+0.40*exp(-4.0*dot(p-l2,p-l2))+0.22*exp(-6.0*dot(p-l3,p-l3));',
+    ' float n=fbm(p*3.0+vec2(t*1.6,-t*1.1));',
+    ' L*=0.45+n;',
+    ' float h=hash(id);',
+    ' L*=0.80+0.28*sin(u_time*(0.5+h*1.4)+h*40.0);',
+    ' L=clamp(L,0.0,1.0);',
+    ' L=floor(L*7.0+h*0.6)/7.0;',
+    ' vec2 q=abs(f-0.5);',
+    ' float tile=smoothstep(0.47,0.40,max(q.x,q.y));',
+    ' vec3 cool=mix(u_c2,vec3(0.62,0.70,0.86),0.6);',
+    ' vec3 tint=mix(cool,u_c1,smoothstep(0.30,0.75,n));',
+    ' float k=L*0.30*tile*(0.85+0.3*f.y);',
+    ' vec3 col=mix(u_bg,tint,k+0.025*tile);',
+    ' vec2 uv=frag/u_res;',
+    ' float vig=smoothstep(1.3,0.3,length((uv-0.5)*vec2(1.0,1.1)));',
+    ' float lum=dot(u_bg,vec3(0.299,0.587,0.114));',
+    ' vec3 edge=u_bg*mix(0.78,0.97,step(0.5,lum));',
+    ' col=mix(edge,col,0.55+0.45*vig);',
+    ' col+=(hash(mod(frag,64.0)+fract(u_time))-0.5)/255.0;',   // mod keeps the numbers small for GPUs without highp
     ' gl_FragColor=vec4(col,1.0);',
     '}'
   ].join('\n');
@@ -90,7 +119,7 @@
   }
 
   function resize() {
-    var dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    var dpr = Math.min(window.devicePixelRatio || 1, 1.5) * 0.75;  // the tiles hide the lower resolution, the battery notices it
     var w = Math.max(2, Math.floor(window.innerWidth * dpr));
     var h = Math.max(2, Math.floor(window.innerHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
@@ -110,7 +139,7 @@
   var lastDraw = 0;
   function loop(now) {
     if (!running) return;
-    if (now - lastDraw >= 32) { lastDraw = now; draw(now); } // ~30fps: smooth enough, half the GPU/battery
+    if (now - lastDraw >= 40) { lastDraw = now; draw(now); } // ~25fps: the tiles drift slowly, more frames would only cost battery
     raf = requestAnimationFrame(loop);
   }
   function start() {

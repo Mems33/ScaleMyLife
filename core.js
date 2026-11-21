@@ -20,6 +20,12 @@
   var GOAL_XP = 300, GOAL_COINS = 150;
   var HABIT_XP = 12, HABIT_COINS = 6;
   var HABITS_ALL_BONUS = 20;      // small coin bonus when every good habit is kept in one day
+  /* Day bonus for finishing the whole plan Sage drafted (see dailyDraft and
+     actions.claimDayWon). Paid once a day. Kept small on purpose: the plan is
+     made of quests and habits that already pay, so this is a nudge to finish
+     the list, not a second income. Raise it and a "solid day" drifts past the
+     90-110 coin target above. */
+  var PLAN_XP = 20, PLAN_COINS = 10;
   var SLIP_HP = 12, SLIP_COINS = 10;
   var JOURNAL_XP = 15, JOURNAL_COINS = 5;
   var SLEEP_XP = 10;
@@ -195,7 +201,7 @@
   // A date is often typed "by friday" / "on friday" - the connector is
   // optional but, when present, must be removed together with the date word
   // so the title never ends with a dangling "by"/"on".
-  var PT_CONNECT = '(?:\\b(?:by|on)\\s+)?';
+  var PT_CONNECT = '(?:\\b(?:by|on|due|before|until)\\s+)?';
   var PT_RE_DIFF = /\b(easy|normal|hard|epic)\b/i;
   var PT_RE_EVERY_WEEKDAY = /\bevery\s+weekdays?\b/i;
   var PT_RE_WEEKDAYS = /\bweekdays\b/i;
@@ -311,6 +317,315 @@
     return out;
   }
 
+  /* ---------- brain dump: several tasks in one go ----------
+     parseDump turns a spoken or pasted paragraph into a list of ready-to-add
+     items. This is what lets the Add button skip the old "which of six task
+     types is this?" question: the app guesses the type, the difficulty, the
+     life area and the date, shows the guess as chips, and the user only
+     corrects what is wrong.
+
+     It is deliberately a set of plain rules, not AI: it runs offline, costs
+     nothing, and gives the same answer every time (so it can be unit tested).
+     The rules are tuned to be SAFE rather than clever. When in doubt an item
+     stays a normal side quest, because a wrong "side quest" costs the user one
+     tap to fix while a wrongly split or wrongly merged sentence costs retyping.
+
+     Pure like parseTask: no Date.now(), no state. `skills` is the hero's life
+     areas (state.skills), only read to match an area by name. */
+  var PD_MAX_ITEMS = 20, PD_MAX_TITLE = 120;
+  /* Verbs a task usually starts with. Two jobs: (1) "call the bank and email
+     the landlord" is split at " and " ONLY because "email" is in this list,
+     which is what keeps "bread and butter" in one piece; (2) nothing else.
+     Adding a verb makes splitting a little more eager, removing one a little
+     less. Keep them lowercase and regex-safe (no special characters). */
+  var PD_VERBS = 'call|email|text|message|reply|write|draft|finish|start|send|submit|buy|book|pay|order|read|study|revise|review|prepare|plan|clean|tidy|wash|cook|fix|update|schedule|cancel|renew|apply|register|sign|print|pick|drop|return|go|do|make|check|research|learn|practice|practise|organize|organise|file|upload|download|install|meet|visit|ask|tell|remind|get|take|bring|watch|listen|complete|build|ship|design|test|deploy|exercise|workout|run|walk|stretch|meditate|journal|sleep|drink|eat|stop|quit|avoid|cut|reduce|limit|pass|land|find|sort|set|open|close|move|pack|wake';
+  // sentence ends, line breaks and semicolons always separate two tasks
+  var PD_RE_HARD = /(?:[.!?]+\s+|\s*[\n\r]+\s*|\s*;+\s*)/;
+  // softer joins only count when a task verb follows them (see PD_VERBS)
+  /* Written so no two parts can match the same spaces: an earlier version
+     began with \\s* in front of alternatives that also began with \\s+, and a
+     line of 2000 spaces then took about 20 seconds to fail (the capture box
+     runs this on every keystroke). pdSplit also collapses spaces first. */
+  var PD_RE_SOFT = new RegExp('(?:\\s?,\\s?(?:and\\s)?(?:then\\s)?(?:also\\s)?|\\s(?:and\\s(?:then\\s)?(?:also\\s)?|then\\s(?:also\\s)?|also\\s))(?=(?:' + PD_VERBS + '|gym|yoga)\\b)', 'i');
+  /* Abbreviations whose full stop is not the end of a sentence. pdSplit hides
+     their dot before splitting on sentence ends and puts it back after. */
+  var PD_RE_ABBR = /\b(dr|mr|mrs|ms|st|prof|etc|vs|e\.g|i\.e|a\.m|p\.m)\./gi;
+  // list markers at the start of a pasted line: "- ", "* ", "1. ", "2) ", "[ ] "
+  var PD_RE_BULLET = /^\s*(?:[-*\u2022\u00b7\u25aa\u25e6\u2013\u2014]+|\d{1,2}[.)]|\[\s?[xX]?\s?\])\s+/;
+  // spoken filler in front of the real task: "and then I need to ...", "don't forget to ..."
+  /* "and", "then", "um" are always filler. Ordinals, "next", "so", "ok" and
+     friends only count with a comma after them ("First, call mom"), because
+     "First draft of the intro" and "Next week submit the report" mean them. */
+  var PD_RE_LEAD = /^(?:(?:(?:and|then|also|um|uh)\b[\s,]*)|(?:(?:so|ok|okay|oh|plus|first|second|third|next|finally|lastly)\s*,\s*))*(?:(?:i|we)\s+(?:really\s+|still\s+|also\s+)?(?:need|have|want|ought|got)\s+to\s+|(?:i|we)(?:'|’)?ve\s+got\s+to\s+|i(?:'|’)?d\s+like\s+to\s+|i\s+(?:really\s+|still\s+|also\s+)?(?:must|should|gotta|wanna)\s+|i(?:'|’)?m\s+going\s+to\s+(?!(?:the|a|an|my|your|our|his|her|their|this|that)\b)|(?:need|have|got)\s+to\s+|gotta\s+|remember\s+to\s+|don(?:'|’)?t\s+forget\s+to\s+|please\s+)?/i;
+  /* A habit to fight, not an errand: "stop by the bank" and "quit my job" are
+     errands, so stop and quit refuse the words that make them one. */
+  var PD_RE_MONSTER = /^(?:stop(?!\s+(?:by|at|in|off|over|for|to)\b)|quit(?!\s+(?:my|the|your|our|this|that)\b)|no\s+more|avoid|less|cut\s+(?:down|back)\s+on|cut\s+out)\s+(.{2,})$/i;
+  var PD_RE_HABIT = /\b(?:read|meditat\w*|stretch\w*|walk|run|jog|workout|work\s+out|gym|exercise|drink|water|sleep|bed\s+by|journal\w*|floss|vitamins?|practi[cs]e|pray|steps|yoga|push-?ups|flashcards?)\b/i;
+  // a big noun plus a "campaign" verb at the start reads as a main quest
+  /* "finals" only in the plural: "the final report" is not an exam. résumé
+     sits outside \\b(...)\\b because JS word boundaries are ASCII-only and
+     never match next to é. */
+  var PD_RE_BIGNOUN = /\b(?:exams?|midterms?|finals|thesis|dissertation|essay|report|presentation|project|applications?|internships?|portfolio|certification|certificate|marathon|website|business\s+plan|cover\s+letter|cv|resume)\b|r\u00e9sum\u00e9/i;
+  var PD_RE_BIGVERB = /^(?:prepare|pass|ace|finish|complete|write|land|get|find|ship|launch|learn|build|plan|organi[sz]e|study\s+for|revise\s+for|apply|create|make|master|start)\b/i;
+  var PD_RE_LEARN = /^(?:learn|master|get\s+better\s+at|get\s+good\s+at)\b/i;
+  /* Which step list a main quest gets. First match wins, so the order matters:
+     "cover letter for my thesis internship" should plan like an application. */
+  var PD_TEMPLATES = [
+    { id: 'apply', re: /\b(?:internships?|applications?|job\s+hunt|cv|resume|cover\s+letter)\b|r\u00e9sum\u00e9/i },
+    { id: 'exam',  re: /\b(?:exams?|midterms?|finals)\b/i },
+    { id: 'essay', re: /\b(?:essay|report|thesis|dissertation|presentation|paper|business\s+plan)\b/i }
+  ];
+  /* Step lists. Each row is [title, difficulty]. The FIRST step of every list
+     takes about five minutes: that is the whole point (a quest you can start
+     right now gets started). `gap` is how many days before the deadline the
+     last step lands: an exam's last step is the evening before, an essay's is
+     the day it is due. */
+  var PD_STEPS = {
+    exam: { gap: 1, steps: [
+      ['List every topic on the exam', 'easy'], ['Gather notes and past papers', 'easy'],
+      ['Revise the first half of the topics', 'hard'], ['Revise the second half of the topics', 'hard'],
+      ['Sit one timed past paper', 'hard'], ['Fix the weak spots it showed', 'normal'],
+      ['Light review, then an early night', 'easy']] },
+    essay: { gap: 0, steps: [
+      ['Write the main point in one sentence', 'easy'], ['Outline it in five bullets', 'easy'],
+      ['Write an ugly first draft', 'hard'], ['Rewrite and tighten', 'normal'],
+      ['Proofread and hand it in', 'easy']] },
+    apply: { gap: 0, steps: [
+      ['Open your CV and fix one line', 'easy'], ['Get the CV down to one clean page', 'hard'],
+      ['Write a base cover letter', 'normal'], ['List 10 targets with their deadlines', 'normal'],
+      ['Send the first application', 'normal']] },
+    kickoff: { gap: 0, steps: [['Kickoff: 5 minutes on it, then stop if you want', 'easy']] }
+  };
+  /* Keyword -> life area. `names` are area names to look for on the hero, best
+     first, lowercase. The Student path calls its first area "Study", Balanced
+     calls it "Mind": both are listed so either hero gets a match. First row
+     that matches the text wins, so money sits above social ("call the bank"
+     is about money). No match means no area, which is fine. */
+  var PD_AREAS = [
+    { re: /\b(?:pay|bills?|bank|budget|invoice|tax(?:es)?|rent|spending|savings?|invest\w*|insurance|refund|subscription)\b/i, names: ['money', 'finance'] },
+    { re: /\b(?:cv|resume|cover\s+letter|internships?|applications?|interview|linkedin|portfolio|client|meeting|pitch|deploy|bug|feature|launch)\b|r\u00e9sum\u00e9/i, names: ['work', 'craft', 'build', 'code', 'career', 'study', 'mind'] },
+    { re: /\b(?:stud(?:y|ying)|revis\w+|exams?|midterms?|finals|lectures?|course|homework|essay|report|presentation|flashcards?|class|thesis|dissertation|notes|read|reading|learn\w*|chapters?)\b/i, names: ['study', 'mind', 'learning', 'school', 'work', 'craft'] },
+    { re: /\b(?:gym|workout|work\s+out|run|jog|walk|stretch\w*|yoga|swim\w*|training|exercise|steps|sport|football|lift\w*|sleep|bed|meal|protein|water|cook|diet|vitamins?)\b/i, names: ['body', 'health', 'fitness', 'nutrition'] },
+    { re: /\b(?:friends?|family|mom|mum|dad|parents?|brother|sister|birthday|reach\s+out|coffee\s+with|network\w*|alumni|party)\b/i, names: ['social', 'network', 'audience', 'people'] }
+  ];
+
+  function pdCap(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+  function pdSkill(text, skills) {
+    if (!Array.isArray(skills) || !skills.length) return null;
+    for (var i = 0; i < PD_AREAS.length; i++) {
+      if (!PD_AREAS[i].re.test(text)) continue;
+      var names = PD_AREAS[i].names;
+      for (var n = 0; n < names.length; n++) {
+        for (var k = 0; k < skills.length; k++) {
+          if (String(skills[k].name || '').toLowerCase() === names[n]) return skills[k].id;
+        }
+      }
+    }
+    return null;
+  }
+  /* Difficulty when the user did not say one. A stated duration wins, then a
+     few tell-tale words; everything else is Normal. Erring toward Normal is
+     the safe side: it is the middle payout. */
+  function pdDiff(text) {
+    var m = /\b(\d{1,3})\s*(?:min|mins|minutes)\b/i.exec(text);
+    if (m) { var n = parseInt(m[1], 10); return n <= 15 ? 'easy' : n <= 45 ? 'normal' : 'hard'; }
+    m = /\b(\d{1,2}(?:[.,]\d)?)\s*(?:hours?|hrs?|h)(?:\d{1,2})?(?![\w&])/i.exec(text);
+    if (m) m[1] = m[1].replace(',', '.');
+    if (m) return parseFloat(m[1]) >= 3 ? 'epic' : 'hard';
+    if (/\b(?:quick|quickly|small|tiny|simple|short)\b/i.test(text)) return 'easy';
+    if (/\b(?:exams?|essay|report|presentation|thesis|dissertation|deadline|tax(?:es)?)\b/i.test(text)) return 'hard';
+    if (/^(?:call|email|text|message|reply|book|pay|buy|order|print|send|renew|cancel|schedule|pick|drop|return)\b/i.test(text)) return 'easy';
+    return 'normal';
+  }
+  function pdDayDiff(aKey, bKey) {
+    return Math.round((new Date(aKey + 'T00:00:00') - new Date(bKey + 'T00:00:00')) / 86400000);
+  }
+  /* The steps of a main quest, with dates. With a deadline the steps are spread
+     evenly from tomorrow to the deadline (minus the template's gap), so the
+     plan runs backward from the date the user gave. Without one the steps
+     carry no date. Returns [{title, diff, due}]. */
+  function pdSteps(templateId, dueKey, now) {
+    var t = PD_STEPS[templateId] || PD_STEPS.kickoff, n = t.steps.length;
+    var total = dueKey ? Math.max(0, pdDayDiff(dueKey, todayKey(now)) - t.gap) : null;
+    return t.steps.map(function (row, i) {
+      var due = null;
+      if (total != null) due = todayKey(ptAddDays(now, n === 1 ? total : Math.round(total * (i + 1) / n)));
+      return { title: row[0], diff: row[1], due: due };
+    });
+  }
+  function pdTemplate(text) {
+    for (var i = 0; i < PD_TEMPLATES.length; i++) if (PD_TEMPLATES[i].re.test(text)) return PD_TEMPLATES[i].id;
+    return 'kickoff';
+  }
+  /* Cuts raw text into one string per task. Hard breaks (new line, full stop,
+     semicolon) always split. Soft joins (", " / " and " / " then ") only
+     split when a task verb follows, see PD_VERBS. */
+  /* Order matters here, and each step fixes a real input that went wrong:
+     1. lines first, so the bullet of "10. Call mom" is stripped before
+        "10." could be read as the end of a sentence;
+     2. runs of spaces collapsed, which keeps every regex below fast;
+     3. abbreviations ("Dr. Smith", "5 p.m.") hidden from the sentence split;
+     4. sentences, then the soft joins inside each sentence. */
+  function pdSplit(text) {
+    var out = [];
+    String(text).split(/[\n\r]+/).forEach(function (rawLine) {
+      var line = rawLine.replace(PD_RE_BULLET, '').replace(/\s+/g, ' ');
+      line = line.replace(PD_RE_ABBR, function (m0, ab) { return ab.replace(/\./g, '\u0001') + '\u0001'; });
+      line.split(PD_RE_HARD).forEach(function (sentence) {
+        var rest = sentence.replace(/\u0001/g, '.'), guard = 0;
+        while (rest && guard++ < 60) {
+          var m = PD_RE_SOFT.exec(rest);
+          if (!m) break;
+          if (m.index > 0) out.push(rest.slice(0, m.index));
+          rest = rest.slice(m.index + m[0].length);
+        }
+        if (rest) out.push(rest);
+      });
+    });
+    return out;
+  }
+  /* One piece of text -> one item. `forceKind` is set when the user taps the
+     type chip on a card: the same text is re-read as that type, so a habit
+     turned into a main quest gains its steps and loses its weekly target. */
+  function captureItem(text, now, skills, forceKind) {
+    now = now || new Date();
+    var raw = String(text == null ? '' : text).replace(PD_RE_BULLET, '').replace(PD_RE_LEAD, '').replace(PD_RE_TO_VERB, '');
+    raw = raw.replace(/[\s.,;:!?]+$/, '').replace(/\s+/g, ' ').trim();
+    if (raw.length < 2 || PD_RE_FILLER_ONLY.test(raw)) return null;
+    var p = parseTask(raw, now);
+    var title = p.title, kind = 'side', note = '';
+    var mon = PD_RE_MONSTER.exec(title);
+    if (mon && !p.recurring && !p.due) { kind = 'monster'; title = mon[1]; }
+    else if (p.recurring) {
+      if (p.target && p.target < 7) kind = 'habit';
+      else if (p.days && p.days.length) kind = 'daily';
+      else kind = PD_RE_HABIT.test(title) ? 'habit' : 'daily';
+    }
+    else if (PD_RE_LEARN.test(title) || (PD_RE_BIGNOUN.test(title) && PD_RE_BIGVERB.test(title))) kind = 'main';
+    if (forceKind && CAPTURE_KINDS.indexOf(forceKind) >= 0) {
+      if (forceKind !== 'monster' && kind === 'monster') title = p.title;   // put "Stop ..." back
+      kind = forceKind;
+    }
+    title = pdClip(pdCap(title.replace(/\s+/g, ' ').trim()), PD_MAX_TITLE);
+    var item = { title: title, kind: kind, diff: p.diff || pdDiff(title), skillId: kind === 'monster' ? null : pdSkill(title, skills),
+      due: null, days: null, target: null, steps: null, note: note, text: raw };
+    if (kind === 'side') item.due = p.due;
+    else if (kind === 'daily') item.days = (p.days && p.days.length && p.days.length < 7) ? p.days.slice() : null;
+    else if (kind === 'habit') item.target = (p.target && p.target >= 1 && p.target <= 7) ? p.target : (p.days && p.days.length ? Math.min(7, p.days.length) : 7);
+    else if (kind === 'main') {
+      var tpl = pdTemplate(title);
+      item.due = p.due;
+      item.steps = pdSteps(tpl, p.due, now);
+      item.note = p.due && tpl !== 'kickoff' ? 'Planned backward from the date' : 'Starts with a 5-minute step';
+    }
+    return item;
+  }
+  var CAPTURE_KINDS = ['side', 'daily', 'habit', 'main', 'monster'];
+  // "do" is left out on purpose: "To do list cleanup" is a task about a to-do list
+  var PD_RE_TO_VERB = new RegExp('^to\\s+(?=(?:' + PD_VERBS.replace('|do|', '|') + ')\\b)', 'i');
+  // a piece that is nothing but a filler word ("First" from "First, call mom")
+  var PD_RE_FILLER_ONLY = /^(?:first|second|third|next|finally|lastly|so|ok|okay|oh|plus|and|then|also|um|uh)$/i;
+  /* A title cut at a fixed length can split an emoji in half; a lone half
+     (a "surrogate") is invalid text and can break saving the JSON. */
+  function pdClip(t, n) { return String(t).slice(0, n).replace(/[\ud800-\udbff]$/, ''); }
+  /* Change an item's date after the fact (the date chip on a capture card).
+     A main quest is re-planned: its steps are spread again toward the new
+     date, which is why this lives in the engine next to pdSteps and is not a
+     one-line assignment in the UI. An invalid or empty date clears it. */
+  function captureDue(item, dueKey, now) {
+    if (!item) return item;
+    now = now || new Date();
+    var ok = /^\d{4}-\d{2}-\d{2}$/.test(dueKey || '') && dueKey >= todayKey(now) &&
+      todayKey(new Date(dueKey + 'T00:00:00')) === dueKey;   // "2026-02-31" comes back as March 3rd and fails here
+    item.due = ok ? dueKey : null;
+    if (item.kind === 'main') item.steps = pdSteps(pdTemplate(item.title), item.due, now);
+    return item;
+  }
+  function parseDump(text, now, skills) {
+    if (typeof text !== 'string' || !text.trim()) return [];
+    now = now || new Date();
+    var items = [], seen = {};
+    pdSplit(text).forEach(function (seg) {
+      if (items.length >= PD_MAX_ITEMS) return;
+      var it = captureItem(seg, now, skills);
+      if (!it) return;
+      var key = it.kind + ':' + it.title.toLowerCase();
+      if (seen[key]) return;          // the same thing said twice is one task
+      seen[key] = 1;
+      items.push(it);
+    });
+    return items;
+  }
+
+  /* ---------- quest packs ----------
+     Ready-made campaigns for the situations most people are actually in. A pack
+     produces the same item shape as parseDump, so the capture sheet and the
+     onboarding wizard show packs and typed tasks as the same cards and add
+     them through the same action (actions.addCaptured).
+     `ask` adds one text field to the pack's little form and `date` one date
+     field; a pack with neither is added in a single tap. To add a pack: one
+     row here, one branch in buildPack, one test. */
+  var PACKS = [
+    { id: 'exam',       icon: '📝', name: 'Exam coming',     blurb: 'A revision plan, backward from the date', ask: 'Which subject?', eg: 'Corporate Finance', date: 'Exam date' },
+    { id: 'internship', icon: '💼', name: 'Internship hunt', blurb: 'CV, targets, applications, practice', date: 'Applications deadline (optional)' },
+    { id: 'essay',      icon: '✍️', name: 'Essay or report', blurb: 'From one sentence to handed in', ask: 'What is it about?', eg: 'Marketing case study', date: 'Due date' },
+    { id: 'fit',        icon: '💪', name: 'Get in shape',    blurb: 'Three sessions a week, starting small' },
+    { id: 'project',    icon: '🚀', name: 'Side project',    blurb: 'A first version, in small steps', ask: 'What are you building?', eg: 'My portfolio site', date: 'Ready by (optional)' },
+    { id: 'sleep',      icon: '🌙', name: 'Fix my sleep',    blurb: 'Two evening habits and one monster' },
+    { id: 'admin',      icon: '🧹', name: 'Life admin',      blurb: 'The four errands everyone postpones' }
+  ];
+  function packById(id) { for (var i = 0; i < PACKS.length; i++) if (PACKS[i].id === id) return PACKS[i]; return null; }
+  function buildPack(id, o, now, skills) {
+    o = o || {}; now = now || new Date();
+    var name = pdClip(String(o.name || '').replace(/\s+/g, ' ').trim(), 60);
+    var date = /^\d{4}-\d{2}-\d{2}$/.test(o.date || '') && o.date >= todayKey(now) ? o.date : null;
+    var out = [];
+    function mk(kind, title, extra) {
+      var it = { title: title, kind: kind, diff: 'normal', skillId: kind === 'monster' ? null : pdSkill(title, skills),
+        due: null, days: null, target: null, steps: null, note: '', text: title };
+      for (var k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) it[k] = extra[k];
+      out.push(it);
+      return it;
+    }
+    if (id === 'exam') {
+      var examDue = date || todayKey(ptAddDays(now, 14));
+      mk('main', 'Pass the ' + (name ? name + ' exam' : 'exam'), { due: examDue, steps: pdSteps('exam', examDue, now), diff: 'hard',
+        note: date ? 'Planned backward from the date' : 'Planned over two weeks, move the dates if needed' });
+      mk('habit', 'Revise ' + (name || 'for the exam') + ' for 25 minutes', { target: 5 });
+    } else if (id === 'internship') {
+      var applyDue = date || todayKey(ptAddDays(now, 14));
+      mk('main', 'Land an internship', { due: applyDue, steps: pdSteps('apply', applyDue, now), diff: 'hard', note: 'Starts with a 5-minute step' });
+      mk('habit', 'Send one application', { target: 5 });
+      mk('habit', 'Interview or case practice, 20 minutes', { target: 3 });
+    } else if (id === 'essay') {
+      var essayDue = date || todayKey(ptAddDays(now, 7));
+      mk('main', 'Finish the ' + (name || 'essay'), { due: essayDue, steps: pdSteps('essay', essayDue, now), diff: 'hard',
+        note: date ? 'Planned backward from the date' : 'Planned over one week, move the dates if needed' });
+    } else if (id === 'fit') {
+      mk('habit', 'Workout or a 30-minute walk', { target: 3 });
+      mk('habit', 'Stretch for 5 minutes', { target: 7 });
+      mk('side', 'Pick three workout slots for this week', { diff: 'easy', due: todayKey(ptAddDays(now, 1)) });
+    } else if (id === 'project') {
+      var proj = name || 'the side project';
+      mk('main', 'Ship ' + proj + ' v1', { diff: 'hard', due: date, note: 'Starts with a 5-minute step', steps: [
+        { title: 'Write what v1 does in three lines', diff: 'easy', due: null },
+        { title: 'List the five smallest steps', diff: 'easy', due: null },
+        { title: 'Build the first step', diff: 'hard', due: null },
+        { title: 'Show it to one person', diff: 'normal', due: null }] });
+      mk('habit', 'Work on ' + proj + ' for 25 minutes', { target: 4 });
+    } else if (id === 'sleep') {
+      mk('habit', 'In bed by 23:30', { target: 7 });
+      mk('habit', 'No screens 30 minutes before bed', { target: 7 });
+      mk('monster', 'Late-night scrolling', {});
+    } else if (id === 'admin') {
+      mk('side', 'Clear or archive the inbox', { diff: 'normal' });
+      mk('side', 'Pay or schedule every open bill', { diff: 'easy' });
+      mk('side', 'Tidy the desk for 10 minutes', { diff: 'easy' });
+      mk('side', 'Book the appointment you keep putting off', { diff: 'easy' });
+    }
+    return out;
+  }
+
   /* ---------- prestige / buff multipliers ----------
      Everything defaults to 1.0 on a fresh hero, so base payouts are unchanged. */
   function boonCount(state, id) { return (state.hero && state.hero.boons && state.hero.boons[id]) || 0; }
@@ -403,13 +718,20 @@
       journal: {}, sleep: {}, log: [],
       inventory: { potion: 0 },
       cosmetics: { frames: [] },
-      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0, deaths: 0, comebacks: 0 },
+      counters: { quests: 0, focusMin: 0, purchases: 0, chests: 0, bosses: 0, ascensions: 0, mends: 0, deaths: 0, comebacks: 0, daysWon: 0 },
       achievements: [],           // [{id,on}]
       activeFocus: null,
       redemption: null,           // {streak,on} - offer to mend a freshly broken streak
       boss: null,                 // {title,setOn,due,doneOn}
       chestClaimedOn: null,
-      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true, restDays: [] },
+      plan: null,                 // {day,refs,wonOn,skipped} - today's plan, see dailyDraft / actions.setPlan
+      /* Staged game systems. `on` is false here, which means "everything is
+         open": that is what every save made before stages existed gets
+         (through migrate), and what the engine tests assume. Only the
+         onboarding wizard switches it on for a brand-new hero. `got` maps a
+         stage id to the day it opened. */
+      stage: { on: false, got: {} },
+      settings: { sound: true, theme: 'dungeon', music: 'lofi', musicUrl: '', escalate: true, restDays: [], intensity: 'classic' },
       lastSeenDay: todayKey()
     };
   }
@@ -927,6 +1249,259 @@
     else if (w.tot.focusMin < 120) suggestion = 'Only ' + Math.round(w.tot.focusMin) + ' min of focus this week - book two deep-work blocks.';
     else suggestion = 'Strong week. Name a weekly boss and keep the streak alive.';
     return { week: w, bestDay: bestDay, bestXp: Math.max(0, bestXp), worstMonster: worstMonster, worstN: worstN, insights: ins, suggestion: suggestion };
+  }
+
+  /* ---------- Sage as game master ----------
+     Everything below is Sage "thinking": a proposed plan for the day, a
+     one-line summary for the journal, a boss for the week and a recap of the
+     week. All of it is plain arithmetic over the save, like briefing() further
+     down: no AI, no network, the same answer for the same save. The UI only
+     shows what these return and lets the user accept or change it. */
+
+  /* Rough minutes per difficulty, used only to total up a draft ("about 1h 20m").
+     They are estimates for display; nothing is paid or scheduled from them. */
+  var DRAFT_MIN = { easy: 10, normal: 25, hard: 50, epic: 90 }, DRAFT_HABIT_MIN = 10;
+  var DRAFT_MAX = 6;
+  /* How many items a draft aims for, from the "time per day" picked in the
+     wizard (15, 30 or 60 minutes). No answer on file means 4. */
+  function draftTarget(state) {
+    var m = state.settings && state.settings.onboard && state.settings.onboard.minutes;
+    return m === 15 ? 3 : m === 60 ? 5 : 4;
+  }
+  /* The Daily Draft: the short list Sage proposes for today, most pressing
+     first. Each candidate gets a score and a reason:
+       100+  overdue          90  due today        70  next step of a main quest
+        62   today's dailies  58- due within 3 days
+        45   daily habits     40+ weekly habits (65 when today is the last
+                                  chance to hit the weekly target)
+        30   side quests waiting a week or more    20  everything else
+     Anything left unfinished on the last plan gets +15, which is how "roll
+     over to tomorrow" works without a button. The scores only decide the
+     ORDER; change one and the draft reorders, nothing else moves.
+     Returns { items:[{ref,kind,id,title,why,minutes,diff}], minutes, target, pool }.
+     A ref is 'q:<quest id>' or 'h:<habit id>' and is what actions.setPlan stores. */
+  function dailyDraft(state, now) {
+    now = now || new Date();
+    var today = todayKey(now), cands = [], byRef = {};
+    var carried = (state.plan && state.plan.day && state.plan.day < today && Array.isArray(state.plan.refs)) ? state.plan.refs : [];
+    function add(ref, o) {
+      if (byRef[ref]) { if (o.score > byRef[ref].score) { byRef[ref].score = o.score; byRef[ref].why = o.why; } return; }
+      o.ref = ref; byRef[ref] = o; cands.push(o);
+    }
+    var nextStepOf = {};   // goal id -> its first open step (earliest date first, then list order)
+    (state.quests || []).forEach(function (q) {
+      if (q.recurring || q.doneOn || !q.main) return;
+      var g = (state.goals || []).find(function (x) { return x.id === q.main && !x.doneOn; });
+      if (!g) return;
+      var cur = nextStepOf[g.id];
+      if (!cur || (q.due && (!cur.q.due || q.due < cur.q.due))) nextStepOf[g.id] = { q: q, g: g };
+    });
+    (state.quests || []).forEach(function (q) {
+      var mins = DRAFT_MIN[q.diff] || 25;
+      if (q.recurring) {
+        if (q.doneOn === today || !questActiveOn(q, now)) return;
+        add('q:' + q.id, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins, score: 62, why: 'Daily, feeds the chest' });
+        return;
+      }
+      if (q.doneOn) return;
+      var ref = 'q:' + q.id;
+      if (q.due) {
+        var d = pdDayDiff(q.due, today);
+        if (d < 0) add(ref, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins, score: 100 + Math.min(20, -d), why: 'Overdue by ' + (-d) + ' day' + (d === -1 ? '' : 's') });
+        else if (d === 0) add(ref, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins, score: 90, why: 'Due today' });
+        else if (d <= 3) add(ref, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins, score: 58 - d, why: d === 1 ? 'Due tomorrow' : 'Due in ' + d + ' days' });
+      }
+      var ns = q.main ? nextStepOf[q.main] : null;
+      if (ns && ns.q === q) add(ref, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins, score: 70, why: '\ud83c\udfc6 ' + ns.g.title });
+      else if (!q.main && !q.due) {
+        var age = q.createdOn ? pdDayDiff(today, q.createdOn) : 0;
+        add(ref, { kind: 'quest', id: q.id, title: q.title, diff: q.diff, minutes: mins,
+          score: age >= 7 ? 30 : 20, why: age >= 7 ? 'Waiting ' + age + ' days' : 'On your list' });
+      }
+    });
+    var wdMon = (now.getDay() + 6) % 7, daysLeft = 7 - wdMon;   // days left this Monday-start week, today included
+    (state.habits || []).forEach(function (h) {
+      if (h.type !== 'good' || h.lastDoneOn === today) return;
+      var ref = 'h:' + h.id, o = { kind: 'habit', id: h.id, title: h.title, diff: null, minutes: DRAFT_HABIT_MIN };
+      if (h.target >= 7) { o.score = 45; o.why = h.streak > 0 ? 'Keeps a ' + h.streak + '-day streak' : 'Daily habit'; }
+      else {
+        var doneWk = actions.weekCount(h, today), need = h.target - doneWk;
+        if (need <= 0) return;                     // this week's target is already met
+        o.score = need >= daysLeft ? 65 : 40;
+        o.why = need >= daysLeft ? 'Needed today to hit ' + h.target + ' this week' : doneWk + ' of ' + h.target + ' this week';
+      }
+      add(ref, o);
+    });
+    cands.forEach(function (c) { if (carried.indexOf(c.ref) >= 0) { c.score += 15; c.why = 'Left from your last plan'; } });
+    cands.forEach(function (c, i) { c.i = i; });
+    cands.sort(function (a, b) { return b.score - a.score || a.i - b.i; });
+    var target = draftTarget(state), must = cands.filter(function (c) { return c.score >= 90; }).length;
+    var want = Math.min(DRAFT_MAX, Math.max(target, must)), picked = [], habits = 0;
+    /* At most two habits in a draft while there are quests to offer: habits
+       already have their own checklist under the plan, and a plan made of five
+       habits is not a plan. The second pass fills up if quests ran out. */
+    cands.forEach(function (c) {
+      if (picked.length >= want) return;
+      if (c.kind === 'habit') { if (habits >= 2) return; habits++; }
+      picked.push(c);
+    });
+    cands.forEach(function (c) { if (picked.length < want && picked.indexOf(c) < 0) picked.push(c); });
+    picked.sort(function (a, b) { return b.score - a.score || a.i - b.i; });
+    var minutes = 0;
+    var items = picked.map(function (c) {
+      minutes += c.minutes;
+      return { ref: c.ref, kind: c.kind, id: c.id, title: c.title, why: c.why, minutes: c.minutes, diff: c.diff };
+    });
+    return { items: items, minutes: minutes, target: target, pool: cands.length };
+  }
+
+  /* The Evening Debrief: one honest line about today, written from the log,
+     that the user can drop into the journal instead of typing. Also returns
+     the numbers behind it and the last sleep duration logged before today
+     (the "same as usual" quick button). `empty` is true when nothing was done,
+     so the UI can stay quiet instead of offering "A quiet day." */
+  function debrief(state, now) {
+    now = now || new Date();
+    var today = todayKey(now), quests = 0, habits = 0, min = 0, xp = 0, slips = 0, best = null, bestXp = -1;
+    (state.log || []).forEach(function (e) {
+      if (e.day !== today) return;
+      xp += e.xp || 0; min += e.min || 0;
+      if (e.icon === '⚔️') { quests++; if ((e.xp || 0) > bestXp) { bestXp = e.xp || 0; best = String(e.text || '').replace('Quest cleared: ', ''); } }
+      if (e.icon === '🌱') habits++;
+      if (e.icon === '👾') slips++;
+    });
+    var parts = [];
+    if (quests) parts.push('Cleared ' + quests + ' quest' + (quests === 1 ? '' : 's'));
+    if (habits) parts.push((parts.length ? 'kept ' : 'Kept ') + habits + ' habit' + (habits === 1 ? '' : 's'));
+    if (min) parts.push((min >= 60 ? Math.floor(min / 60) + 'h ' + (min % 60 ? (min % 60) + 'm' : '') : min + ' min').trim() + ' of focus');
+    var line = parts.length ? parts.join(', ') + '.' : 'A quiet day.';
+    if (best && quests > 1) line += ' Biggest win: ' + best + '.';
+    var st = actions.planStatus(state, now);
+    var open = st.items.filter(function (it) { return !it.done; }).map(function (it) { return it.title; });
+    if (st.active && st.total) {
+      line += st.complete ? ' Finished the whole plan.'
+        : ' Left for tomorrow: ' + open[0] + (open.length > 1 ? ' and ' + (open.length - 1) + ' more' : '') + '.';
+    }
+    if (slips) line += ' ' + slips + ' slip' + (slips === 1 ? '' : 's') + ', logged honestly.';
+    var sleepGuess = null, keys = Object.keys(state.sleep || {}).filter(function (k) { return k < today; }).sort();
+    if (keys.length) sleepGuess = state.sleep[keys[keys.length - 1]].hours;
+    return { line: line, quests: quests, habits: habits, focusMin: min, xp: xp, slips: slips, open: open,
+      empty: !parts.length, sleepGuess: sleepGuess };
+  }
+
+  /* Sage's pick for the weekly boss: the hardest open one-off, with a deadline
+     inside the boss week counting for more than raw difficulty. An Easy errand
+     with no date is never proposed, since a boss is meant to be THE task of
+     the week. Returns null when a boss is already named or nothing qualifies. */
+  function suggestBoss(state, now) {
+    if (state.boss && !state.boss.doneOn) return null;
+    now = now || new Date();
+    var today = todayKey(now), end = bossSunday(now), rank = { easy: 0, normal: 1, hard: 2, epic: 3 }, best = null;
+    (state.quests || []).forEach(function (q) {
+      if (q.recurring || q.doneOn) return;
+      var r = rank[q.diff] || 0, s = r * 10, why;
+      if (q.due && q.due <= end) { s += q.due < today ? 25 : 20; why = q.due < today ? 'It is already late' : 'Your biggest deadline this week'; }
+      else if (r < 1) return;
+      else if (q.main) { s += 8; why = 'The next push on a main quest'; }
+      else why = 'The hardest thing on your list';
+      if (!best || s > best.s) best = { s: s, title: q.title, why: why, due: end, questId: q.id };
+    });
+    return best ? { title: best.title, why: best.why, due: best.due, questId: best.questId } : null;
+  }
+
+  /* The weekly chronicle: last seven days as a titled recap for Progress. The
+     title comes from how many days had any XP, so the same week always gets
+     the same name. */
+  var WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  function chronicle(state) {
+    var r = weeklyReview(state), w = r.week, t = w.tot;
+    var active = w.days.filter(function (d) { return w.per[d].xp > 0; }).length;
+    var monsters = (state.habits || []).some(function (h) { return h.type === 'bad'; });
+    var title = active >= 6 ? 'The Unbroken Week' : active >= 4 ? 'The Steady Climb' : active >= 2 ? 'The Uneven Road'
+      : active === 1 ? 'A Spark in the Dark' : 'The Quiet Week';
+    if (active >= 4 && monsters && t.slips === 0) title = 'The Clean Week';
+    var lines = [];
+    if (!active) lines.push('Nothing was logged this week. The board is waiting.');
+    else {
+      lines.push((state.hero.name || 'The hero') + ' showed up on ' + active + ' of 7 days and earned ' + t.xp + ' XP.');
+      if (t.quests || t.focusMin) {
+        var fm = Math.round(t.focusMin), ft = fm >= 60 ? Math.floor(fm / 60) + 'h ' + (fm % 60) + 'm' : fm + ' min';
+        lines.push((t.quests ? t.quests + ' quest' + (t.quests === 1 ? '' : 's') + ' cleared' : '') +
+          (t.quests && fm ? ' and ' : '') + (fm ? ft + ' of focus banked' : '') + '.');
+      }
+      if (r.bestDay && r.bestXp > 0) lines.push('Best day: ' + WEEKDAY_NAMES[new Date(r.bestDay + 'T00:00:00').getDay()] + ' with ' + r.bestXp + ' XP.');
+      if (r.worstMonster) lines.push('Toughest monster: ' + r.worstMonster + ' (' + r.worstN + ' slip' + (r.worstN === 1 ? '' : 's') + ').');
+    }
+    return { title: title, lines: lines, days: active, xp: t.xp };
+  }
+
+  /* ---------- game systems in stages ----------
+     A brand-new hero does not get every system on day one. Each row below is a
+     system that arrives later, as an event, at a level (the Market also opens
+     with the first daily chest, whichever comes first). The UI asks
+     isUnlocked(state, id) before drawing that system.
+
+     Two rules that are easy to break by accident:
+     1. A save with stage.on === false has EVERYTHING open. That covers
+        every hero created before stages existed. Never make isUnlocked return
+        false for those saves, or returning users lose features they had.
+     2. Stages only hide screens. The engine keeps paying coins and tracking HP
+        underneath, so the day the Market opens the purse is already full.
+     `line` is what the now-open screen says once the system is open, `tease`
+     describes it while it is still locked, `how` says what opens it, `tab` is
+     where its button leads. */
+  var STAGES = [
+    { id: 'rewards', level: 2, icon: '🛍️', name: 'The Market',              tab: 'market', how: 'Opens at level 2, or with your first daily chest',
+      line: 'Your coins buy real rewards now. You earned every one.', tease: 'Spend what you earn on real rewards you choose yourself.' },
+    { id: 'stakes',  level: 3, icon: '❤️', name: 'HP and monsters',         tab: 'habits', how: 'Opens at level 3',
+      line: 'Bad habits fight back now. Log slips honestly and rest to heal.', tease: 'Bad habits become monsters. A slip costs HP, rest heals it.' },
+    { id: 'boss',    level: 4, icon: '🐲', name: 'The weekly boss',         tab: 'quests', how: 'Opens at level 4',
+      line: 'Name the one task that matters this week. Slaying it pays 500 XP.', tease: 'One task that matters, named each week, worth 500 XP.' },
+    { id: 'social',  level: 5, icon: '🏆', name: 'Leaderboard and friends', tab: 'stats',  how: 'Opens at level 5',
+      line: 'Race your friends on weekly XP.', tease: 'A weekly XP race against your friends.' }
+  ];
+  function stageById(id) { for (var i = 0; i < STAGES.length; i++) if (STAGES[i].id === id) return STAGES[i]; return null; }
+  function staged(state) { return !!(state && state.stage && state.stage.on); }
+  /* Calm intensity: no HP, no monsters, ever. It overrides stages in both
+     directions, so it also hides them on an old save that had them. */
+  function calm(state) { return !!(state && state.settings && state.settings.intensity === 'calm'); }
+  function isUnlocked(state, id) {
+    if (id === 'stakes' && calm(state)) return false;
+    if (!staged(state)) return true;
+    return !!(state.stage.got && state.stage.got[id]);
+  }
+  function stageDue(state, st) {
+    if (state.hero.level >= st.level || (state.hero.ascension || 0) > 0) return true;
+    return st.id === 'rewards' && (state.counters.chests || 0) >= 1;
+  }
+  /* Opens every stage whose condition is now met and returns the ones that
+     just opened, for the UI to celebrate. Safe to call after every action:
+     a stage opens once. */
+  function checkUnlocks(state) {
+    if (!staged(state)) return [];
+    if (!state.stage.got) state.stage.got = {};
+    var fresh = [];
+    STAGES.forEach(function (st) {
+      if (state.stage.got[st.id] || !stageDue(state, st)) return;
+      /* Calm has no HP and no monsters: not recorded, so a later switch back to
+         Classic opens them with their own announcement */
+      if (st.id === 'stakes' && calm(state)) return;
+      state.stage.got[st.id] = todayKey();
+      addLog(state, '🔓', 'Opened: ' + st.name);
+      fresh.push(st);
+    });
+    return fresh;
+  }
+  function unlockAll(state) { state.stage = { on: false, got: (state.stage && state.stage.got) || {} }; return state; }
+  /* the next system still locked, for the "what opens next" teaser; null when none */
+  function nextUnlock(state) {
+    if (!staged(state)) return null;
+    for (var i = 0; i < STAGES.length; i++) {
+      var st = STAGES[i];
+      if (st.id === 'stakes' && calm(state)) continue;
+      if (!state.stage.got || !state.stage.got[st.id]) return st;
+    }
+    return null;
   }
 
   /* ---------- actions ---------- */
@@ -1461,6 +2036,134 @@
       state.skills = state.skills.filter(function (s) { return s.id !== id; });
       state.quests.forEach(function (q) { if (q.skillId === id) q.skillId = null; });
       state.habits.forEach(function (h) { if (h.skillId === id) h.skillId = null; });
+    },
+
+    /* ----- capture: add everything the capture sheet (or a pack) proposed -----
+       `items` is what parseDump / buildPack return, after the user's edits.
+       Each one goes through the same action a hand-typed entry uses, so
+       nothing here can create a shape the rest of the engine does not know.
+       An item whose title already exists in its own list is skipped, not
+       doubled: tapping the same pack twice must not fill the board with twins.
+       Returns counts per kind plus the ids created (the UI flashes those rows). */
+    addCaptured: function (state, items) {
+      var out = { side: 0, daily: 0, habit: 0, main: 0, monster: 0, steps: 0, skipped: 0, total: 0, ids: [] };
+      (items || []).forEach(function (it) {
+        if (!it || typeof it.title !== 'string' || !it.title.trim()) return;
+        var t = pdClip(it.title.replace(/\s+/g, ' ').trim(), PD_MAX_TITLE), low = t.toLowerCase();
+        var skillId = it.skillId && state.skills.some(function (k) { return k.id === it.skillId; }) ? it.skillId : null;
+        if (it.kind === 'habit' || it.kind === 'monster') {
+          var type = it.kind === 'monster' ? 'bad' : 'good';
+          if (state.habits.some(function (h) { return h.type === type && h.title.toLowerCase() === low; })) { out.skipped++; return; }
+          var h = actions.addHabit(state, { title: t, type: type, skillId: type === 'good' ? skillId : null, target: it.target || 7 });
+          out[it.kind]++; out.ids.push(h.id);
+        } else if (it.kind === 'main') {
+          if (state.goals.some(function (g) { return !g.doneOn && g.title.toLowerCase() === low; })) { out.skipped++; return; }
+          var g = actions.addGoal(state, { title: t, note: '' });
+          out.main++; out.ids.push(g.id);
+          (it.steps || []).forEach(function (st) {
+            if (!st || typeof st.title !== 'string' || !st.title.trim()) return;
+            var sq = actions.addQuest(state, { title: pdClip(st.title, PD_MAX_TITLE), diff: st.diff, skillId: skillId, due: st.due || null, main: g.id });
+            out.steps++; out.ids.push(sq.id);
+          });
+        } else {
+          var rec = it.kind === 'daily';
+          if (state.quests.some(function (q) { return !!q.recurring === rec && !q.main && (rec || !q.doneOn) && q.title.toLowerCase() === low; })) { out.skipped++; return; }
+          var q = actions.addQuest(state, { title: t, diff: it.diff, skillId: skillId, due: rec ? null : (it.due || null), recurring: rec, days: rec ? it.days : null });
+          out[rec ? 'daily' : 'side']++; out.ids.push(q.id);
+        }
+      });
+      out.total = out.side + out.daily + out.habit + out.main + out.monster;
+      if (out.total) addLog(state, '🦉', 'Sage logged ' + out.total + ' new entr' + (out.total === 1 ? 'y' : 'ies') + ' on the board.');
+      return out;
+    },
+
+    /* ----- the plan: today's short list, locked from the Daily Draft -----
+       setPlan stores refs ('q:<id>' / 'h:<id>'), not copies, so a quest edited
+       or cleared anywhere else in the app is the same quest in the plan. An
+       empty list is a valid plan and means "not today": it stops the draft
+       from being offered again until tomorrow. */
+    setPlan: function (state, refs, now) {
+      var today = todayKey(now), keep = [];
+      (refs || []).forEach(function (ref) {
+        if (typeof ref !== 'string' || keep.indexOf(ref) >= 0) return;
+        var id = ref.slice(2);
+        /* only what is still to do today: a quest already cleared, or a habit
+           already kept, would make the plan "complete" the moment it is locked */
+        if (ref.charAt(0) === 'q' && state.quests.some(function (q) { return q.id === id && (q.recurring ? q.doneOn !== today : !q.doneOn); })) keep.push(ref);
+        if (ref.charAt(0) === 'h' && state.habits.some(function (h) { return h.id === id && h.type === 'good' && h.lastDoneOn !== today; })) keep.push(ref);
+      });
+      /* a day already won stays won: locking a second plan the same day must
+         not open the day bonus a second time */
+      var wonAlready = !!(state.plan && state.plan.day === today && state.plan.wonOn === today);
+      state.plan = { day: today, refs: keep, wonOn: wonAlready ? today : null, skipped: !keep.length };
+      if (keep.length) addLog(state, '🧭', 'Plan locked: ' + keep.length + ' for today.');
+      return actions.planStatus(state, now);
+    },
+
+    /* Where today's plan stands. `active` is false when no plan was locked
+       today (yesterday's plan is not today's). An item deleted since the plan
+       was locked simply drops out, so the count never waits on something that
+       no longer exists. */
+    planStatus: function (state, now) {
+      var today = todayKey(now), p = state.plan;
+      if (!p || p.day !== today) return { active: false, skipped: false, items: [], done: 0, total: 0, complete: false, won: false };
+      var items = [];
+      (p.refs || []).forEach(function (ref) {
+        if (typeof ref !== 'string') return;
+        var id = ref.slice(2);
+        if (ref.charAt(0) === 'q') {
+          var q = state.quests.find(function (x) { return x.id === id; });
+          if (q) items.push({ ref: ref, kind: 'quest', id: id, title: q.title, done: q.recurring ? q.doneOn === today : !!q.doneOn });
+        } else {
+          var h = state.habits.find(function (x) { return x.id === id && x.type === 'good'; });
+          if (h) items.push({ ref: ref, kind: 'habit', id: id, title: h.title, done: h.lastDoneOn === today });
+        }
+      });
+      var done = items.filter(function (it) { return it.done; }).length;
+      return { active: true, skipped: !!p.skipped, items: items, done: done, total: items.length,
+        complete: items.length > 0 && done === items.length, won: p.wonOn === today };
+    },
+
+    /* Pays the day bonus the moment the whole plan is done, once per day.
+       Returns null when there is nothing to pay (plan unfinished, or already
+       paid today), so callers can fire it after every action. */
+    /* Throw today's plan away so the draft is offered again ("Change the
+       plan"). Refused once the day bonus is paid: a won day stays won, and
+       re-planning it would let the bonus be earned twice. */
+    clearPlan: function (state, now) {
+      var p = state.plan;
+      if (!p || p.day !== todayKey(now)) return false;
+      if (p.wonOn === todayKey(now)) return false;
+      state.plan = null;
+      return true;
+    },
+
+    claimDayWon: function (state, now) {
+      var st = actions.planStatus(state, now);
+      if (!st.complete || st.won) return null;
+      /* items deleted after the lock drop out of the count, so without this
+         check deleting what is left would "finish" the plan. "Change the
+         plan" is the honest way to drop something. */
+      if (st.total < (state.plan.refs || []).length) return null;
+      state.plan.wonOn = todayKey(now);
+      state.counters.daysWon = (state.counters.daysWon || 0) + 1;
+      var res = grant(state, { xp: PLAN_XP, coins: PLAN_COINS }, null);
+      addLog(state, '🏁', 'Day won: the whole plan is done (' + st.total + ' of ' + st.total + ').', { xp: res.xp, coins: res.coins });
+      res.dayWon = true; res.total = st.total; res.streak = state.hero.streak; res.daysWon = state.counters.daysWon;
+      return res;
+    },
+
+    /* Game intensity. 'hardcore' and the older settings.hardcore flag are kept
+       in step here because damage() reads the flag: set one without the other
+       and the Settings screen would say Hardcore while defeats stay soft. */
+    setIntensity: function (state, v) {
+      if (['calm', 'classic', 'hardcore'].indexOf(v) < 0) return null;
+      state.settings.intensity = v;
+      state.settings.hardcore = v === 'hardcore';
+      /* Calm has no HP, so it cannot leave anyone Downed or Wounded: that
+         would keep the half-XP, no-coin penalty with no screen left to heal on */
+      if (v === 'calm') { state.hero.downed = null; state.hero.woundedOn = null; state.hero.hp = maxHpOf(state); }
+      return v;
     }
   };
 
@@ -1472,7 +2175,16 @@
     if (!s.sleep) s.sleep = {};
     if (!s.journal) s.journal = {};
     if (!s.counters) s.counters = { quests: 0, focusMin: 0, purchases: 0, chests: 0 };
-    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions', 'mends', 'deaths', 'comebacks'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
+    ['quests', 'focusMin', 'purchases', 'chests', 'bosses', 'ascensions', 'mends', 'deaths', 'comebacks', 'daysWon'].forEach(function (k) { if (typeof s.counters[k] !== 'number') s.counters[k] = 0; });
+    /* Sage as game master: the plan, staged systems and game intensity. A save
+       from before stages existed has no `stage` at all and gets on:false,
+       which means everything stays open for it (see STAGES). */
+    if (!('plan' in s) || (s.plan && typeof s.plan !== 'object')) s.plan = null;
+    if (s.plan && !Array.isArray(s.plan.refs)) s.plan.refs = [];
+    if (s.plan) s.plan.refs = s.plan.refs.filter(function (r) { return typeof r === 'string'; });
+    if (!s.stage || typeof s.stage !== 'object') s.stage = { on: false, got: {} };
+    if (typeof s.stage.on !== 'boolean') s.stage.on = false;
+    if (!s.stage.got || typeof s.stage.got !== 'object') s.stage.got = {};
     if (!('downed' in s.hero)) s.hero.downed = null;
     /* v5: prestige, inventory, cosmetics, buffs, menace, scheduled dailies */
     if (!s.hero.boons || typeof s.hero.boons !== 'object') s.hero.boons = {};
@@ -1503,6 +2215,7 @@
     if (typeof s.settings.friends !== 'boolean') s.settings.friends = false;
     if (typeof s.settings.mascot !== 'boolean') s.settings.mascot = true;
     if (typeof s.settings.hardcore !== 'boolean') s.settings.hardcore = false;
+    if (['calm', 'classic', 'hardcore'].indexOf(s.settings.intensity) < 0) s.settings.intensity = s.settings.hardcore ? 'hardcore' : 'classic';
     if (!Array.isArray(s.settings.restDays)) s.settings.restDays = [];
     if (typeof s.settings.reminderHour !== 'number' || s.settings.reminderHour < 0 || s.settings.reminderHour > 23) s.settings.reminderHour = 18;
     if (typeof s.hero.title !== 'string') s.hero.title = '';
@@ -1550,8 +2263,11 @@
       : ['Good evening', 'Evening, hero', 'One last push today', 'The day is almost won'], now);
     var greeting = hello + ', ' + (state.hero.name || 'Hero') + '!';
 
+    /* HP lines (0 and 2) only for heroes who have HP: not before it opens on
+       the staged game, and never in Calm */
+    var hpOn = isUnlocked(state, 'stakes');
     // 0) defeated: the single most urgent thing
-    if (state.hero.downed) {
+    if (state.hero.downed && hpOn) {
       mood = 'urgent';
       lines.push({ icon: '💀', tab: 'market', text: 'You were defeated - half XP and no coins until you rest to full HP and rise. Heal at the 🛏️ Hotel or sleep well.' });
     }
@@ -1561,7 +2277,8 @@
       lines.push({ icon: '🕯', tab: 'today', text: 'Your ' + state.redemption.streak + '-day streak broke! Clear ALL of today’s dailies before midnight to mend it.' });
     }
     // 2) wounded / low HP
-    if (state.hero.woundedOn === today) {
+    if (!hpOn) { /* nothing to say about HP */ }
+    else if (state.hero.woundedOn === today) {
       if (mood === 'happy') mood = 'worried';
       lines.push({ icon: '🩸', tab: 'market', text: 'You’re wounded - XP is halved today. Rest at the Hotel or log good sleep.' });
     } else if (state.hero.hp <= maxHpOf(state) * 0.3) {
@@ -1588,11 +2305,11 @@
     if (hour >= 18 && !state.journal[today]) lines.push({ icon: '📔', tab: 'journal', text: 'No journal entry yet - one honest line pays 15 XP.' });
     // 8) streak flex when things are calm
     if (!lines.length) {
-      lines.push({ icon: '✨', tab: 'stats', text: pickByDay([
-        'All clear! A perfect moment for a focus run.',
+      var quiet = ['All clear! A perfect moment for a focus run.',
         'Board’s clean. Want to bank some deep work in Focus?',
-        'Nothing urgent. Check Stats to admire your progress.',
-        'Quiet day. Maybe plan the week’s boss?'], now) });
+        'Nothing urgent. Check Stats to admire your progress.'];
+      if (isUnlocked(state, 'boss')) quiet.push('Quiet day. Maybe plan the week’s boss?');   // the boss opens at level 4
+      lines.push({ icon: '✨', tab: 'stats', text: pickByDay(quiet, now) });
       mood = 'proud';
     }
     if (state.hero.streak >= 3 && mood === 'happy') mood = 'fired';
@@ -1615,6 +2332,9 @@
     SCHEMA: SCHEMA, DIFF: DIFF, RANKS: RANKS, MOODS: MOODS, ACHIEVEMENTS: ACHIEVEMENTS, MAX_HP: MAX_HP, MAX_SKILLS: MAX_SKILLS, KEY: KEY,
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
     uid: uid, todayKey: todayKey, clamp: clamp, parseTask: parseTask,
+    parseDump: parseDump, captureItem: captureItem, captureDue: captureDue, CAPTURE_KINDS: CAPTURE_KINDS, PACKS: PACKS, packById: packById, buildPack: buildPack,
+    dailyDraft: dailyDraft, debrief: debrief, suggestBoss: suggestBoss, chronicle: chronicle, PLAN_XP: PLAN_XP, PLAN_COINS: PLAN_COINS,
+    STAGES: STAGES, stageById: stageById, staged: staged, isUnlocked: isUnlocked, checkUnlocks: checkUnlocks, unlockAll: unlockAll, nextUnlock: nextUnlock,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     progressKey: progressKey, compareProgress: compareProgress,
     skillTier: skillTier, boonById: boonById, frameById: frameById, pathById: pathById,

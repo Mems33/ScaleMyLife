@@ -1,6 +1,6 @@
 :root{
-  --bg:#12101f; --panel:#1b1830; --panel2:#221e3d; --line:#2e2950;
-  --ink:#e8e4ff; --muted:#8f88b8; --gold:#f5c542; --hp:#ff5470;
+  --bg:#0b0b0e; --panel:#141418; --panel2:#1c1c22; --line:#2a2a33;
+  --ink:#ecebf2; --muted:#8d8b99; --gold:#f49d70; --hp:#ff5470;
   --xp:#3ddc84; --skill:#8f7bff; --good:#3ddc84; --blue:#5aa2ff; --purple:#b07bff; --orange:#ff9d47;
   --px:"Press Start 2P",monospace; --body:"Karla",system-ui,sans-serif; --mono:"IBM Plex Mono",monospace;
 
@@ -41,7 +41,7 @@ button{font-family:inherit;cursor:pointer;touch-action:manipulation}
 input,select,textarea{font-family:inherit;font-size:15px;background:var(--bg);color:var(--ink);
   border:1px solid var(--line);border-radius:6px;padding:8px 10px;outline:none;width:100%}
 input:focus,select:focus,textarea:focus{border-color:var(--skill)}
-::placeholder{color:#5c5684}
+::placeholder{color:color-mix(in srgb,var(--muted) 75%,transparent)}
 .wrap{max-width:1060px;margin:0 auto;padding:calc(12px + env(safe-area-inset-top)) 16px 90px}
 .wrap.shake{animation:shake .4s}
 @keyframes shake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
@@ -1471,3 +1471,607 @@ body.light .wring.up .wd{color:#0f7a48}
   .herotop .lvbig{font-size:14px}
   .proghead .btn.small{min-height:36px}
 }
+
+/* ==========================================================================
+   Sage as game master
+   --------------------------------------------------------------------------
+   Styles for the capture sheet, the Daily Draft and plan, the staged-system
+   teasers, the ceremony overlays and the fx.js motion layer. Everything is
+   built from the theme tokens at the top of this file, so all six themes
+   (Daylight included) restyle it for free. If you hard-code a colour here it
+   will look wrong on at least one theme.
+
+   Motion: transform and opacity only, and every animation in this block is
+   switched off by the global prefers-reduced-motion rule further up. An
+   element that is animated IN must therefore look right with no animation at
+   all: never give one a resting opacity of 0.
+   ========================================================================== */
+
+/* ---------- quick actions: Add is the primary ---------- */
+.quick.qa button.primary{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.quick.qa button.primary:hover{color:var(--brand-ink);filter:brightness(1.08)}
+/* Daylight paints every quick action white (body.light .quick.qa button). That
+   rule is more specific than the one above, so without this line the primary
+   button would be white text on a white button there. */
+body.light .quick.qa button.primary{background:var(--brand);color:var(--brand-ink)}
+
+/* ---------- capture sheet ---------- */
+.modal .box.capsheet{max-width:520px;padding:18px 18px 0;overscroll-behavior:contain}
+.caphead{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
+.caphead .sowl{font-size:28px;line-height:1.1;flex:none}
+.modal .caphead h2{margin:0;font:700 22px/1.15 var(--font-display);color:var(--text-1);letter-spacing:-.02em;text-wrap:balance}
+.capsub{font-size:14px;line-height:1.4;color:var(--text-2);margin-top:3px}
+.capin{position:relative}
+.capin textarea{display:block;min-height:96px;font-size:16px;line-height:1.45;padding:12px 60px 12px 14px;border-radius:var(--r-row);
+  resize:vertical;background:var(--surface-2);border-color:var(--border)}
+.capin textarea:focus{border-color:var(--brand)}
+.capmic{position:absolute;right:8px;bottom:8px;width:44px;height:44px;border-radius:50%;border:1px solid var(--border-strong);
+  background:var(--surface-1);color:var(--text-1);display:grid;place-items:center;transition:transform .15s var(--spring),background-color .15s,color .15s,border-color .15s}
+.capmic:hover{border-color:var(--brand);color:var(--brand)}
+.capmic:active{transform:scale(.94)}
+.capmic.on{background:var(--danger);border-color:var(--danger);color:#fff}
+/* the listening ring: a second outline that grows and fades, by transform only */
+.capmic.on::after{content:"";position:absolute;inset:-1px;border-radius:50%;border:2px solid var(--danger);animation:micring 1.3s ease-out infinite;pointer-events:none}
+@keyframes micring{from{transform:scale(1);opacity:.85}to{transform:scale(1.75);opacity:0}}
+.capvoice{font-size:12px;line-height:1.4;margin:6px 2px 0}
+.cappacks{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;margin:0 -2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.cappacks::-webkit-scrollbar{display:none}
+.cappack{flex:none;display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:8px 14px;border:1px solid var(--border);border-radius:var(--r-pill);
+  background:var(--surface-2);color:var(--text-1);font:600 14px var(--body);white-space:nowrap;transition:transform .15s var(--spring),border-color .15s}
+.cappack:hover{border-color:var(--brand)}
+.cappack:active{transform:scale(.96)}
+.packform{border:1px solid color-mix(in srgb,var(--brand) 45%,var(--border));border-radius:var(--r-row);padding:12px;margin:4px 0 6px;
+  background:color-mix(in srgb,var(--brand) 5%,var(--surface-2));display:grid;gap:6px}
+.pfhead{font-size:15px}
+.pflabel{font:600 12.5px var(--body);color:var(--text-2);margin-top:4px}
+.packform input{min-height:44px;font-size:16px;border-radius:var(--r-control)}
+.pfact{display:flex;gap:8px;margin-top:6px}
+.capmeta{min-height:18px;font:600 12px var(--mono);color:var(--text-2);margin-top:8px;font-variant-numeric:tabular-nums}
+.caplist{display:grid;gap:8px;margin-top:6px}
+.capcard{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid color-mix(in srgb,var(--brand) 42%,var(--border));
+  border-radius:var(--r-row);background:color-mix(in srgb,var(--brand) 5%,var(--surface-2))}
+/* only a card that just appeared slides in: the list is redrawn on every
+   keystroke, and animating every card each time made them all blink */
+.capcard.new{animation:capin .26s var(--ease) both}
+@keyframes capin{from{opacity:0;transform:translateY(6px)}}
+.capcard.off{border-color:var(--border);background:var(--surface-2)}
+.capcard.off .grow{opacity:.5}
+.capcard .grow{flex:1;min-width:0}
+/* 44px hit area around a 24px box: the negative margins keep the card's own
+   padding as the visual spacing */
+.capbox{flex:none;width:44px;height:44px;margin:-8px -6px -8px -10px;border:none;background:none;display:grid;place-items:center;color:var(--brand-ink)}
+.capbox .i{width:24px;height:24px;padding:3px;border-radius:8px;border:2px solid var(--brand);background:var(--brand)}
+.capcard.off .capbox .i{background:none;border-color:var(--border-strong);color:transparent}
+.captitle{font:600 15px/1.35 var(--body);color:var(--text-1);overflow-wrap:anywhere}
+.capchips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.capchip{position:relative;display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:6px 12px;border-radius:var(--r-pill);
+  border:1px solid var(--border);background:var(--surface-1);color:var(--text-2);font:600 12.5px var(--body);white-space:nowrap}
+button.capchip,label.capchip{cursor:pointer;color:var(--text-1);transition:transform .15s var(--spring),border-color .15s}
+button.capchip:hover,label.capchip:hover{border-color:var(--brand)}
+button.capchip:active{transform:scale(.95)}
+.capchip.kind{border-color:color-mix(in srgb,var(--brand) 55%,var(--border));color:var(--brand);background:var(--brand-soft)}
+.capchip.easy{color:var(--ok)}
+.capchip.normal{color:var(--info)}
+.capchip.hard{color:var(--purple)}
+.capchip.epic{color:var(--brand)}
+.capchip.area{color:var(--skill)}
+/* the native date input lies invisibly over its chip, so the chip opens the
+   phone's own date picker */
+.capchip.date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;padding:0;border:0}
+.capchip.date:has(input:focus-visible){outline:2px solid var(--brand);outline-offset:2px}
+.capsteps{font-size:12.5px;line-height:1.45;color:var(--text-2);margin-top:8px}
+.cappackhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;
+  font:700 12.5px var(--font-display);color:var(--text-2);letter-spacing:.06em;text-transform:uppercase}
+.capempty{font-size:13.5px;color:var(--text-2);padding:8px 2px}
+/* the Add button rides the bottom of the sheet while the cards scroll under it */
+.capfoot{position:sticky;bottom:0;padding:14px 0 calc(16px + env(safe-area-inset-bottom));margin-top:8px;
+  background:linear-gradient(180deg,transparent,var(--surface-1) 34%)}
+.capfoot .btn{min-height:50px;font-size:16px}
+.capfoot .btn:disabled{opacity:.5;cursor:not-allowed}
+/* inside the onboarding wizard the same body sits in the wizard's own box */
+.obwiz.obplatestep .caplist{margin-bottom:4px}
+.obplate{display:grid;gap:6px}
+.obpl{display:flex;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);font-size:14px}
+.obpl .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.obpl .obmeta{font:500 12px var(--mono);color:var(--text-2);white-space:nowrap}
+
+/* ---------- avatar picker: skins that open with level ---------- */
+.avpick button.locked{position:relative;cursor:not-allowed}
+.avpick button.locked .svgav{opacity:.32;filter:grayscale(1)}
+.avpick button.locked .lk{position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);font:700 10px/1.4 var(--mono);
+  background:var(--surface-1);border:1px solid var(--border);border-radius:var(--r-pill);padding:0 6px;color:var(--text-2);white-space:nowrap}
+
+/* ---------- the Daily Draft ---------- */
+.draft{border:1px solid color-mix(in srgb,var(--brand) 50%,var(--border));border-radius:var(--r-card);padding:14px;margin-bottom:14px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 10%,var(--surface-1)),var(--surface-1) 72%);
+  box-shadow:inset 0 1px 0 var(--hair),var(--elev1)}
+.dhead{display:flex;gap:10px;align-items:center;margin-bottom:10px}
+.dhead .sowl{font-size:26px;line-height:1;flex:none}
+.dhead .grow{flex:1;min-width:0}
+.dtitle{font:700 18px/1.2 var(--font-display);letter-spacing:-.01em;color:var(--text-1)}
+.dsub{font:500 12.5px var(--mono);color:var(--text-2);margin-top:2px;font-variant-numeric:tabular-nums}
+.drows{display:grid;gap:8px}
+.drow{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;text-align:left;padding:8px 12px;border:1px solid var(--border);
+  border-radius:var(--r-row);background:var(--surface-2);color:var(--text-1);transition:transform .15s var(--spring),border-color .15s}
+.drow:active{transform:scale(.985)}
+.drow .grow{flex:1;min-width:0}
+.drow:not(.on) .grow,.drow:not(.on) .dmin{opacity:.5}
+.drow.on{border-color:color-mix(in srgb,var(--brand) 40%,var(--border))}
+.dbox{flex:none;width:24px;height:24px;border-radius:8px;border:2px solid var(--border-strong);display:grid;place-items:center;color:transparent}
+.drow.on .dbox{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.dt{display:block;font:600 15px/1.3 var(--body);overflow-wrap:anywhere}
+.dw{display:block;font-size:12.5px;line-height:1.35;color:var(--text-2);margin-top:1px}
+.dmin{flex:none;font:500 12px var(--mono);color:var(--text-2);font-variant-numeric:tabular-nums}
+.dact{display:flex;gap:8px;margin-top:12px}
+.dact .btn.go{flex:1;min-height:48px;font-size:16px}
+.dact .btn.go:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------- today's plan (the Now panel once a plan is locked) ---------- */
+.panel.now.plan{border-color:color-mix(in srgb,var(--brand) 45%,var(--border))}
+.panel.now.plan.won{border-color:color-mix(in srgb,var(--ok) 55%,var(--border))}
+.panel.now.plan.fresh{animation:planin .5s var(--ease)}
+@keyframes planin{from{opacity:0;transform:translateY(10px) scale(.985)}}
+.planring{display:inline-flex}
+.panel.now h3 .planedit{color:var(--text-2)}
+.panel.now h3 .planedit:hover{color:var(--brand)}
+.panel.now .alsotoday{margin:14px 0 8px}
+/* a row added a moment ago: a brand outline that fades (opacity only) */
+.item.fresh,.goal.fresh{position:relative}
+.item.fresh::after,.goal.fresh::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:2px solid var(--brand);
+  box-shadow:0 0 18px color-mix(in srgb,var(--brand) 45%,transparent);animation:freshfade 2s ease-out forwards;pointer-events:none}
+@keyframes freshfade{from{opacity:1}to{opacity:0}}
+
+/* ---------- what opens next ---------- */
+.nextline{display:flex;align-items:center;gap:8px;margin:-4px 0 14px;padding:9px 12px;border:1px solid var(--border);border-radius:var(--r-row);
+  background:color-mix(in srgb,var(--surface-1) 70%,transparent);color:var(--text-2);font-size:13px}
+.nextline .grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.nextline b{color:var(--text-1)}
+.nlhow{flex:none;font:600 12px var(--mono);color:var(--brand);font-variant-numeric:tabular-nums}
+.tabs button.locked .ti{opacity:.5}
+.tabs .tlock{position:absolute;top:4px;right:6px;color:var(--text-2);display:inline-flex}
+.panel.lockedsys{text-align:center;padding:30px 18px;display:grid;justify-items:center;gap:6px}
+.lkico{position:relative;font-size:54px;line-height:1;margin-bottom:8px;filter:grayscale(.55)}
+.lkbadge{position:absolute;right:-12px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:var(--surface-2);
+  border:1px solid var(--border-strong);display:grid;place-items:center;color:var(--text-1);filter:none}
+.lktitle{font:700 22px/1.2 var(--font-display);letter-spacing:-.01em;text-wrap:balance}
+.lkline{font-size:14.5px;line-height:1.45;color:var(--text-2);max-width:340px;text-wrap:pretty}
+.lkhow{font:600 13px var(--mono);color:var(--brand);margin-top:6px}
+.bar.lkbar{width:min(320px,100%);height:10px;margin-top:8px}
+.lkmeta{font:500 12px var(--mono);color:var(--text-2);font-variant-numeric:tabular-nums}
+.lockedsys .btn{margin-top:12px}
+.ladrow{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-row);background:var(--surface-2);margin-bottom:8px}
+.ladrow:last-child{margin-bottom:0}
+.ladrow.open{border-color:color-mix(in srgb,var(--ok) 40%,var(--border))}
+.ladrow .grow{flex:1;min-width:0}
+.ladico{font-size:22px;width:30px;text-align:center;flex:none;filter:grayscale(.8);opacity:.7}
+.ladrow.open .ladico{filter:none;opacity:1}
+.ladrow .title{font-weight:600;font-size:15px}
+.ladrow .meta{font-size:13px;line-height:1.4;color:var(--text-2);margin-top:2px}
+.ladstate{flex:none;display:inline-flex;align-items:center;gap:4px;font:600 12px var(--mono);color:var(--text-2);white-space:nowrap}
+.ladstate.ok{color:var(--ok)}
+
+/* ---------- Sage's touches on existing screens ---------- */
+.chip.sagechip{display:inline-flex;align-items:center;min-height:36px;margin:0 0 8px;padding:6px 12px;cursor:pointer;
+  border:1px solid color-mix(in srgb,var(--brand) 50%,var(--border));background:var(--brand-soft);color:var(--brand);font:600 13px var(--body)}
+.chip.sagechip:hover{border-color:var(--brand)}
+.panel.logcard.evening{border-color:color-mix(in srgb,var(--brand) 50%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 8%,var(--surface-1)),var(--surface-1))}
+.btn.sagepick{margin-top:8px;border-color:color-mix(in srgb,var(--brand) 50%,var(--border));max-width:100%;white-space:normal;text-align:left}
+.btn.sagepick b{color:var(--brand)}
+.chron{border:1px solid var(--border);border-radius:var(--r-row);padding:12px 14px;background:var(--surface-2);margin:12px 0}
+.chk{font:700 11.5px var(--font-display);letter-spacing:.1em;text-transform:uppercase;color:var(--brand)}
+.cht{font:700 19px/1.2 var(--font-display);letter-spacing:-.01em;margin:4px 0 6px;text-wrap:balance}
+.chron p{font-size:14px;line-height:1.5;color:var(--text-2)}
+.seg{display:flex;gap:6px;margin:6px 0}
+.seg button{flex:1;min-width:0;min-height:44px;border:1px solid var(--border);border-radius:var(--r-control);background:var(--surface-2);
+  color:var(--text-2);font:600 13.5px var(--body);transition:transform .15s var(--spring),border-color .15s,color .15s}
+.seg button:active{transform:scale(.97)}
+.seg button.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
+.hint.segdesc{margin-bottom:10px}
+
+/* ---------- ceremonies: level up, rank up, now open, day won ----------
+   One card for every big moment (see ceremony() in app.js). The card is a
+   real surface, not text floating on the dimmed page, so it reads on every
+   theme. Order of arrival: the medallion pops, then each reward row slides
+   up in turn (the row's --i sets its delay), then the buttons are simply
+   there. */
+#overlay .levelbox.cer{position:relative;width:min(420px,calc(100vw - 32px));max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:hidden auto;
+  padding:30px 20px 18px;text-align:center;background:var(--surface-1);border:1px solid var(--border);border-radius:24px;
+  box-shadow:inset 0 1px 0 var(--hair),var(--elev2);animation:cerin .42s var(--ease) both;overscroll-behavior:contain}
+@keyframes cerin{from{opacity:0;transform:translateY(18px) scale(.96)}}
+.cer>*{position:relative}
+/* slow rays behind the medallion; a mask fades them out toward the card edge */
+.cer>.cer-rays{position:absolute;left:50%;top:86px;width:560px;height:560px;margin:-280px 0 0 -280px;border-radius:50%;pointer-events:none;
+  background:repeating-conic-gradient(from 0deg,color-mix(in srgb,var(--brand) 20%,transparent) 0 8deg,transparent 8deg 20deg);
+  -webkit-mask:radial-gradient(circle,#000 0,rgba(0,0,0,.5) 34%,transparent 64%);mask:radial-gradient(circle,#000 0,rgba(0,0,0,.5) 34%,transparent 64%);
+  animation:cerspin 2.4s var(--ease) both}
+/* the rays turn in once and settle: one moving thing per card is enough */
+@keyframes cerspin{from{transform:rotate(-30deg);opacity:0}}
+.cer-badge{width:112px;height:112px;margin:0 auto 16px;display:grid;place-items:center;border-radius:50%;
+  background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--brand) 34%,var(--surface-2)),var(--surface-2) 70%);
+  border:2px solid var(--brand);box-shadow:0 0 0 6px var(--brand-soft),0 14px 34px -12px color-mix(in srgb,var(--brand) 70%,transparent);
+  animation:cerpop .6s var(--spring) .08s both}
+@keyframes cerpop{from{opacity:0;transform:scale(.3) rotate(-18deg)}}
+.cer-badge>*{grid-area:1/1}
+.cer-num{font-family:var(--px);font-size:34px;line-height:1;color:var(--brand);font-variant-numeric:tabular-nums}
+.cer-ring{width:100%;height:100%;border-radius:50%;border:2px solid color-mix(in srgb,var(--brand) 60%,transparent);animation:cerring 1.8s ease-out 3;pointer-events:none;opacity:0}
+@keyframes cerring{from{transform:scale(1);opacity:.8}to{transform:scale(1.5);opacity:0}}
+.cer-ico{font-size:54px;line-height:1;animation:cerpop .7s var(--spring) .2s both}
+.cer-kicker{font:700 12px/1 var(--font-display);letter-spacing:.24em;text-transform:uppercase;color:var(--brand);margin-bottom:8px}
+.levelbox.cer .big.cer-title{font:700 30px/1.1 var(--font-display);letter-spacing:-.02em;color:var(--text-1);text-shadow:none;margin-bottom:8px;text-wrap:balance}
+.levelbox.cer .sub.cer-sub{font:400 14.5px/1.45 var(--body);color:var(--text-2);margin-bottom:0;text-wrap:pretty}
+.cer-rows{display:grid;gap:8px;margin-top:16px;text-align:left}
+.cer-row{display:flex;gap:12px;align-items:center;min-height:52px;padding:9px 12px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);
+  animation:cerrow .45s var(--ease) both;animation-delay:calc(.38s + var(--i,0) * .09s)}
+@keyframes cerrow{from{opacity:0;transform:translateY(10px)}}
+.cer-row .ri{flex:none;width:30px;text-align:center;font-size:20px;line-height:1}
+.cer-row .ri.av .svgav{width:30px;height:30px;display:block}
+.cer-row .rt{flex:1;min-width:0}
+.cer-row .rt b{display:block;font:600 14.5px/1.3 var(--body);color:var(--text-1)}
+.cer-row .rt small{display:block;font-size:12.5px;line-height:1.4;color:var(--text-2);margin-top:1px}
+.cer-act{display:grid;gap:8px;margin-top:16px}
+.levelbox.cer .btn{margin-top:0}
+.cer-act .btn.go{min-height:50px;font-size:16px}
+/* rank up keeps its big pixel letter; the medallion frame steps aside for it */
+.rankcer .cer-badge{width:auto;height:auto;background:none;border:none;box-shadow:none;margin-bottom:4px;animation:none}
+.rankcer .cer-badge .rankbig{margin:4px 0 10px}
+.levelbox.cer .rankname{display:block;font-family:var(--px);font-size:14px;letter-spacing:3px;margin:0}
+/* day won: the flame is the medallion, the streak number sits on a pill under it */
+.daywon .cer-badge{border-color:var(--warn);box-shadow:0 0 0 6px var(--warn-soft),0 14px 34px -12px color-mix(in srgb,var(--warn) 70%,transparent);
+  background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--warn) 34%,var(--surface-2)),var(--surface-2) 70%);position:relative}
+.daywon .cer-rays{background:repeating-conic-gradient(from 0deg,color-mix(in srgb,var(--warn) 22%,transparent) 0 8deg,transparent 8deg 20deg)}
+.daywon .cer-kicker{color:var(--warn)}
+.cer-flame{font-size:56px;line-height:1;animation:cerflame 1.5s ease-in-out 3;transform-origin:50% 80%}
+@keyframes cerflame{50%{transform:scale(1.08) rotate(-3deg)}}
+.daywon .cer-num{position:absolute;left:50%;bottom:-12px;transform:translateX(-50%);grid-area:auto;font-size:15px;color:var(--warn);
+  background:var(--surface-1);border:2px solid var(--warn);border-radius:var(--r-pill);padding:6px 12px 5px}
+.wkdots{display:flex;gap:6px;flex:1}
+.wkdots i{flex:1;min-width:0;height:32px;border-radius:10px;background:var(--surface-1);border:1px solid var(--border);display:grid;place-items:center;font-style:normal}
+.wkdots i.on{background:var(--warn-soft);border-color:var(--warn)}
+.wkdots i.today{outline:2px solid var(--warn);outline-offset:1px}
+.wkdots b{font:700 11px var(--mono);color:var(--text-2)}
+.wkdots i.on b{color:var(--warn)}
+body.light .wkdots i.on b,body.light .daywon .cer-kicker,body.light .daywon .cer-num{color:#a8540c}
+
+/* ---------- fx.js: the small flourishes ---------- */
+.fx-fly{position:fixed;z-index:84;pointer-events:none;transform:translate(-50%,-50%);font:700 14px var(--mono);padding:5px 11px;border-radius:var(--r-pill);
+  background:var(--surface-1);border:1px solid var(--xp);color:var(--xp);box-shadow:0 6px 18px -6px rgba(0,0,0,.6);white-space:nowrap}
+body.light .fx-fly{color:#157a47;border-color:#157a47}
+/* where a flown chip lands: the XP bar swells for a beat */
+.fx-land{animation:fxland .5s var(--spring)}
+@keyframes fxland{35%{transform:scale(1.04)}}
+.fx-bump{animation:fxbump .4s var(--spring)}
+@keyframes fxbump{40%{transform:scale(1.18)}}
+/* the streak pill on the first action of a day */
+.fx-ignite{animation:fxignite .9s var(--spring)}
+@keyframes fxignite{30%{transform:scale(1.4) rotate(-6deg)}60%{transform:scale(1.1) rotate(4deg)}}
+.fx-combo{position:fixed;left:50%;top:calc(74px + env(safe-area-inset-top));z-index:84;pointer-events:none;transform:translateX(-50%);
+  font:400 14px/1 var(--px);letter-spacing:1px;padding:11px 16px 10px;border-radius:14px;color:var(--brand-ink);background:var(--brand);
+  box-shadow:0 10px 30px -8px color-mix(in srgb,var(--brand) 75%,transparent);white-space:nowrap}
+.fx-combo.warm{background:var(--warn);color:#241300;box-shadow:0 10px 30px -8px color-mix(in srgb,var(--warn) 75%,transparent)}
+.fx-combo.hot{background:var(--danger);color:#fff;box-shadow:0 10px 30px -8px color-mix(in srgb,var(--danger) 75%,transparent)}
+.fx-combo.show{animation:fxcombo 1.6s var(--ease) both}
+@keyframes fxcombo{0%{opacity:0;transform:translateX(-50%) translateY(-14px) scale(.7)}12%{opacity:1;transform:translateX(-50%) translateY(0) scale(1.1)}
+  22%{transform:translateX(-50%) translateY(0) scale(1)}80%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}100%{opacity:0;transform:translateX(-50%) translateY(-8px) scale(.96)}}
+.fx-stamp{position:fixed;left:50%;top:42%;z-index:84;pointer-events:none;font:400 clamp(20px,6.4vw,38px)/1 var(--px);letter-spacing:2px;color:var(--brand);
+  border:4px solid var(--brand);border-radius:14px;padding:16px 20px 14px;background:color-mix(in srgb,var(--surface-0) 86%,transparent);white-space:nowrap;
+  animation:fxstamp 1s var(--ease) both}
+@keyframes fxstamp{0%{opacity:0;transform:translate(-50%,-50%) scale(2.2) rotate(-12deg)}22%{opacity:1;transform:translate(-50%,-50%) scale(.94) rotate(-6deg)}
+  32%{transform:translate(-50%,-50%) scale(1) rotate(-6deg)}75%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-6deg)}100%{opacity:0;transform:translate(-50%,-50%) scale(1.04) rotate(-6deg)}}
+
+@media(max-width:640px){
+  .draft{padding:12px}
+  .dact{flex-wrap:wrap}
+  .seg button{font-size:12.5px;padding:0 4px}
+  #overlay .levelbox.cer{padding:26px 16px 16px;border-radius:22px}
+  .levelbox.cer .big.cer-title{font-size:26px}
+}
+
+/* older celebrations moved onto the ceremony card */
+.cer .lootline{font:inherit;color:inherit;margin:0;padding:0;border:none;background:none;box-shadow:none;max-width:none}
+.cer .lootline.gold{color:var(--brand)}
+#overlay .levelbox.cer .chestshake{font-size:72px;margin:6px 0 14px}
+#overlay.defeat .cer-badge{border-color:var(--danger);box-shadow:0 0 0 6px var(--danger-soft),0 14px 34px -12px color-mix(in srgb,var(--danger) 70%,transparent);
+  background:radial-gradient(circle at 32% 26%,color-mix(in srgb,var(--danger) 30%,var(--surface-2)),var(--surface-2) 70%)}
+#overlay.defeat .cer-kicker{color:var(--danger)}
+#overlay.defeat .cer-rays{background:repeating-conic-gradient(from 0deg,color-mix(in srgb,var(--danger) 18%,transparent) 0 8deg,transparent 8deg 20deg)}
+#overlay.defeat .cer-ring{border-color:color-mix(in srgb,var(--danger) 60%,transparent)}
+.cer-act .btn:disabled{cursor:not-allowed}
+.planfoot{display:flex;justify-content:flex-end;margin-top:8px}
+.capchip.date.bare{padding:6px 10px}
+.capsteps{text-wrap:pretty}
+#overlay .daywon .cer-badge{margin-bottom:28px}
+
+/* ---------- design audit fixes (contrast, targets, short screens) ----------
+   --brand-text is the brand colour when it is used AS TEXT. On the five dark
+   themes it is the accent itself. Daylight's accent (#b4740a) is fine as a
+   fill but only about 3.9:1 as text on white, so text gets a deeper amber
+   there (about 6.7:1). Use --brand for fills and borders, --brand-text for
+   words. */
+:root{--brand-text:var(--brand)}
+body.light{--brand-text:#7f5205}
+.capchip.kind,.capchip.epic,.seg button.on,.chip.sagechip,.chk,.cer .lootline.gold,.nlhow,.lkhow,.cer-kicker,
+.btn.sagepick b,.cer-num,.capfoot .btn,.dsub b{color:var(--brand-text)}
+.capchip.kind{border-color:color-mix(in srgb,var(--brand) 55%,var(--border))}
+body.light .capchip.easy,body.light .ladstate.ok{color:#0f7a48}
+body.light .capchip.normal{color:#1a5fb4}
+body.light .capchip.hard{color:#6437c9}
+body.light .capchip.area{color:#5a45c9}
+body.light #overlay.defeat .cer-kicker{color:#c0264a}
+body.light .wkdots i.on b{color:#8f4708}
+/* white text on amber is 3.9:1, so Daylight's filled amber gets a step darker */
+body.light .quick.qa button.primary,body.light .fx-combo{background:#946007;border-color:#946007;color:#fff}
+.fx-combo.hot{color:#2a0008}
+.capfoot .btn.go{color:#04160c}
+/* the capture box: a visible edge and a readable placeholder on every theme */
+.capin textarea{border-color:var(--border-strong)}
+.capin textarea::placeholder{color:var(--text-2)}
+/* switched-off rows stay readable (they are still live toggles); the strike
+   says "off" instead of fading the words */
+.drow:not(.on) .grow,.drow:not(.on) .dmin,.capcard.off .grow{opacity:1}
+.drow:not(.on) .dt,.capcard.off .captitle{color:var(--text-2);text-decoration:line-through;text-decoration-color:var(--border-strong)}
+/* grey text sitting on the brand-tinted cards needs a little more ink */
+.capsteps,.pflabel,.dsub,.dw{color:color-mix(in srgb,var(--text-2) 85%,var(--text-1))}
+/* touch screens get full 44px chips; a mouse keeps the compact 36px */
+@media (pointer:coarse){
+  .capchip,.chip.sagechip{min-height:44px}
+  .capchip.date.bare{min-width:44px;justify-content:center}
+}
+/* a mouse cannot scroll a row sideways, so on desktop the packs wrap */
+@media (pointer:fine){.cappacks{flex-wrap:wrap;overflow:visible}}
+/* Lock in my day is a button, not a banner, on wide screens */
+@media(min-width:641px){.dact .btn.go{flex:0 0 auto;min-width:240px}}
+/* short phones (iPhone SE and friends): the ceremony card tightens up and its
+   buttons stay pinned to the bottom of the card while the rows scroll */
+@media (max-height:680px){
+  #overlay .levelbox.cer{padding-top:20px}
+  .cer-badge{width:84px;height:84px;margin-bottom:10px}
+  .cer-num{font-size:26px}
+  .cer-ico{font-size:40px}
+  .cer>.cer-rays{top:62px}
+  .cer-rows{margin-top:10px;gap:6px}
+  .cer-row{min-height:44px;padding:6px 10px}
+  .levelbox.cer .big.cer-title{font-size:24px}
+}
+.cer-act{position:sticky;bottom:-18px;padding:10px 0 18px;margin-bottom:-18px;background:linear-gradient(transparent,var(--surface-1) 24%)}
+/* text only screen readers hear, for the tab lock */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ========== Pixel art (art.js) ==========
+   .pxi is an emoji the swap replaced: the drawing, plus the original emoji
+   as screen-reader text (.pxt). Sized in em so a drawing is as big as the
+   emoji it replaced, wherever it sits (a 12px chip, a 40px medallion).
+   .px is an interface icon (svgIcon), .pxhero a portrait or big sprite. */
+.pxi{display:inline-flex;align-items:center;justify-content:center;vertical-align:-.16em;line-height:1}
+.pxi svg{width:1.12em;height:1.12em;display:block;overflow:visible}
+.pxi.big svg{width:1.25em;height:1.25em}
+.pxt{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+svg.px{display:inline-block;flex:none}
+svg.pxhero{display:block;width:100%;height:100%}
+.svgav{display:block;width:100%;height:100%}
+/* the pixel wordmark in the header */
+.logo b .pxtext{display:block;height:22px;width:auto;margin:0 auto;overflow:visible}
+.logo b .pxtext .pp{fill:var(--ink)}
+.logo b .pxtext .pg:nth-child(3n+1) .pp:nth-child(7n+2){fill:var(--gold)}
+/* Daylight: pale drawings (silver, cream, white tiles) get a hairline so
+   they still read on the light page */
+body.light .pxi svg{filter:drop-shadow(0 0 .6px rgba(40,30,20,.55))}
+
+/* the header wordmark is pixel tiles now: no gradient text, no gold rule */
+.logo{margin:4px 0 12px;font-size:0;letter-spacing:0;text-shadow:none}
+.logo b{background:none;-webkit-text-fill-color:currentColor;filter:none;display:block}
+.logo::after{display:none}
+.logo .gear{font-size:18px}
+
+/* ========== Calmer screens (Nov 2026) ==========
+   One control per row: the tick on the left clears it, the ⋯ on the right
+   opens everything else (rowMenu in app.js). Rows stay on one line on a
+   phone, meta lines truncate instead of wrapping, panels lose their heavy
+   borders, typed add forms fold behind a "+" row. If a row starts wrapping
+   again on a 375px phone, look for a rule that sets .item{flex-wrap:wrap}. */
+.panel{background:color-mix(in srgb,var(--panel) 86%,transparent);border-color:color-mix(in srgb,var(--line) 65%,transparent);box-shadow:none;padding:14px}
+.panel h3{font-size:16px;margin-bottom:10px}
+.panel h3 .cnt{color:var(--text-2)}
+.item{flex-wrap:nowrap;min-height:52px;padding:8px 4px 8px 10px;gap:10px;border-color:transparent;border-radius:12px;
+  background:color-mix(in srgb,var(--panel2) 72%,transparent);margin-bottom:6px}
+.item:hover{transform:none;background:var(--panel2)}
+.item .grow{flex:1 1 auto;order:0;min-width:0}
+.item .title{font-size:15px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.item .meta{display:block;font-size:12.5px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .meta .chip{margin-left:6px;padding:1px 7px;font-size:10.5px}
+.item.done{opacity:1}
+.item.done .title{color:var(--text-2);text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--muted) 55%,transparent)}
+.item.done .meta{opacity:.7}
+/* the tick: a 26px tile with a 44px invisible touch area around it */
+.tick{flex:none;width:26px;height:26px;border-radius:8px;border:2px solid color-mix(in srgb,var(--ink) 28%,transparent);
+  background:transparent;display:inline-flex;align-items:center;justify-content:center;position:relative;color:var(--ink)}
+.btn.tick{padding:0;min-height:0;min-width:0;overflow:visible;cursor:pointer}
+/* every .btn carries a hover shine in ::after; on the tick that slot is the
+   enlarged touch area instead, so the shine is switched off here */
+.btn.tick::after{content:"";position:absolute;inset:-9px;width:auto;height:auto;background:none;transform:none;transition:none}
+.btn.tick:hover{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 14%,transparent)}
+.btn.tick:active{transform:scale(.88)}
+.tick.on{background:var(--good);border-color:var(--good);color:#06210f}
+.tick.on .i{width:16px;height:16px}
+.tick.off{border-style:dashed;opacity:.45}
+.tick.sm{width:22px;height:22px;border-radius:7px}
+.tick.sm.on .i{width:13px;height:13px}
+.btn.more{flex:none;width:36px;min-width:36px;height:40px;min-height:0;padding:0;color:var(--text-2)}
+.btn.more:hover{color:var(--ink)}
+/* the week as seven small tiles */
+.item .hdots{flex:none;gap:2px}
+.hd{width:7px;height:7px;border-radius:2px;background:color-mix(in srgb,var(--ink) 13%,transparent);box-shadow:none}
+.hd.on{background:var(--xp);box-shadow:none}
+.hd.today{outline:none;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--ink) 50%,transparent)}
+.hd.on.today{box-shadow:none}
+@media(max-width:360px){.item .hdots{display:none}}
+.item.monster .btn.slip{min-height:34px;padding:6px 10px;font-size:13px}
+.item.monster .meta .cost{color:var(--hp)}
+/* dated rows (Coming up, Deadlines) */
+.ag{flex-wrap:nowrap;border:none;border-radius:10px;padding:7px 8px;gap:10px;background:color-mix(in srgb,var(--panel2) 72%,transparent)}
+.ag .grow{flex:1 1 auto}
+.ag.overdue,.ag.today{border:none}
+.ag.overdue{box-shadow:inset 3px 0 0 var(--hp)}
+.ag .submeta{font-size:12px;color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* folding panels: Coming up, Deadlines */
+details.panel>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:28px}
+details.panel>summary::-webkit-details-marker{display:none}
+details.panel>summary h3{margin:0;flex:1}
+details.panel>summary>.i{color:var(--text-2);transition:transform .16s var(--ease)}
+details.panel[open]>summary>.i{transform:rotate(180deg)}
+details.panel[open]>summary{margin-bottom:8px}
+.panel.comingup,.panel.deadlines{margin-top:12px}
+.foldmore,.stepsmore{width:100%;margin-top:2px;color:var(--text-2)}
+.foldmore:hover,.stepsmore:hover{color:var(--ink)}
+/* main quests */
+.goal{border:1px solid color-mix(in srgb,var(--gold) 32%,transparent);border-radius:14px;padding:12px;box-shadow:none;
+  background:color-mix(in srgb,var(--gold) 5%,transparent)}
+.goal .t{flex-wrap:nowrap;align-items:flex-start}
+.goal .title{font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.goal .bar{height:6px;margin-top:8px}
+.goal .bar>i{box-shadow:none}
+.goal .pct{color:var(--text-2)}
+.steps{gap:2px;margin-top:8px}
+.step{border:none;background:transparent;padding:4px 0 4px 2px;gap:10px;font-size:14px}
+.step.done .grow{color:var(--text-2);text-decoration:line-through}
+.step .when{font-family:var(--mono);font-size:11px;color:var(--text-2);white-space:nowrap}
+.step .when.late{color:var(--hp)}
+.goal>.btn.go.wide{margin-top:8px}
+/* typed add forms, folded */
+details.addform{margin-top:6px}
+details.addform>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 8px;
+  border-radius:10px;color:var(--text-2);font-size:14px;font-weight:600}
+details.addform>summary::-webkit-details-marker{display:none}
+details.addform>summary:hover,details.addform[open]>summary{color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent)}
+details.addform .form{margin-top:8px}
+/* the ⋯ sheet */
+.rowmenu .rmhead{font:700 17px/1.3 var(--font-display);margin-bottom:4px;overflow-wrap:anywhere}
+.rowmenu .rminfo{font-size:13px;color:var(--text-2);margin-bottom:14px}
+.rmacts{display:grid;gap:6px;margin-bottom:10px}
+.rmact{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;padding:0 14px;border-radius:12px;
+  border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:600 15px var(--body);text-align:left}
+.rmact:hover{border-color:var(--brand)}
+.rmact.danger{color:var(--danger)}
+.rmact .i{width:18px;height:18px}
+/* the primary action takes the theme accent instead of a fixed green */
+.btn.go{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.go:hover{filter:brightness(1.08);box-shadow:none}
+/* header and the one-line slots, lighter */
+.hud{background:color-mix(in srgb,var(--panel) 70%,transparent);border-color:transparent;box-shadow:none}
+.sageline{background:none;border-color:transparent;color:var(--text-2);padding-left:2px}
+.todayhead .hi{font-size:clamp(20px,4.6vw,24px)}
+.goal .t{flex-direction:row;align-items:flex-start}
+.goal .t .title{flex:1 1 auto}
+.boss.calm{flex-wrap:nowrap;align-items:flex-start;border-color:color-mix(in srgb,var(--line) 65%,transparent)}
+.boss.calm .ic{font-size:28px;flex:none}
+.boss.calm .sub{font-family:var(--body);font-size:13px}
+.boss .sagepick{margin-top:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;justify-content:flex-start}
+.boss details.addform>summary{padding:0 2px;min-height:40px}
+.bossform{display:grid;gap:8px}
+
+/* ========== the opening (introPlay in app.js) ========== */
+#intro{position:fixed;inset:0;z-index:95;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:color-mix(in srgb,var(--bg) 18%,transparent)}
+/* everything but the intro and the mosaic canvas steps out while it plays */
+body.introing>*:not(#intro):not(#bg):not(#pxSprite){opacity:0!important}
+body.introout>*:not(#intro):not(#bg):not(#pxSprite){animation:introAppIn .6s .2s cubic-bezier(.2,.9,.3,1) both}
+@keyframes introAppIn{from{opacity:0}to{opacity:1}}  /* opacity only: a transform here would detach the fixed bars inside #wrap for the length of the fade */
+#intro .introin{display:flex;flex-direction:column;align-items:center;gap:22px;width:100%;max-width:560px;text-align:center}
+#intro .introtitle{width:min(86vw,520px);height:auto;overflow:visible}
+#intro .introtitle .pp{fill:var(--ink);transform-box:fill-box;transform-origin:50% 50%;transition:fill .5s}
+#intro .introtitle .pp.lit{fill:var(--gold)}
+#intro .introtitle .pg{transform-box:fill-box;transform-origin:50% 50%}
+#intro .introsub{font:600 17px/1.4 var(--font-display);color:var(--text-2);display:flex;align-items:center;gap:10px}
+#intro .introav{width:34px;height:34px;display:inline-block;flex:none}
+#intro .introgo{min-height:52px;padding:0 26px;font-size:16px;border-radius:14px}
+
+/* ========== review fixes (Nov 2026) ========== */
+/* the shake moves the header and the cards only (see shake() in app.js) */
+.wrap.shake{animation:none}
+body.shake #hud,body.shake #view>*:not(.qa):not(.qaspace){animation:shake .4s}
+/* the tick outline reaches 3:1 against the row in every theme */
+.tick{border-color:var(--text-2)}
+body.light .hd.on{background:#1d7a4c}
+body.light .btn.buy,body.light .scard .price,body.light .hud .coin,body.light .obprice{color:var(--brand-text)}
+/* 44px touch targets */
+.btn.more{width:44px;min-width:44px;height:44px}
+.step{min-height:40px}
+details.panel>summary{min-height:44px}
+.item.monster .btn.slip{min-height:40px}
+.logo .gear{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+/* pixel drawings are sharpest at whole pixels per tile: icons at multiples
+   of 7px, heroes at multiples of 20px (16 tiles plus a 2-tile frame) */
+.i{width:21px;height:21px}
+.i.sm{width:14px;height:14px}
+.tabs .i{width:21px;height:21px}
+.tick.on .i,.tick.sm.on .i{width:14px;height:14px}
+.avpick.svgrow .svgav{width:40px;height:40px}
+.herotop .heroav{width:64px;height:64px}
+.herotop .heroav .svgav{width:40px;height:40px}
+.bldprev .svgav{width:100px;height:100px}
+#intro .introav{width:40px;height:40px}
+.hud .avatar .svgav{width:40px;height:40px}
+/* builder: hair and extras are previews of the hero wearing them */
+.bld{min-width:44px;height:44px}
+.bld.sw{width:40px;height:40px;border-radius:10px}
+.bld.look{width:52px;height:52px;padding:4px}
+.bld.look .pxhero{width:40px;height:40px;margin:0 auto}
+/* Sage's reason under each draft row stays on one line */
+.drow .dw{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* greys that fell under 4.5:1 */
+.item.done .meta{opacity:1}
+.advlog .tm{color:var(--text-2)}
+.toast .undobtn{pointer-events:auto}
+
+/* ========== hero rarity in the picker ========== */
+.avpick.svgrow button{border-width:1.5px}
+.avpick.svgrow button.t-rare{border-color:color-mix(in srgb,#5aa2ff 55%,var(--line))}
+.avpick.svgrow button.t-epic{border-color:color-mix(in srgb,#b07bff 65%,var(--line))}
+.avpick.svgrow button.t-legendary{border-color:color-mix(in srgb,#f5c542 75%,var(--line))}
+.avpick.svgrow button.on{border-color:var(--brand);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand) 45%,transparent)}
+.avlegend{display:flex;gap:12px;margin:6px 2px 0;font-size:12px;color:var(--text-2)}
+.avlegend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:0}
+.avlegend .t-rare::before{background:#5aa2ff}.avlegend .t-epic::before{background:#b07bff}.avlegend .t-legendary::before{background:#f5c542}
+
+/* ========== capture sheet: one task at a time (Nov 2026) ========== */
+.capbar{display:flex;align-items:center;gap:8px;margin-top:6px}
+.capbar .hint{flex:1;min-width:0;margin:0}
+.capcommit{min-height:40px;padding:0 14px;flex:none}
+.caplang{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:none}
+.caplang button{min-width:40px;min-height:40px;background:none;border:none;color:var(--text-2);font:700 12px var(--mono)}
+.caplang button.on{background:var(--panel2);color:var(--ink)}
+.capchip .i{width:12px;height:12px;margin-left:3px;opacity:.7}
+.capchip.open{border-color:var(--brand)}
+.cappick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding:8px;border-radius:12px;background:color-mix(in srgb,var(--panel2) 80%,transparent);border:1px solid var(--line)}
+.cappick button{min-height:40px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:600 13px var(--body)}
+.cappick button.on{border-color:var(--brand);color:var(--brand-text);background:color-mix(in srgb,var(--brand) 12%,transparent)}
+.capnote{display:flex;align-items:center;gap:8px;margin:10px 0 2px;padding:8px 10px;border-radius:12px;font-size:13px;
+  background:color-mix(in srgb,var(--good) 12%,transparent);border:1px solid color-mix(in srgb,var(--good) 40%,transparent)}
+.capnote span{flex:1;min-width:0}
+.capnote .i{color:var(--good)}
+.cappackhead.flash{animation:capflash 1.6s ease-out}
+@keyframes capflash{0%{background:color-mix(in srgb,var(--good) 30%,transparent)}100%{background:transparent}}
+
+/* ========== onboarding: Your day and the grouped board (Nov 2026) ========== */
+.obq{margin-top:16px}
+.obq:first-of-type{margin-top:6px}
+.obqt{font:700 16px/1.35 var(--font-display);color:var(--ink);margin-bottom:8px}
+.obqh{margin-top:8px;line-height:1.45}
+.obmodes{display:grid;gap:8px}
+.obmode{display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;padding:12px 14px;border-radius:14px;
+  border:1.5px solid var(--line);background:var(--panel2);color:var(--ink);cursor:pointer}
+.obmode.on{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 10%,var(--panel2))}
+.obmode .omi{font-size:22px;line-height:1;flex:none;margin-top:2px}
+.obmode b{display:flex;align-items:center;gap:8px;font:700 15px var(--font-display)}
+.obmode small{display:block;margin-top:3px;font-size:13px;line-height:1.45;color:var(--text-2)}
+.omrec{font:700 10px/1.6 var(--mono);letter-spacing:.04em;text-transform:uppercase;padding:0 7px;border-radius:999px;
+  color:var(--brand-text);border:1px solid color-mix(in srgb,var(--brand) 55%,transparent)}
+.obgroup{margin-top:14px;padding:12px;border-radius:16px;border:1px solid var(--line);background:color-mix(in srgb,var(--panel2) 55%,transparent)}
+.obghead{font:700 15px var(--font-display);display:flex;align-items:center;gap:8px}
+.obgname{font:600 13px var(--body);color:var(--text-2)}
+.obgsub{font-size:12px;color:var(--text-2);margin:2px 0 8px}
+.obsub{font:700 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--text-2);margin:10px 2px 6px}
+.obsteps{margin:2px 0 6px 44px;padding:0;font-size:12.5px;color:var(--text-2);line-height:1.6}
+.obsteps li.more{list-style:none;margin-left:-14px}
+#intro .introsub.two{flex-direction:column;gap:2px}
+#intro .introsub.two b{font:700 20px/1.3 var(--font-display);color:var(--ink)}

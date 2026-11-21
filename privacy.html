@@ -17,7 +17,7 @@
 <body>
 <p><a href="./">&larr; Back to ScaleMyLife</a></p>
 <h1>🏆 ScaleMyLife - Privacy Policy</h1>
-<p class="muted">Last updated: 18 July 2026</p>
+<p class="muted">Last updated: 16 November 2026</p>
 
 <p>ScaleMyLife is a personal habit and productivity game. The short version: <b>your data is yours, it stays on your device unless you opt into cloud sync, and we run no ads, no analytics and no tracking of any kind.</b></p>
 
@@ -25,6 +25,8 @@
 <p><b>On your device.</b> Everything you enter (quests, habits, journal entries, mood and sleep logs, focus sessions, character customization, settings) is saved in your browser's local storage. It never leaves your device unless you turn on cloud sync.</p>
 <p><b>Cloud sync (optional).</b> If you create an account, your email address, a password hash and a copy of your game save are stored in our database (hosted by <a href="https://supabase.com" rel="noopener">Supabase</a>) so your progress follows you across devices. Your save is protected by row-level security: only your signed-in account can read it. Passwords are hashed with bcrypt; we never see or store them in plain text.</p>
 <p><b>Leaderboard and friends (optional).</b> Joining the leaderboard or enabling friends shares exactly six fields: your hero name, avatar, level, rank, weekly XP and best streak. Never your quests, habits, journal or any other content. Leaving the leaderboard deletes that row entirely.</p>
+
+<p><b>Voice input (optional).</b> The microphone button in the Add sheet uses the speech recognition built into your browser. ScaleMyLife never receives or stores the audio: only the text your browser hands back appears in the box, and it is treated like anything else you type. Depending on the browser, the audio is sent to the browser maker's speech service to be turned into text (in Chrome, to Google). If you never tap the microphone, nothing is recorded, and typing or pasting does the same job without it.</p>
 
 <h2>What we don't do</h2>
 <ul>
@@ -38,6 +40,7 @@
 <ul>
 <li><b>Supabase</b> - database and authentication, only if you enable cloud sync.</li>
 <li><b>Google Fonts</b> - loads the app's typefaces.</li>
+<li><b>Your browser's speech service</b> - only if you tap the microphone (in Chrome this is Google). See "Voice input" above.</li>
 <li><b>YouTube (privacy-enhanced mode)</b> - only if you choose focus music, the player is embedded from youtube-nocookie.com and only after you pick a station.</li>
 </ul>
 

@@ -1133,6 +1133,286 @@ ok(p37.title === 'Renew passport in 90 days' && p37.due === null, '"in N days" o
 var p38 = RPG.parseTask('Water the plants');
 ok(p38 && p38.title === 'Water the plants', 'omitting `now` falls back to the current date without throwing');
 
+/* ===== Sage as game master (capture, packs, draft, debrief, boss, chronicle, stages) =====
+   The parsing tests pin "now" to Friday 18 September 2026 (the same day the
+   parseTask tests above use), so "friday" and "tomorrow" resolve to fixed
+   dates. The plan tests use the real clock, because completing a quest stamps
+   it with the real today. */
+section('parseDump: one brain dump becomes typed items');
+var GM_NOW = new Date(2026, 8, 18, 10, 0, 0);
+var gmSkills = RPG.seedPreset(RPG.newState('T', '🧙'), ['student']).skills;   // Study, Body, Craft, Social, Money
+function pd(t) { return RPG.parseDump(t, GM_NOW, gmSkills); }
+function areaName(id) { var k = gmSkills.find(function (x) { return x.id === id; }); return k ? k.name : null; }
+
+var d1 = pd('I need to call the bank and email my landlord, then finish the marketing essay by friday');
+ok(d1.length === 3, 'one spoken sentence splits into three tasks at "and" / ", then" when a task verb follows');
+ok(d1[0].title === 'Call the bank' && d1[0].kind === 'side' && d1[0].diff === 'easy' && areaName(d1[0].skillId) === 'Money', 'filler ("I need to") is stripped, an errand is an Easy side quest, "bank" lands in Money');
+ok(d1[1].title === 'Email my landlord' && d1[1].kind === 'side' && d1[1].skillId === null, 'no matching life area leaves the area empty rather than guessing');
+ok(d1[2].title === 'Finish the marketing essay' && d1[2].kind === 'main' && d1[2].due === '2026-09-25' && areaName(d1[2].skillId) === 'Study', 'a big noun with a campaign verb becomes a main quest, with its date and area');
+ok(d1[2].steps.length === 5 && d1[2].steps[0].diff === 'easy' && d1[2].steps[4].due === '2026-09-25' && d1[2].steps[0].due === '2026-09-19', 'an essay gets five dated steps: the first is easy and due tomorrow, the last lands on the deadline');
+ok(d1[2].note === 'Planned backward from the date', 'the card says why the dates are what they are');
+
+var d2 = pd('- Gym 3x a week\n- read 20 pages every day\n* stop doomscrolling\n10. stretch every weekday');
+ok(d2.length === 4, 'a pasted list splits on line breaks and drops the bullets and numbers');
+ok(d2[0].title === 'Gym' && d2[0].kind === 'habit' && d2[0].target === 3 && areaName(d2[0].skillId) === 'Body', '"3x a week" makes a habit with a weekly target of 3');
+ok(d2[1].title === 'Read 20 pages' && d2[1].kind === 'habit' && d2[1].target === 7, 'a daily phrase on a habit-like verb makes a daily habit');
+ok(d2[2].title === 'Doomscrolling' && d2[2].kind === 'monster' && d2[2].skillId === null, '"stop X" names a monster and drops the "stop"');
+ok(d2[3].title === 'Stretch' && d2[3].kind === 'daily' && d2[3].days.join() === '1,2,3,4,5', 'a weekday schedule makes a scheduled daily');
+
+var d3 = pd('Buy milk. Pay rent tomorrow. Learn Spanish');
+ok(d3.length === 3 && d3[1].title === 'Pay rent' && d3[1].due === '2026-09-19', 'sentences split on full stops and keep their own dates');
+ok(d3[2].kind === 'main' && d3[2].steps.length === 1 && /5 minutes/.test(d3[2].steps[0].title) && d3[2].note === 'Starts with a 5-minute step', 'a main quest with no template still starts with a five-minute kickoff step');
+
+ok(pd('Buy bread and butter').length === 1, '"and" without a task verb after it does not split ("bread and butter")');
+var d4 = pd('Read chapters 3, 4 and 5');
+ok(d4.length === 1 && d4[0].title === 'Read chapters 3, 4 and 5', 'a comma inside one task does not split it');
+ok(pd('call mom. Call mom').length === 1, 'the same task said twice is one item');
+ok(pd('').length === 0 && pd('   ').length === 0 && RPG.parseDump(null).length === 0, 'empty or missing text gives an empty list');
+var many = []; for (var mi = 0; mi < 30; mi++) many.push('Task number ' + mi);
+ok(pd(many.join('\n')).length === 20, 'a dump is capped at 20 items');
+
+var d5 = pd('prepare for the corporate finance exam in 10 days');
+ok(d5[0].kind === 'main' && d5[0].due === '2026-09-28' && d5[0].steps.length === 7, 'an exam gets the seven-step revision plan');
+ok(d5[0].steps[6].due === '2026-09-27' && d5[0].steps[0].due === '2026-09-19', 'the exam plan ends the evening before the exam and starts tomorrow');
+var d6 = pd('Run 30 min. Quick call with Marc. Deep work 2 hours. Study 4h');
+ok(d6[0].diff === 'normal' && d6[1].diff === 'easy' && d6[2].diff === 'hard' && d6[3].diff === 'epic', 'a stated duration or the word "quick" sets the difficulty');
+ok(pd('finish report by friday epic')[0].diff === 'epic', 'a difficulty the user says out loud always wins');
+
+ok(RPG.captureItem('read 20 pages every day', GM_NOW, gmSkills, 'daily').kind === 'daily', 'the type chip can force a habit to be a daily');
+var forced = RPG.captureItem('read 20 pages every day', GM_NOW, gmSkills, 'main');
+ok(forced.kind === 'main' && forced.steps.length === 1 && forced.target === null, 'forcing main quest adds the kickoff step and drops the weekly target');
+ok(RPG.captureItem('stop doomscrolling', GM_NOW, gmSkills, 'side').title === 'Stop doomscrolling', 'forcing a monster back to a side quest puts the "Stop" back');
+ok(RPG.captureItem('.', GM_NOW, gmSkills) === null && RPG.captureItem('', GM_NOW, gmSkills) === null, 'text with nothing in it gives no item');
+var redue = RPG.captureDue(RPG.captureItem('finish the marketing essay', GM_NOW, gmSkills), '2026-09-23', GM_NOW);
+ok(redue.due === '2026-09-23' && redue.steps[4].due === '2026-09-23' && redue.steps[0].due === '2026-09-19', 'changing the date of a main quest re-plans its steps toward the new date');
+ok(RPG.captureDue(redue, 'not a date', GM_NOW).due === null && redue.steps[0].due === null, 'clearing the date clears the step dates');
+
+section('addCaptured: the cards become real entries');
+var cs = RPG.seedPreset(RPG.newState('C', '🧙'), ['student']);
+var cBefore = { q: cs.quests.length, h: cs.habits.length, g: cs.goals.length };
+var cItems = RPG.parseDump('call the bank and email my landlord, then finish the marketing essay by friday. gym 3x a week. stop doomscrolling', GM_NOW, cs.skills);
+var cOut = A.addCaptured(cs, cItems);
+ok(cOut.side === 2 && cOut.main === 1 && cOut.steps === 5 && cOut.habit === 1 && cOut.monster === 0 && cOut.skipped === 1, 'two side quests, a main quest with five steps and a habit are added; the monster the path already seeded is skipped');
+ok(cs.quests.length === cBefore.q + 7 && cs.goals.length === cBefore.g + 1 && cs.habits.length === cBefore.h + 1, 'the board grew by exactly those entries');
+var cGoal = cs.goals[cs.goals.length - 1];
+ok(cs.quests.filter(function (q) { return q.main === cGoal.id; }).length === 5 && A.goalProgress(cs, cGoal.id).total === 5, 'the steps hang off the new main quest');
+ok(cOut.ids.length === 9 && cs.log[0].icon === '🦉', 'the created ids are returned and the log has one Sage line');
+var cAgain = A.addCaptured(cs, cItems);
+ok(cAgain.total === 0 && cAgain.skipped === 5 && cs.quests.length === cBefore.q + 7, 'adding the same cards again adds nothing');
+ok(A.addCaptured(cs, [{ title: '  ', kind: 'side' }, null, { kind: 'side' }]).total === 0, 'blank or broken items are ignored');
+var cBad = A.addCaptured(cs, [{ title: 'Area test', kind: 'side', diff: 'nope', skillId: 'not-a-real-id' }]);
+var cBadQ = cs.quests[cs.quests.length - 1];
+ok(cBad.side === 1 && cBadQ.skillId === null && cBadQ.diff === 'normal', 'an unknown life area or difficulty falls back to none / Normal');
+
+section('Quest packs');
+ok(RPG.PACKS.length >= 6 && RPG.PACKS.every(function (p) {
+  var items = RPG.buildPack(p.id, {}, GM_NOW, gmSkills);
+  return items.length >= 1 && items.every(function (it) { return it.title && RPG.CAPTURE_KINDS.indexOf(it.kind) >= 0; });
+}), 'every pack builds at least one valid item with no input at all');
+var exam = RPG.buildPack('exam', { name: 'Corporate Finance', date: '2026-10-02' }, GM_NOW, gmSkills);
+ok(exam[0].kind === 'main' && exam[0].title === 'Pass the Corporate Finance exam' && exam[0].due === '2026-10-02' && exam[0].steps.length === 7, 'the exam pack names the main quest after the subject');
+ok(exam[0].steps[6].due === '2026-10-01' && exam[0].steps[0].due <= '2026-09-21', 'and plans backward: last step the evening before, first step within days');
+ok(exam[1].kind === 'habit' && exam[1].target === 5 && /Corporate Finance/.test(exam[1].title), 'plus a revision habit, five times a week');
+ok(RPG.buildPack('exam', { date: '2020-01-01' }, GM_NOW, gmSkills)[0].due === '2026-10-02', 'a date in the past is ignored and the pack falls back to two weeks out');
+var hunt = RPG.buildPack('internship', {}, GM_NOW, gmSkills);
+ok(hunt[0].kind === 'main' && hunt[0].steps[0].diff === 'easy' && hunt.filter(function (it) { return it.kind === 'habit'; }).length === 2, 'the internship pack is a main quest that starts easy, plus two habits');
+ok(RPG.buildPack('sleep', {}, GM_NOW, gmSkills).some(function (it) { return it.kind === 'monster'; }), 'the sleep pack names a monster');
+ok(RPG.buildPack('nope', {}, GM_NOW, gmSkills).length === 0 && RPG.packById('exam').ask && !RPG.packById('fit').ask, 'an unknown pack builds nothing; packs declare whether they ask a question');
+var ps = RPG.newState('P', '🧙');
+ok(A.addCaptured(ps, hunt).total === 3 && A.addCaptured(ps, hunt).total === 0, 'a pack added twice is only on the board once');
+
+section('Daily Draft and the plan');
+function dayKey(offset) { var d = new Date(); d.setDate(d.getDate() + offset); return RPG.todayKey(d); }
+var ds = RPG.newState('D', '🧙');
+ok(RPG.dailyDraft(ds).items.length === 0 && RPG.dailyDraft(ds).pool === 0, 'an empty board gives an empty draft');
+var qLate = A.addQuest(ds, { title: 'Late thing', diff: 'normal', due: dayKey(-1) });
+var qToday = A.addQuest(ds, { title: 'Due today', diff: 'easy', due: dayKey(0) });
+var qDaily = A.addQuest(ds, { title: 'A daily', diff: 'easy', recurring: true });
+var dGoal = A.addGoal(ds, { title: 'Big goal' });
+var dStep1 = A.addQuest(ds, { title: 'Step one', diff: 'normal', main: dGoal.id });
+A.addQuest(ds, { title: 'Step two', diff: 'normal', main: dGoal.id });
+var qOld = A.addQuest(ds, { title: 'Old errand' }); qOld.createdOn = dayKey(-10);
+var qNew = A.addQuest(ds, { title: 'New errand' });
+var hDaily = A.addHabit(ds, { title: 'Read', type: 'good', target: 7 });
+var hBad = A.addHabit(ds, { title: 'Scroll', type: 'bad' });
+var dr = RPG.dailyDraft(ds);
+ok(dr.items.length === 4 && dr.target === 4, 'with no time budget on file the draft aims for four items');
+ok(dr.items[0].ref === 'q:' + qLate.id && dr.items[0].why === 'Overdue by 1 day', 'overdue comes first, with its reason');
+ok(dr.items[1].ref === 'q:' + qToday.id && dr.items[1].why === 'Due today', 'then what is due today');
+ok(dr.items[2].ref === 'q:' + dStep1.id && dr.items[2].why === '🏆 Big goal', 'then the next step of a main quest, and only the next one, named by its goal');
+ok(dr.items[3].ref === 'q:' + qDaily.id && dr.minutes === 70, 'then a daily; the draft totals its rough minutes');
+ok(!dr.items.some(function (it) { return it.id === hBad.id; }), 'a monster is never in a draft');
+ds.settings.onboard = { minutes: 60 };
+var dr60 = RPG.dailyDraft(ds);
+ok(dr60.items.length === 5 && dr60.items[4].ref === 'h:' + hDaily.id && dr60.items[4].kind === 'habit', 'a 60-minute budget aims for five, and a daily habit outranks a stale errand');
+ds.settings.onboard = { minutes: 15 };
+ok(RPG.dailyDraft(ds).items.length === 3, 'a 15-minute budget aims for three');
+delete ds.settings.onboard;
+ds.plan = { day: dayKey(-1), refs: ['q:' + qNew.id], wonOn: null };
+var drCarry = RPG.dailyDraft(ds);
+var carried = drCarry.items.concat([]).filter(function (it) { return it.ref === 'q:' + qNew.id; })[0];
+ok(!carried || carried.why === 'Left from your last plan', 'an item left from the last plan is marked as carried over');
+ds.settings.onboard = { minutes: 60 };
+hDaily.lastDoneOn = dayKey(0);   // take the habit out of the running so the fifth slot is between the two errands
+ok(RPG.dailyDraft(ds).items.some(function (it) { return it.ref === 'q:' + qNew.id && it.why === 'Left from your last plan'; }), 'and it now outranks the stale errand for the fifth slot');
+hDaily.lastDoneOn = null;
+delete ds.settings.onboard;
+ok(A.planStatus(ds).active === false, 'a plan locked yesterday is not today\'s plan');
+
+var st0 = A.setPlan(ds, dr.items.map(function (it) { return it.ref; }));
+ok(st0.active && st0.total === 4 && st0.done === 0 && !st0.complete && !st0.won, 'locking the draft makes it today\'s plan');
+ok(ds.log[0].icon === '🧭' && A.claimDayWon(ds) === null, 'the lock is logged and nothing is paid before the plan is done');
+ok(A.clearPlan(ds) === true && ds.plan === null && A.planStatus(ds).active === false, 'an unfinished plan can be thrown away to plan again');
+A.setPlan(ds, dr.items.map(function (it) { return it.ref; }));
+A.completeQuest(ds, qLate.id); A.completeQuest(ds, qToday.id); A.completeQuest(ds, dStep1.id);
+ok(A.planStatus(ds).done === 3 && !A.planStatus(ds).complete, 'three of four done is not complete');
+A.completeQuest(ds, qDaily.id);
+var xpB = ds.hero.xp, coinB = ds.hero.coins, lvB = ds.hero.level;
+var won = A.claimDayWon(ds);
+ok(won && won.dayWon && won.total === 4 && won.xp === RPG.PLAN_XP && won.coins === RPG.PLAN_COINS, 'finishing the plan pays the day bonus');
+ok((ds.hero.level > lvB || ds.hero.xp === xpB + RPG.PLAN_XP) && ds.hero.coins === coinB + RPG.PLAN_COINS && ds.counters.daysWon === 1, 'the bonus is credited and the day counted');
+ok(A.claimDayWon(ds) === null && A.planStatus(ds).won === true, 'the bonus is paid once a day');
+var st1 = A.setPlan(ds, ['q:nope', 'h:' + hBad.id, 'q:' + qOld.id, 'q:' + qOld.id, 'h:' + hDaily.id]);
+ok(st1.total === 2, 'unknown ids, monsters and repeats are dropped when a plan is locked');
+A.deleteQuest(ds, qOld.id);
+ok(A.planStatus(ds).total === 1, 'a quest deleted after the lock drops out of the plan');
+A.doHabit(ds, hDaily.id);
+ok(A.planStatus(ds).complete, 'a habit in the plan counts as done once it is kept today');
+ok(A.clearPlan(ds) === false && ds.plan !== null, 'once the day bonus is paid the plan cannot be thrown away');
+ok(A.planStatus(ds).won === true && A.claimDayWon(ds) === null && ds.counters.daysWon === 1, 'and a second plan locked the same day cannot win the bonus again');
+var stSkip = A.setPlan(ds, []);
+ok(stSkip.active && stSkip.skipped && stSkip.total === 0 && !stSkip.complete, 'an empty plan means "not today" and can never be "complete"');
+
+section('Evening Debrief');
+var es = RPG.newState('E', '🧙');
+var eb = RPG.debrief(es);
+ok(eb.empty && eb.line === 'A quiet day.' && eb.sleepGuess === null, 'a day with nothing logged is reported as empty');
+var eq1 = A.addQuest(es, { title: 'Small thing', diff: 'easy' }), eq2 = A.addQuest(es, { title: 'Big thing', diff: 'hard' });
+var eh = A.addHabit(es, { title: 'Read', type: 'good' });
+var eq3 = A.addQuest(es, { title: 'Left over', diff: 'normal' });
+A.setPlan(es, ['q:' + eq1.id, 'q:' + eq2.id, 'q:' + eq3.id]);
+A.completeQuest(es, eq1.id); A.completeQuest(es, eq2.id); A.doHabit(es, eh.id);
+es.sleep[dayKey(-1)] = { hours: 7.5, quality: 4 };
+var ed = RPG.debrief(es);
+ok(ed.line === 'Cleared 2 quests, kept 1 habit. Biggest win: Big thing. Left for tomorrow: Left over.', 'the line counts the day, names the biggest win and what is left');
+ok(!ed.empty && ed.quests === 2 && ed.habits === 1 && ed.open.length === 1 && ed.sleepGuess === 7.5, 'it also returns the numbers and the last sleep duration');
+A.completeQuest(es, eq3.id);
+ok(/Finished the whole plan\.$/.test(RPG.debrief(es).line), 'a finished plan is said plainly');
+
+section('Sage proposes the weekly boss');
+var bs = RPG.newState('B', '🧙');
+ok(RPG.suggestBoss(bs) === null, 'nothing on the board, nothing to propose');
+A.addQuest(bs, { title: 'Buy milk', diff: 'easy' });
+ok(RPG.suggestBoss(bs) === null, 'an easy errand with no date is not a boss');
+A.addQuest(bs, { title: 'Hard thing', diff: 'hard' });
+ok(RPG.suggestBoss(bs).title === 'Hard thing' && RPG.suggestBoss(bs).due === RPG.bossSunday(), 'the hardest open quest is proposed, due by the boss Sunday');
+A.addQuest(bs, { title: 'Deadline thing', diff: 'normal', due: dayKey(0) });
+ok(RPG.suggestBoss(bs).title === 'Deadline thing' && RPG.suggestBoss(bs).why === 'Your biggest deadline this week', 'a deadline inside the week outranks raw difficulty');
+A.setBoss(bs, { title: 'Named' });
+ok(RPG.suggestBoss(bs) === null, 'no proposal while a boss is already named');
+
+section('Weekly chronicle');
+var ws = RPG.newState('Wren', '🧙');
+var wc0 = RPG.chronicle(ws);
+ok(wc0.title === 'The Quiet Week' && wc0.days === 0 && /board is waiting/.test(wc0.lines[0]), 'an empty week gets its own title and one line');
+var wq = A.addQuest(ws, { title: 'Chronicle quest', diff: 'hard' }); A.completeQuest(ws, wq.id);
+var wc1 = RPG.chronicle(ws);
+ok(wc1.title === 'A Spark in the Dark' && wc1.days === 1 && /^Wren showed up on 1 of 7 days and earned 60 XP\.$/.test(wc1.lines[0]), 'one active day is named and counted');
+ok(wc1.lines.some(function (l) { return l === '1 quest cleared.'; }) && wc1.lines.some(function (l) { return /^Best day: \w+day with 60 XP\.$/.test(l); }), 'the recap lists quests cleared and the best day');
+
+section('Game systems in stages, and game intensity');
+var gs = RPG.newState('S', '🧙');
+ok(RPG.staged(gs) === false && RPG.isUnlocked(gs, 'rewards') && RPG.isUnlocked(gs, 'stakes') && RPG.isUnlocked(gs, 'boss') && RPG.isUnlocked(gs, 'social'), 'a save without staging has every system open');
+ok(RPG.checkUnlocks(gs).length === 0 && RPG.nextUnlock(gs) === null, 'and there is nothing left to open or tease');
+gs.stage = { on: true, got: {} };
+ok(!RPG.isUnlocked(gs, 'rewards') && !RPG.isUnlocked(gs, 'stakes') && !RPG.isUnlocked(gs, 'boss') && !RPG.isUnlocked(gs, 'social'), 'a staged hero starts with all four systems locked');
+ok(RPG.nextUnlock(gs).id === 'rewards' && RPG.checkUnlocks(gs).length === 0, 'the Market is the first teaser and nothing opens at level 1');
+gs.counters.chests = 1;
+var gFresh = RPG.checkUnlocks(gs);
+ok(gFresh.length === 1 && gFresh[0].id === 'rewards' && RPG.isUnlocked(gs, 'rewards') && gs.log[0].icon === '🔓', 'the first chest opens the Market, and it is logged');
+ok(RPG.checkUnlocks(gs).length === 0, 'a stage opens once');
+gs.hero.level = 3;
+ok(RPG.checkUnlocks(gs).map(function (x) { return x.id; }).join() === 'stakes' && RPG.nextUnlock(gs).id === 'boss', 'level 3 opens HP and monsters; the boss is next');
+gs.hero.level = 5;
+ok(RPG.checkUnlocks(gs).map(function (x) { return x.id; }).join() === 'boss,social' && RPG.nextUnlock(gs) === null, 'jumping to level 5 opens the boss and the leaderboard together');
+var g2 = RPG.newState('L', '🧙'); g2.stage = { on: true, got: {} }; g2.hero.level = 2;
+ok(RPG.checkUnlocks(g2)[0].id === 'rewards', 'level 2 opens the Market without a chest');
+var gc = RPG.newState('Calm', '🧙'); gc.stage = { on: true, got: {} };
+ok(A.setIntensity(gc, 'calm') === 'calm' && gc.settings.hardcore === false, 'Calm can be chosen');
+gc.hero.level = 3;
+var gcFresh = RPG.checkUnlocks(gc).map(function (x) { return x.id; });
+ok(gcFresh.indexOf('stakes') < 0 && gcFresh.indexOf('rewards') >= 0 && !RPG.isUnlocked(gc, 'stakes'), 'in Calm, HP and monsters never open and are never announced');
+ok(RPG.nextUnlock(gc).id === 'boss', 'and the teaser skips them');
+A.setIntensity(gc, 'classic');
+ok(!RPG.isUnlocked(gc, 'stakes'), 'Calm never even recorded HP and monsters as opened');
+var gcBack = RPG.checkUnlocks(gc).map(function (x) { return x.id; });
+ok(gcBack.join() === 'stakes' && RPG.isUnlocked(gc, 'stakes'), 'so switching back to Classic opens them with their own announcement, since the level was already reached');
+var gOld = RPG.newState('Old', '🧙'); A.setIntensity(gOld, 'calm');
+ok(!RPG.isUnlocked(gOld, 'stakes') && RPG.isUnlocked(gOld, 'rewards'), 'Calm hides HP and monsters on an unstaged save too, and nothing else');
+ok(A.setIntensity(gOld, 'hardcore') === 'hardcore' && gOld.settings.hardcore === true && A.setIntensity(gOld, 'nope') === null, 'Hardcore sets the older hardcore flag; an unknown value is refused');
+ok(RPG.staged(RPG.unlockAll(gs)) === false && RPG.isUnlocked(gs, 'social'), 'unlockAll switches staging off');
+var gAsc = RPG.newState('Asc', '🧙'); gAsc.stage = { on: true, got: {} }; gAsc.hero.ascension = 1;
+ok(RPG.checkUnlocks(gAsc).length === 4, 'a hero who has ascended keeps every system on the new climb');
+var legacy = JSON.parse(JSON.stringify(RPG.newState('Legacy', '🧙')));
+delete legacy.stage; delete legacy.plan; delete legacy.settings.intensity; delete legacy.counters.daysWon; legacy.settings.hardcore = true;
+var mig = RPG.migrate(legacy);
+ok(mig.stage.on === false && mig.plan === null && mig.settings.intensity === 'hardcore' && mig.counters.daysWon === 0 && RPG.isUnlocked(mig, 'stakes'), 'an older save migrates to unstaged, with its intensity read from the hardcore flag');
+
+section('parseDump: review fixes (speed, lists, abbreviations, false friends)');
+var t0 = Date.now(); pd('a' + new Array(1999).join(' ') + 'b'); pd('a' + new Array(1990).join(' ') + ', call x');
+ok(Date.now() - t0 < 200, 'a run of 2000 spaces parses in well under a second (it used to take about 20 seconds)');
+ok(pd('9. Buy milk\n10. Call mom\n11. Pay rent').map(function (x) { return x.title; }).join('|') === 'Buy milk|Call mom|Pay rent', 'a numbered list past 9 loses its numbers, not just the first nine');
+ok(pd('Email Dr. Smith about the thesis').length === 1 && pd('Email Dr. Smith about the thesis')[0].title === 'Email Dr. Smith about the thesis', '"Dr." is not the end of a sentence');
+var pm = pd('Meet Tom at 5 p.m. tomorrow');
+ok(pm.length === 1 && pm[0].due === '2026-09-19', '"5 p.m. tomorrow" stays one task and keeps its date');
+ok(pd('Write the final report')[0].kind === 'main' && pd('Write the final report')[0].steps.length === 5, '"final report" plans like a report, not an exam');
+ok(pd('make the final payment on the car')[0].kind === 'side', '"final payment" is an errand, not a main quest');
+ok(pd('study for my finals')[0].steps.length === 7, '"finals" in the plural is still the exam plan');
+ok(pd('stop by the bank')[0].kind === 'side' && pd('Stop at the pharmacy on the way')[0].kind === 'side' && pd('quit my job')[0].kind === 'side', 'errands that start with stop or quit are not monsters');
+ok(pd('reduce essay to 1000 words')[0].kind === 'side' && pd('quit smoking')[0].kind === 'monster', 'but quitting a habit still names a monster');
+var nw = pd('Next week submit the report');
+ok(nw[0].due === '2026-09-25' && /^Submit the report/.test(nw[0].title), '"next week" at the start is a date, not filler');
+ok(pd('First draft of the intro')[0].title === 'First draft of the intro' && pd('To do list cleanup')[0].title === 'To do list cleanup', 'words that belong to the task stay in it');
+ok(pd('First, call mom')[0].title === 'Call mom', 'an ordinal with a comma is still treated as filler');
+ok(/dentist/i.test(pd("I'm going to the dentist tomorrow")[0].title), '"going to the dentist" keeps the dentist');
+ok(pd('call the bank and then also email the landlord').map(function (x) { return x.title; }).join('|') === 'Call the bank|Email the landlord', '"and then also" is one join');
+ok(pd(', call the bank, email the landlord').length === 2, 'a leading comma does not stop the split');
+var longList = []; for (var li = 0; li < 41; li++) longList.push('call person ' + li);
+ok(pd(longList.join(' and ')).length === 20, 'a long spoken run is cut at the 20-item cap, not silently after 40 joins');
+ok(pd('finish my résumé')[0].kind === 'main', 'résumé with its accents is recognised');
+ok(pd('Deep work 10 hours')[0].diff === 'epic' && pd('Study 1h30')[0].diff === 'hard' && pd('Buy 3 h&m shirts')[0].diff !== 'epic', 'hours: two digits, "1h30", and never inside "h&m"');
+ok(pd('Hand in the essay due friday')[0].due === '2026-09-25' && pd('Hand in the essay due friday')[0].title === 'Hand in the essay', '"due friday" is read as a date and leaves the title clean');
+ok(pd('Email X about the convention before tuesday')[0].title === 'Email X about the convention' && pd('Email X about the convention before tuesday')[0].due === '2026-09-22', '"before tuesday" too');
+var emo = pd(new Array(120).join('a') + '😀 tomorrow')[0].title;
+ok(!/[\ud800-\udbff]$/.test(emo), 'a title cut at 120 characters never ends in half an emoji');
+var past = RPG.captureDue(RPG.captureItem('finish the marketing essay', GM_NOW, gmSkills), '2020-01-01', GM_NOW);
+ok(past.due === null && RPG.captureDue(past, '2026-02-31', GM_NOW).due === null, 'a past or impossible date is refused');
+
+section('Plan, stages and intensity: review fixes');
+var rs = RPG.newState('R', '🧙');
+var rq1 = A.addQuest(rs, { title: 'one' }), rq2 = A.addQuest(rs, { title: 'two' }), rq3 = A.addQuest(rs, { title: 'three' });
+A.setPlan(rs, ['q:' + rq1.id, 'q:' + rq2.id, 'q:' + rq3.id]);
+A.completeQuest(rs, rq1.id); A.deleteQuest(rs, rq2.id); A.deleteQuest(rs, rq3.id);
+ok(A.planStatus(rs).complete === true && A.claimDayWon(rs) === null && rs.counters.daysWon === 0, 'deleting the unfinished plan items does not win the day');
+var rq4 = A.addQuest(rs, { title: 'four' }); A.completeQuest(rs, rq4.id);
+var rh = A.addHabit(rs, { title: 'kept', type: 'good' }); A.doHabit(rs, rh.id);
+ok(A.setPlan(rs, ['q:' + rq4.id, 'h:' + rh.id]).total === 0, 'a plan cannot be made of things already done today');
+var corruptRaw = JSON.parse(JSON.stringify(RPG.newState('C', '🧙'))); corruptRaw.plan = { day: RPG.todayKey(), refs: [null, 7, 'q:x'] };
+var corrupt = RPG.migrate(corruptRaw);
+ok(corrupt.plan.refs.length === 1 && A.planStatus(corrupt).total === 0 && A.claimDayWon(corrupt) === null, 'a corrupt plan ref is dropped on load and never breaks a tap');
+var ds2 = RPG.newState('Down', '🧙'), mon2 = A.addHabit(ds2, { title: 'Scroll', type: 'bad' });
+ds2.hero.hp = 5; A.slipHabit(ds2, mon2.id);
+ok(!!ds2.hero.downed, 'setup: the hero is downed');
+A.setIntensity(ds2, 'calm');
+var dq = A.addQuest(ds2, { title: 'after calm', diff: 'normal' }), dres = A.completeQuest(ds2, dq.id);
+ok(ds2.hero.downed === null && ds2.hero.hp === RPG.maxHpOf(ds2) && dres.coins === RPG.DIFF.normal.coins, 'switching to Calm lifts Downed and heals, so quests pay in full again');
+var bq = RPG.newState('Quiet', '🧙'); bq.stage = { on: true, got: {} };
+var quietLines = {};
+for (var qd = 0; qd < 40; qd++) { var qdate = new Date(2026, 0, 1 + qd, 10); quietLines[RPG.briefing(bq, qdate).lines[0].text] = 1; }
+ok(Object.keys(quietLines).every(function (l) { return l.indexOf('boss') < 0; }), 'Sage never suggests the weekly boss before it opens');
+bq.hero.hp = 10;
+ok(!RPG.briefing(bq).lines.some(function (l) { return /HP|Hotel/.test(l.text); }), 'nor talks about HP before HP exists');
+
 section('Release hygiene: service-worker cache freshness');
 /* The SW is cache-first: hosted/PWA users only receive new assets when sw.js
    itself changes (new CACHE name -> new install). So any commit that touches a
@@ -1141,7 +1421,7 @@ section('Release hygiene: service-worker cache freshness');
   var cp = require('child_process');
   try {
     var swCommit = cp.execSync('git log -1 --format=%H -- sw.js', { cwd: __dirname }).toString().trim();
-    var assets = ['index.html', 'styles.css', 'core.js', 'app.js', 'gradient.js', 'cloud.js', 'manifest.json', 'privacy.html', 'terms.html'];
+    var assets = ['index.html', 'styles.css', 'core.js', 'app.js', 'fx.js', 'art.js', 'gradient.js', 'cloud.js', 'manifest.json', 'privacy.html', 'terms.html'];
     var changed = cp.execSync('git diff --name-only ' + swCommit + '..HEAD -- ' + assets.join(' '), { cwd: __dirname }).toString().trim();
     ok(changed === '', 'sw.js cache bumped alongside asset changes' + (changed ? ' — STALE for: ' + changed.replace(/\n/g, ', ') + ' (bump CACHE in sw.js)' : ''));
   } catch (e) {

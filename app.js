@@ -34,7 +34,7 @@ function skillColorById(id){
 }
 function skillLabelById(id){
   if(id==='__none') return '· untagged';
-  var s=state.skills.find(function(k){return k.id===id;}); return s? s.icon+' '+esc(s.name) : '?';
+  var s=state.skills.find(function(k){return k.id===id;}); return s? esc(s.icon)+' '+esc(s.name) : '?';
 }
 function fmtHm(min){ var h=Math.floor(min/60), m=Math.round(min%60); return (h?h+'h ':'')+m+'m'; }
 var focusMode={work:50,brk:10,custom:false};
@@ -55,9 +55,9 @@ var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var MON_ORDER=[1,2,3,4,5,6,0];   // display weekdays Monday-first -> letters M T W T F S S
 var pendingDays=[];              // weekday ints picked for a new recurring quest
 var pickedPaths=['general'];     // onboarding paths (you can be several things at once)
-/* The path cards live on step 2 of the wizard, so every toggle re-renders
-   that step. onboarding() with no argument means step 1 (the hero), which is
-   why the number is spelled out here. */
+/* Kept for older code paths only: the wizard has no path step any more and
+   every new board starts from Balanced ('general'). Each call re-renders
+   step 2 of the wizard, which is now Your day. */
 function togglePath(id){
   if(id==='general'){ pickedPaths=['general']; onboarding(2); return; }   // Balanced stands alone
   var at=pickedPaths.indexOf(id);
@@ -69,9 +69,12 @@ function togglePath(id){
 
 var RANK_COLORS={E:'#9a94b8',D:'#5aa2ff',C:'#3ddc84',B:'#b07bff',A:'#ff9d47',S:'#f5c542',SS:'#ff5fa2'};
 var THEMES={
-  dungeon:  {name:'Dungeon',  bg:'#12101f',panel:'#1b1830',panel2:'#221e3d',line:'#2e2950',accent:'#f5c542'},
+  /* Dungeon: near-black with an Ember accent (chosen Nov 2026, replacing the
+     purple-navy). ink and muted are set here too, so the text greys are
+     neutral instead of the old lavender. */
+  dungeon:  {name:'Dungeon',  bg:'#0b0b0e',panel:'#141418',panel2:'#1c1c22',line:'#2a2a33',accent:'#f49d70',ink:'#ecebf2',muted:'#8d8b99'},
   synthwave:{name:'Synthwave',bg:'#170b22',panel:'#221030',panel2:'#2c1440',line:'#45215e',accent:'#ff5fa2'},
-  forest:   {name:'Forest',   bg:'#0d1712',panel:'#14231b',panel2:'#1a2f23',line:'#28492f',accent:'#7bd88f'},
+  forest:   {name:'Forest',   bg:'#0d1712',panel:'#14231b',panel2:'#1a2f23',line:'#28492f',accent:'#7bd88f',muted:'#9c96c3'},
   crimson:  {name:'Crimson',  bg:'#1a0d12',panel:'#26141b',panel2:'#321a23',line:'#4a2532',accent:'#ff7854'},
   ocean:    {name:'Ocean',    bg:'#0a1220',panel:'#101c30',panel2:'#15263f',line:'#22395c',accent:'#59c2ff'},
   daylight: {name:'Daylight', bg:'#f1ece1',panel:'#ffffff',panel2:'#f5f0e6',line:'#d9cfba',accent:'#b4740a',
@@ -88,7 +91,6 @@ var MUSIC={
 };
 
 var pickedTheme=null;            // onboarding live preview (no state yet)
-var avTab='heroes';              // avatar picker tab: 'heroes' (designed) | 'emoji'
 function applyTheme(){
   var t=THEMES[(state&&state.settings.theme)||pickedTheme||'dungeon']||THEMES.dungeon;
   var r=document.documentElement.style;
@@ -246,24 +248,34 @@ function flyCoins(n){
     })(i);
   }
 }
-function shake(){ var w=$('#wrap'); w.classList.remove('shake'); void w.offsetWidth; w.classList.add('shake'); }
+/* The screen shake moves the header and the cards, not #wrap: a transform on
+   #wrap would detach the fixed tab bar and quick actions inside it. */
+function shake(){ var b=document.body; b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); setTimeout(function(){ b.classList.remove('shake'); },450); }
 function hurtBar(){ var b=$('.bar.hp'); if(b){ b.classList.add('hurt'); setTimeout(function(){ b.classList.remove('hurt'); },600); } }
 
 function fx(res){
   if(!res) return;
+  /* While the Market is still locked (a staged hero before level 2) coins are
+     earned but never shown: the purse fills quietly and is revealed in one go
+     when the Market opens. coinsOn is that switch. */
+  var coinsOn=sysOn('rewards');
   var bits=[];
   if(res.xp>0) bits.push('<span class="p">+'+res.xp+' XP</span>');
-  if(res.coins>0) bits.push('<span class="c">+'+res.coins+' 💰</span>');
+  if(res.coins>0 && coinsOn) bits.push('<span class="c">+'+res.coins+' 💰</span>');
   if(res.coins<0) bits.push('<span class="c">'+res.coins+' 💰</span>');
-  if(res.hp>0) bits.push('<span class="hg">+'+res.hp+' HP</span>');
+  if(res.hp>0 && sysOn('stakes')) bits.push('<span class="hg">+'+res.hp+' HP</span>');
   if(res.hp<0) bits.push('<span class="h">'+res.hp+' HP</span>');
   if(res.mult>1.001) bits.push('<span style="color:var(--orange)">×'+res.mult.toFixed(2)+' streak</span>');
   if(res.wounded) bits.push('<span class="h">🩸 ×0.5 wounded</span>');
   if(bits.length) toast(bits.join(''), (res.hp<0)?'dmg':'');
   if(res.hp<0){ shake(); hurtBar(); SND.dmg(); sparks('💢'); }
   else if(res.coins<0){ SND.buy(); sparks('🛍️'); }
-  else if(res.xp>0){ SND.earn(); sparks('✨'); if(res.coins>0) flyCoins(res.coins); }
-  (res.skillUps||[]).forEach(function(u){ toast('<span class="p">'+u.icon+' '+esc(u.name)+' → Lv.'+u.level+'</span>'); });
+  else if(res.xp>0){
+    SND.earn(); sparks('✨'); if(res.coins>0 && coinsOn) flyCoins(res.coins);
+    /* the "+25 XP" chip that flies from the tap into the XP bar (fx.js) */
+    if(window.FX) FX.flyText('+'+res.xp+' XP', lastTap.x, lastTap.y, $('#hud .bar.xp'), 'xp');
+  }
+  (res.skillUps||[]).forEach(function(u){ toast('<span class="p">'+esc(u.icon)+' '+esc(u.name)+' → Lv.'+u.level+'</span>'); });
   if(res.newRank){ rankUp(res.newRank, res.levelUps[res.levelUps.length-1]); }
   else if(res.levelUps && res.levelUps.length){ levelUp(res.levelUps[res.levelUps.length-1]); }
   if(res.ko) defeatScreen(res);
@@ -273,44 +285,127 @@ function announceAchievements(list){
     setTimeout(function(){ toast('🏆 <span style="color:var(--purple)">'+a.icon+' '+esc(a.name)+'</span> unlocked!','ach'); SND.ach(); }, 400+i*700);
   });
 }
+/* ---------- ceremonies: one layout for every big moment ----------
+   Level up, rank up, a system opening and a won day all draw through
+   ceremony(): slow rays behind, a medallion that pops in, a small kicker, a
+   title, then reward rows that arrive one after another (each row carries its
+   index as --i and the stylesheet turns that into its delay), then the
+   buttons. One layout means one place to restyle, and a new kind of moment
+   is a dozen lines, not a new screen.
+
+   o = { cls, badge (html), kicker, title, sub, rows:[html], primary:{label,act},
+         secondary:{label,act} }. Every string in o is already HTML: escape
+   user text with esc() BEFORE passing it in.
+   The .levelbox and .big classes stay on purpose: older styles and the tests
+   find a celebration through them. */
+function ceremony(o){
+  var ov=$('#overlay'); ov.className='show'+(o.cls?' '+o.cls:''); ov.dataset.seq=++overlaySeq;
+  /* While a ceremony is up, #overlay is a modal dialog named after its kicker,
+     and its main button takes focus once the card has arrived, so a keyboard
+     or screen-reader user lands on the way out. closeOverlay() turns it back
+     into the polite status region it is the rest of the time. */
+  ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true'); ov.setAttribute('aria-label',String(o.kicker||'').toLowerCase());
+  var seqNow=overlaySeq;
+  setTimeout(function(){ if(overlaySeq!==seqNow) return; var b=ov.querySelector('.cer-act .btn'); if(b&&b.focus){ try{ b.focus(); }catch(e){} } },450);
+  ov.innerHTML='<div class="levelbox cer"><div class="cer-rays" aria-hidden="true"></div>'+
+    '<div class="cer-badge">'+o.badge+'</div>'+
+    '<div class="cer-kicker">'+o.kicker+'</div>'+
+    '<div class="big cer-title">'+o.title+'</div>'+
+    (o.sub?'<div class="sub cer-sub">'+o.sub+'</div>':'')+
+    ((o.rows&&o.rows.length)?'<div class="cer-rows">'+o.rows.map(function(r,i){ return '<div class="cer-row" style="--i:'+i+'">'+r+'</div>'; }).join('')+'</div>':'')+
+    '<div class="cer-act"><button class="btn go wide" '+((o.primary&&o.primary.attrs)||'')+' onclick="'+((o.primary&&o.primary.act)||'closeOverlay()')+'">'+((o.primary&&o.primary.label)||'Continue')+'</button>'+
+    (o.secondary?'<button class="btn ghost" onclick="'+o.secondary.act+'">'+o.secondary.label+'</button>':'')+'</div></div>';
+}
+/* one reward row: an emoji, a bold line and an optional small line under it.
+   `title` and `small` are HTML, so escape user text before passing it in */
+function cerRow(icon,title,small){
+  return '<span class="ri" aria-hidden="true">'+icon+'</span><span class="rt"><b>'+title+'</b>'+(small?'<small>'+small+'</small>':'')+'</span>';
+}
+function cerBadge(icon){ return '<span class="cer-ring" aria-hidden="true"></span><span class="cer-ico" aria-hidden="true">'+icon+'</span>'; }
+/* A queue for moments that arrive while another one is on screen (the chest
+   pays out AND the Market opens; a level-up AND a won day). Each waits its
+   turn: closeOverlay() calls cerPump(), which shows the next. Without the
+   queue the later overlay would overwrite the earlier one and the user would
+   never see it. */
+var cerQueue=[];
+function cerPump(){
+  if(!cerQueue.length) return;
+  if($('#overlay').classList.contains('show')) return;
+  cerQueue.shift()();
+}
+/* The rows a level-up adds beyond the level itself: every system that opens
+   at this level (RPG.checkUnlocks marks them opened, so each is announced
+   once) and every hero skin that becomes wearable. Shared by levelUp and
+   rankUp so a rank-up level announces what it opens too. */
+function levelRows(lv){
+  var rows=[];
+  var hadHp=sysOn('stakes');     // read BEFORE the stage check: on the level that opens HP, "HP restored" would be noise
+  var opened=RPG.checkUnlocks(state);
+  if(opened.length) persist();
+  opened.forEach(function(st){
+    rows.push('<span class="ri" aria-hidden="true">'+st.icon+'</span><span class="rt"><b>New: '+esc(st.name)+'</b><small>'+esc(st.line)+'</small></span>');
+  });
+  if(hadHp) rows.push('<span class="ri" aria-hidden="true">❤️</span><span class="rt"><b>HP fully restored</b></span>');
+  skinsAt(lv).forEach(function(k){
+    rows.push('<span class="ri av" aria-hidden="true">'+avHtml(k)+'</span><span class="rt"><b>New hero skin: '+esc(SVG_AVATARS[k].name)+'</b><small>Wear it from your hero sheet</small></span>');
+  });
+  var nx=RPG.nextUnlock(state);
+  if(nx) rows.push('<span class="ri" aria-hidden="true">🔒</span><span class="rt"><b>Next: '+esc(nx.name)+'</b><small>'+esc(nx.how)+'</small></span>');
+  return {rows:rows, opened:opened};
+}
 function levelUp(lv){
   SND.levelup(); confetti();
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="big">⬆ LEVEL UP!</div>'+
-    '<div class="sub">'+esc(state.hero.name)+' reached <b style="color:var(--gold)">Level '+lv+'</b></div>'+
-    '<div class="sub" style="color:var(--good)">❤️ HP fully restored</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Continue ▶</button></div>';
+  var lr=levelRows(lv), one=lr.opened.length===1?lr.opened[0]:null;
+  ceremony({
+    badge:'<span class="cer-ring" aria-hidden="true"></span><span class="cer-num">'+lv+'</span>',
+    kicker:'LEVEL UP',
+    title:'Level '+lv,
+    rows:lr.rows,
+    primary:one?{label:'Open '+esc(one.name),act:'closeOverlay();go(\''+one.tab+'\')'}:null,
+    secondary:one?{label:'Later',act:'closeOverlay()'}:null
+  });
 }
 function rankUp(rank, lv){
   SND.rankup(); confetti(true); setTimeout(function(){confetti(true);},600);
   var col=RANK_COLORS[rank.code]||'#f5c542';
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="big">🎖 RANK UP</div>'+
-    '<div class="rankbig" style="color:'+col+'">'+rank.code+'</div>'+
-    '<div class="rankname" style="color:'+col+'">'+esc(rank.name).toUpperCase()+'</div>'+
-    '<div class="sub">'+esc(state.hero.name)+' hit Level '+lv+' and earned a new class.</div>'+
-    '<div class="sub" style="color:var(--good)">❤️ HP fully restored · badge added</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Rise ▶</button></div>';
+  var lr=levelRows(lv);
+  ceremony({
+    cls:'rankcer',
+    badge:'<div class="rankbig" style="color:'+col+'">'+rank.code+'</div>',
+    kicker:'RANK UP',
+    title:'<span class="rankname" style="color:'+col+'">'+esc(rank.name).toUpperCase()+'</span>',
+    sub:esc(state.hero.name)+' hit Level '+lv+' and earned a new class.',
+    rows:['<span class="ri" aria-hidden="true">🎖</span><span class="rt"><b>Rank badge added</b></span>'].concat(lr.rows),
+    primary:{label:'Rise',act:'closeOverlay()'}
+  });
 }
 function defeatScreen(res){
   SND.dmg(); shake(); hurtBar(); if(!reduceMotion()) sparks('💀');
-  var o=$('#overlay'); o.className='show defeat';
-  var cost=(res&&res.cost)||0;
-  o.innerHTML='<div class="levelbox defeatbox"><div class="big" style="color:var(--hp)">💀 DEFEATED</div>'+
-    '<div class="sub">The monsters dragged you down. You’re <b style="color:var(--hp)">Downed</b>.</div>'+
-    (cost>0?'<div class="sub" style="color:var(--hp)">You lost <b>'+cost+' 💰</b> in the fall.</div>':'')+
-    '<div class="sub" style="color:var(--muted)">While downed: <b>half XP</b> and <b>no coins</b> earned. Rest back to <b>full HP</b> - sleep well or heal at the 🛏️ Hotel - to <b>rise</b>.</div>'+
-    '<button class="btn go" onclick="closeOverlay();goMarket(\'hotel\')">🛏️ Go rest</button>'+
-    '<button class="btn" onclick="closeOverlay()">Get up</button></div>';
+  var cost=(res&&res.cost)||0, rows=[];
+  if(cost>0) rows.push(cerRow('💰','You lost '+cost+' coins in the fall'));
+  rows.push(cerRow('⚖️','While downed: half XP, no coins','Nothing you built is lost. No levels, no streak.'));
+  rows.push(cerRow('🛏️','Rest back to full HP to rise','Sleep well, or heal at the Hotel.'));
+  ceremony({
+    cls:'defeat',
+    badge:cerBadge('💀'),
+    kicker:'DEFEATED',
+    title:'You are downed',
+    sub:'The monsters dragged you down.',
+    rows:rows,
+    primary:{label:'Go rest',act:'closeOverlay();goMarket(\'hotel\')'},
+    secondary:{label:'Not now',act:'closeOverlay()'}
+  });
 }
 function riseScreen(cb){
   SND.rankup(); confetti(true); if(!reduceMotion()){ setTimeout(function(){confetti(true);},400); }
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--orange);font-size:60px">🔥</div>'+
-    '<div class="big" style="color:var(--orange)">YOU ROSE AGAIN</div>'+
-    '<div class="sub">Back to full strength. Comeback #'+(cb&&cb.comebacks||1)+'.</div>'+
-    '<div class="sub" style="color:var(--good)">+'+((cb&&cb.xp)||0)+' XP comeback bonus</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Rise ▶</button></div>';
+  ceremony({
+    cls:'daywon',
+    badge:'<span class="cer-flame" aria-hidden="true">🔥</span>',
+    kicker:'YOU ROSE AGAIN',
+    title:'Back to full strength',
+    rows:[cerRow('🔥','Comeback #'+((cb&&cb.comebacks)||1)), cerRow('✨','+'+((cb&&cb.xp)||0)+' XP comeback bonus')],
+    primary:{label:'Rise',act:'closeOverlay()'}
+  });
 }
 function maybeRise(){
   if(state.hero.downed && state.hero.hp>=RPG.maxHpOf(state)){
@@ -322,29 +417,44 @@ function maybeRise(){
 }
 function chestScreen(res){
   SND.chest(); confetti();
-  var loot='';
+  var coinsOn=sysOn('rewards');
+  var rows=[cerRow('✨','+'+res.xp+' XP')];
+  if(coinsOn) rows.push(cerRow('💰','+'+res.coins+' coins'));
   if(res.loot){
     confetti(true);
-    if(res.loot.type==='jackpot') loot='<div class="lootline gold">💰 <b>COIN JACKPOT</b> - +'+res.loot.coins+' bonus coins!</div>';
-    else if(res.loot.type==='potion') loot='<div class="lootline">🧪 Rare drop: <b>Focus Elixir</b> - quaff it any day for ×2 XP.</div>';
-    else if(res.loot.type==='frame') loot='<div class="lootline" style="color:'+res.loot.frame.color+'">🖼 Rare drop: <b>'+esc(res.loot.frame.name)+' frame</b> - equip it on your avatar.</div>';
+    /* .lootline marks the rare drop; a test finds the loot through it */
+    if(res.loot.type==='jackpot') rows.push(cerRow('🧞','<span class="lootline gold">Coin jackpot'+(coinsOn?': +'+res.loot.coins+' bonus coins':'')+'</span>',coinsOn?'':'Waiting for you when the Market opens'));
+    else if(res.loot.type==='potion') rows.push(cerRow('🧪','<span class="lootline">Rare drop: Focus Elixir</span>','Drink it any day for double XP'));
+    else if(res.loot.type==='frame') rows.push(cerRow('🖼','<span class="lootline" style="color:'+res.loot.frame.color+'">Rare drop: '+esc(res.loot.frame.name)+' frame</span>','Equip it on your avatar'));
   }
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="big">🎁 DAILY CHEST</div>'+
-    '<div class="sub">All dailies cleared. You got:</div>'+
-    '<div class="sub" style="font-size:17px"><b style="color:var(--xp)">+'+res.xp+' XP</b> &nbsp; <b style="color:var(--gold)">+'+res.coins+' 💰</b></div>'+
-    loot+
-    '<button class="btn go" onclick="closeOverlay()">Nice ▶</button></div>';
+  ceremony({
+    badge:cerBadge('🎁'),
+    kicker:'DAILY CHEST',
+    title:'All dailies cleared',
+    rows:rows,
+    primary:{label:'Nice',act:'closeOverlay()'}
+  });
 }
 function usePotion(){
   var r=RPG.usePotion(state); persist(); render();
   if(r){ SND.chest(); sparks('🧪'); toast('🧪 <span class="p">Focus Elixir - XP ×'+r.mult+' for the rest of today</span>'); }
 }
-function closeOverlay(){ $('#overlay').className=''; render(); }
+function closeOverlay(){
+  var ov=$('#overlay'); ov.className='';
+  ov.setAttribute('role','status'); ov.removeAttribute('aria-modal'); ov.removeAttribute('aria-label');
+  render(); cerPump();
+}
+/* Is a staged game system open for this hero? One short name for the check
+   every screen makes before drawing the Market, HP, monsters, the boss or the
+   leaderboard. With no hero yet (the wizard) nothing is open. */
+function sysOn(id){ return !!state && RPG.isUnlocked(state,id); }
 
 /* ---------- rendering ---------- */
 /* Both parts are typed by the user (life-area name and its emoji override) and
    both callers drop the result straight into HTML, so escape here, once. */
+/* "300xp/150💰" in copy, without the coin half while the Market is still
+   closed (staged heroes): coins are earned quietly until then */
+function payTxt(xp,c){ return xp+'xp'+(sysOn('rewards')?'/'+c+'💰':''); }
 function skillName(id){ var s=state.skills.find(function(k){return k.id===id;}); return s? esc(s.icon)+' '+esc(s.name) : null; }
 
 /* today at a glance: xp, coins earned and focus minutes logged since midnight */
@@ -354,7 +464,7 @@ function todayGlance(){
   if(!xp&&!coins&&!min) return '';
   var bits=[];
   if(xp) bits.push('<b style="color:var(--xp)">+'+xp+'xp</b>');
-  if(coins) bits.push('<b style="color:var(--gold)">+'+coins+'\ud83d\udcb0</b>');
+  if(coins && sysOn('rewards')) bits.push('<b style="color:var(--gold)">+'+coins+'\ud83d\udcb0</b>');
   if(min) bits.push('<b style="color:var(--blue)">'+fmtHm(min)+' \u23f3</b>');
   return '<div class="nextrank glance" title="Earned today">today '+bits.join(' \u00b7 ')+'</div>';
 }
@@ -391,14 +501,32 @@ function renderHUD(){
         (h.woundedOn===RPG.todayKey()?'<span class="wound" title="Wounded today: you earn half XP until you heal">🩸 wounded</span>':'')+
         buff+
         '<span class="lvl">LV.'+h.level+'</span>'+
-        '<span class="coin" id="coinCounter" title="Coins to spend in Rewards">💰 '+h.coins+'</span>'+
-        '<span class="flame" title="'+h.streak+' day streak'+((h.shields||0)>0?' - a Streak Shield is held':'')+'">🔥 '+h.streak+((h.shields||0)>0?' <span aria-label="Streak Shield held">🛡</span>':'')+'</span>'+
+        /* no purse before the Market opens (staged heroes): see fx() */
+        (sysOn('rewards')?'<span class="coin" id="coinCounter" title="Coins to spend in Rewards">💰 '+h.coins+'</span>':'')+
+        '<span class="flame" id="streakPill" title="'+h.streak+' day streak'+((h.shields||0)>0?' - a Streak Shield is held':'')+'">🔥 '+h.streak+((h.shields||0)>0?' <span aria-label="Streak Shield held">🛡</span>':'')+'</span>'+
       '</div>'+
     '</div>'+
     '<div class="bars">'+
       '<div class="bar xp"><i style="width:'+Math.min(100,h.xp/need*100)+'%"></i><b>XP '+h.xp+' / '+need+'</b></div>'+
-      '<div class="bar hp'+(h.hp>=maxHp?' full':'')+'" role="button" tabindex="0" style="cursor:pointer" title="Health '+h.hp+' of '+maxHp+' - what happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+hpPct+'%"></i></div>'+
+      /* no HP bar until HP and monsters open (and never in Calm) */
+      (sysOn('stakes')?'<div class="bar hp'+(h.hp>=maxHp?' full':'')+'" role="button" tabindex="0" style="cursor:pointer" title="Health '+h.hp+' of '+maxHp+' - what happens if my HP hits zero?" aria-label="Health '+h.hp+' of '+maxHp+'. Learn what happens at zero HP." onclick="openDefeatInfo()" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openDefeatInfo()}"><i style="width:'+hpPct+'%"></i></div>':'')+
     '</div>';
+  hudMotion(h, need);
+}
+/* The header is rebuilt from scratch on every render, so on its own nothing in
+   it can animate: a new XP bar would simply appear at its new width. hudPrev
+   remembers the last values drawn, and this compares them with the new ones:
+   the XP bar grows from where it was, and the streak pill pulses on the first
+   action of a day. Same hero and same level only, so loading another save or
+   levelling up (the bar wraps to zero) never animates backwards. Purely
+   visual: delete this function and the header still shows the right numbers. */
+var hudPrev=null;
+function hudMotion(h, need){
+  var now={name:h.name, level:h.level, xpPct:Math.min(100,h.xp/need*100), streak:h.streak};
+  var prev=hudPrev; hudPrev=now;
+  if(!prev || !window.FX || prev.name!==now.name) return;
+  if(prev.level===now.level && now.xpPct>prev.xpPct) FX.grow($('#hud .bar.xp>i'), prev.xpPct);
+  if(now.streak>prev.streak) FX.bump($('#streakPill'),'fx-ignite');
 }
 
 function renderSkills(){
@@ -406,7 +534,7 @@ function renderSkills(){
     var need=RPG.skillXpForLevel(s.level);
     var tier=RPG.skillTier(s.level);
     var tierChip=tier.name?'<span class="tier" title="'+tier.name+' - +'+Math.round((tier.xp-1)*100)+'% XP'+(tier.coins>1?', +'+Math.round((tier.coins-1)*100)+'% coins':'')+' on this area’s actions">'+tier.name+'</span>':'';
-    return '<div class="skillcard"><div class="t"><span>'+s.icon+' '+esc(s.name)+'</span><small>Lv.'+s.level+'</small></div>'+
+    return '<div class="skillcard"><div class="t"><span>'+esc(s.icon)+' '+esc(s.name)+'</span><small>Lv.'+s.level+'</small></div>'+
       '<div class="bar"><i style="width:'+Math.min(100,s.xp/need*100)+'%"></i></div>'+tierChip+
       '<button class="del" aria-label="Remove life area" onclick="delSkill(\''+s.id+'\')">✕</button></div>';
   }).join('');
@@ -435,7 +563,10 @@ function renderTabs(){
        and #focuspill already follows the user across every screen, so the
        chest is the only thing left worth a dot. */
     var dot=(t[0]==='quests'||t[0]==='today')&&chest.eligible?'<span class="dot"></span>':'';
-    return '<button class="'+t[3]+(tab===t[0]?' on':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+svgIcon(t[1])+'</span><span class="tl">'+t[2]+'</span>'+dot+'</button>';
+    /* Rewards carries a small lock until the Market opens (staged heroes).
+       The tab still works: it shows what the Market is and what opens it. */
+    var lock=(t[0]==='market'&&!sysOn('rewards'))?'<span class="tlock" aria-hidden="true">'+svgIcon('lock','sm')+'</span><span class="sr-only"> (locked)</span>':'';
+    return '<button class="'+t[3]+(tab===t[0]?' on':'')+(lock?' locked':'')+'" onclick="go(\''+t[0]+'\')"><span class="ti">'+svgIcon(t[1])+'</span><span class="tl">'+t[2]+'</span>'+dot+lock+'</button>';
   }).join('');
 }
 /* Focus and Journal are off the tab bar, so each one carries its own way back.
@@ -460,13 +591,21 @@ function goMarket(section){
   if(el) el.scrollIntoView({block:'start'});
 }
 
-/* One icon from the sprite in index.html. `cls` adds a modifier, 'sm' for the
-   14px version used inside meta text. Icons inherit the surrounding text colour
-   through currentColor, so they never need a colour of their own. Named
+/* One interface icon, drawn in pixel tiles by art.js. `cls` adds a modifier,
+   'sm' for the 14px version used inside meta text. Icons take the surrounding
+   text colour (currentColor), so they never need a colour of their own. Named
    svgIcon, not icon, because emptyState() already takes an `icon` argument and
-   a shadowed name here would be a silent failure. */
+   a shadowed name here would be a silent failure.
+   The names on the left are the ones the code has always used (they came from
+   the old line-icon set); the right side is the drawing in art.js. A name
+   missing from this map falls back to the same name in art.js, then to a
+   sparkle, so a typo shows a sparkle instead of nothing. */
+var UI_ICON={'scroll-text':'sword','bar-chart-3':'chart','book-open':'book',settings:'gear','chevron-right':'chevR',
+  'chevron-left':'chevL','chevron-down':'chevD','trash-2':'trash',coins:'coin',sparkles:'sparkle',zap:'bolt',
+  'more-horizontal':'more','arrow-up-right':'upRight'};
 function svgIcon(name,cls){
-  return '<svg class="i'+(cls?' '+cls:'')+'" aria-hidden="true" focusable="false"><use href="#i-'+name+'"/></svg>';
+  if(!window.PX) return '';
+  return PX.icon(UI_ICON[name]||name,'i'+(cls?' '+cls:''));
 }
 /* Kept for the creation flows (difficulty is a real choice there, and shows its
    payout). List rows use the meta sentence in questRow instead. */
@@ -478,7 +617,7 @@ function emptyState(icon,title,hint,cta){
 }
 function skillOptions(sel){
   return '<option value="">- skill -</option>'+state.skills.map(function(s){
-    return '<option value="'+s.id+'"'+(sel===s.id?' selected':'')+'>'+s.icon+' '+esc(s.name)+'</option>';}).join('');
+    return '<option value="'+s.id+'"'+(sel===s.id?' selected':'')+'>'+esc(s.icon)+' '+esc(s.name)+'</option>';}).join('');
 }
 
 /* ---------- presets ---------- */
@@ -556,36 +695,86 @@ function dueLabel(due,today){
 function questRow(q){
   var today=RPG.todayKey(), done=q.doneOn===today || (!q.recurring && q.doneOn);
   var activeToday=RPG.questActiveOn(q,new Date());
-  var d=RPG.DIFF[q.diff], bits=[d.label], chip='';
-  if(q.skillId&&skillName(q.skillId)) bits.push(skillName(q.skillId));
-  if(q.recurring){
-    bits.push(q.days&&q.days.length
-      ? MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n];}).join(' ')
-      : 'every day');
-  }
+  var d=RPG.DIFF[q.diff], bits=[], chip='';
+  if(q.diff==='hard'||q.diff==='epic') bits.push(d.label);
   if(q.due){
     var lbl=dueLabel(q.due,today);
     if(lbl==='late') chip='<span class="chip late">Late</span>';
     else if(lbl==='due today') chip='<span class="chip due">Due today</span>';
     else bits.push(lbl);
   }
+  /* a step drawn on Today (the plan, Now) says which main quest it belongs to;
+     on the Quests tab steps live inside their goal card and never come here.
+     One context is enough: the main quest wins over the life area. */
+  var stepOf=q.main?state.goals.find(function(g){return g.id===q.main;}):null;
+  if(stepOf) bits.push('🏆 '+esc(stepOf.title));
+  else if(q.skillId&&skillName(q.skillId)) bits.push(skillName(q.skillId));
+  if(q.recurring){
+    bits.push(q.days&&q.days.length
+      ? MON_ORDER.filter(function(n){return q.days.indexOf(n)>=0;}).map(function(n){return DOW[n];}).join(' ')
+      : 'every day');
+  }
   if((q.focusMin||0)>0) bits.push(fmtHm(q.focusMin)+' focused');
-  var action = done ? '<span style="color:var(--good);font-weight:700">'+svgIcon('check')+'</span>'
-    : (q.recurring && !activeToday) ? '<span class="chip muted" title="Scheduled for another day">not today</span>'
-    : '<button class="btn go" onclick="doQuest(\''+q.id+'\')">Clear</button>';
-  /* Focus lost its tab, so the way in is from the work itself: anything you
-     could clear right now can be focused right now. A dormant daily or a
-     finished quest gets no button, because there is nothing to work on. */
-  var canFocus = !done && (!q.recurring || activeToday);
-  return '<div class="item'+(done?' done':'')+(q.recurring&&!activeToday?' dormant':'')+'"><div class="grow"><div class="title">'+esc(q.title)+'</div>'+
-    '<div class="meta" title="'+d.label+': '+d.xp+' XP, '+d.coins+' coins">'+bits.join(', ')+chip+'</div></div>'+
-    action+
-    (canFocus?'<button class="btn ghost" title="Focus on this quest" aria-label="Focus on this quest" onclick="focusOnQuest(\''+q.id+'\')">'+svgIcon('timer','sm')+'</button>':'')+
-    (!q.recurring&&!done?'<button class="btn ghost" style="color:var(--gold)" title="Upgrade to main quest" aria-label="Upgrade to main quest" onclick="promoteQ(\''+q.id+'\')">'+svgIcon('arrow-up-right','sm')+'</button>':'')+
-    '<button class="btn ghost" title="Edit" aria-label="Edit quest" onclick="editQuestModal(\''+q.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
-    '<button class="btn ghost" title="Delete" aria-label="Delete quest" onclick="delQuest(\''+q.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+  var dormant=q.recurring && !activeToday;
+  if(dormant) bits.unshift('not today');
+  var meta=(bits.length||chip)?'<div class="meta" title="'+d.label+': '+d.xp+' XP'+(sysOn('rewards')?', '+d.coins+' coins':'')+'">'+chip+bits.join(' · ')+'</div>':'';
+  return '<div class="item q'+(done?' done':'')+(dormant?' dormant':'')+(flashIds[q.id]?' fresh':'')+'">'+
+    tickHtml(done, dormant, 'doQuest(\''+q.id+'\')', 'Clear '+q.title)+
+    '<div class="grow"><div class="title">'+esc(q.title)+'</div>'+meta+'</div>'+
+    moreBtn('q',q.id,'quest')+'</div>';
 }
-
+/* The row control on the left of every quest, step and habit. One tap clears.
+   A cleared row shows a filled check (with "Done today" for screen readers),
+   a daily that is not on today's schedule shows an empty dashed tile. It is a
+   real <button class="btn tick">, so lockDraft() can still focus the first
+   control of the plan with '.item .btn'. */
+function tickHtml(done, dormant, act, label, cls){
+  if(done) return '<span class="tick on'+(cls?' '+cls:'')+'">'+svgIcon('check')+'<span class="sr-only">Done today</span></span>';
+  if(dormant) return '<span class="tick off'+(cls?' '+cls:'')+'" title="Scheduled for another day"></span>';
+  return '<button type="button" class="btn tick'+(cls?' '+cls:'')+'" onclick="'+act+'" aria-label="'+esc(label)+'"></button>';
+}
+/* The one ⋯ button a row keeps. Everything else a row used to show (Focus,
+   upgrade, edit, delete, the payout) opens from here, in rowMenu(). */
+function moreBtn(kind,id,what){
+  return '<button type="button" class="btn ghost more" aria-label="More for this '+what+'" title="More" onclick="rowMenu(\''+kind+'\',\''+id+'\')">'+svgIcon('more-horizontal')+'</button>';
+}
+/* The small sheet behind ⋯. kind is q (quest or step), h (good habit),
+   m (monster) or g (main quest). Each entry closes the sheet first and then
+   calls the same function the old row button called, so editing, deleting
+   and focusing behave exactly as before. */
+function rowMenu(kind,id){
+  var acts=[], head='', info='';
+  function a(icon,label,call,cls){ acts.push('<button type="button" class="rmact'+(cls?' '+cls:'')+'" onclick="closeModal();'+call+'">'+svgIcon(icon)+'<span>'+label+'</span></button>'); }
+  if(kind==='q'){
+    var q=state.quests.find(function(x){return x.id===id;}); if(!q) return;
+    var done=q.doneOn===RPG.todayKey()||(!q.recurring&&q.doneOn), active=RPG.questActiveOn(q,new Date()), d=RPG.DIFF[q.diff];
+    head=esc(q.title); info=d.label+' · '+payTxt(d.xp,d.coins)+((q.focusMin||0)>0?' · '+fmtHm(q.focusMin)+' focused':'');
+    if(!done&&(!q.recurring||active)) a('timer','Focus on it','focusOnQuest(\''+id+'\')');
+    if(!q.recurring&&!done&&!q.main) a('arrow-up-right','Make it a main quest','promoteQ(\''+id+'\')');
+    a('pencil','Edit','editQuestModal(\''+id+'\')');
+    a('trash-2','Delete','delQuest(\''+id+'\')','danger');
+  } else if(kind==='h'||kind==='m'){
+    var h=state.habits.find(function(x){return x.id===id;}); if(!h) return;
+    head=esc(h.title);
+    if(kind==='m'){ var cd=A.cleanDays(h); info=cd+' day'+(cd===1?'':'s')+' clean · best '+Math.max(h.bestClean||0,cd)+' · slips '+h.slips; }
+    else info=(h.target>=7?'Every day':h.target+'× a week')+' · '+(h.target<7?A.weekStreak(h)+' week streak':h.streak+' day streak');
+    a('pencil','Edit','editHabitModal(\''+id+'\')');
+    a('trash-2','Delete','delHabit(\''+id+'\')','danger');
+  } else if(kind==='g'){
+    var g=state.goals.find(function(x){return x.id===id;}); if(!g) return;
+    var p=A.goalProgress(state,g.id);
+    head='🏆 '+esc(g.title); info=p.done+' of '+p.total+' steps done · completing pays '+payTxt(300,150);
+    a('check','Complete it','doGoal(\''+id+'\')');
+    a('pencil','Edit','editGoalModal(\''+id+'\')');
+    a('trash-2','Delete','delGoal(\''+id+'\')','danger');
+  } else return;
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box rowmenu"><div class="rmhead">'+head+'</div>'+(info?'<div class="rminfo">'+info+'</div>':'')+
+    '<div class="rmacts">'+acts.join('')+'</div>'+
+    '<button type="button" class="btn ghost wide" onclick="closeModal()">Cancel</button></div>';
+  m.setAttribute('aria-label','Options');
+  var f=m.querySelector('.rmact'); if(f&&f.focus){ try{ f.focus(); }catch(e){} }
+}
 function chestChip(){
   var c=A.chestStatus(state);
   if(c.total===0) return '';
@@ -630,8 +819,11 @@ function openChestPreview(){
   m.innerHTML='<div class="box"><h2>🎁 DAILY CHEST</h2>'+
     '<div class="hint">Clear <b>all '+c.total+'</b> of today’s dailies ('+c.done+'/'+c.total+' done) and the chest opens. Inside:</div>'+
     '<div class="ranklist" style="margin-top:10px">'+
-      '<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">💰</span><div class="grow"><b>25 XP + 20-50 coins</b> - every chest, guaranteed</div><span class="rl">100%</span></div>'+
-      '<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">🧞</span><div class="grow"><b>Coin jackpot</b> - an extra 40-100 💰 on top</div><span class="rl">'+jack+'%</span></div>'+
+      /* coin amounts only once the Market is open (staged heroes) */
+      (sysOn('rewards')
+        ?'<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">💰</span><div class="grow"><b>25 XP + 20-50 coins</b> - every chest, guaranteed</div><span class="rl">100%</span></div>'+
+         '<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">🧞</span><div class="grow"><b>Coin jackpot</b> - an extra 40-100 💰 on top</div><span class="rl">'+jack+'%</span></div>'
+        :'<div class="rankrow"><span class="rk" style="color:var(--gold);border-color:var(--gold)">✨</span><div class="grow"><b>25 XP</b> - every chest, guaranteed</div><span class="rl">100%</span></div>')+
       '<div class="rankrow"><span class="rk" style="color:var(--skill);border-color:var(--skill)">🧪</span><div class="grow"><b>Focus Elixir</b> - ×2 XP for a whole day</div><span class="rl">'+pot+'%</span></div>'+
       '<div class="rankrow"><span class="rk" style="color:var(--hp);border-color:var(--hp)">🖼</span><div class="grow"><b>Glowing avatar frame</b> - rare cosmetic, collect all 6</div><span class="rl">'+fr+'%</span></div>'+
     '</div>'+
@@ -643,63 +835,73 @@ function openChestPreview(){
 function goalCard(g){
   var p=A.goalProgress(state,g.id), pct=p.total?Math.round(p.done/p.total*100):0;
   var steps=state.quests.filter(function(q){return q.main===g.id && !q.recurring;});
-  var stepHtml=steps.map(function(q){
-    var done=!!q.doneOn;
-    var today=RPG.todayKey();
-    var dueChip=q.due?' <span class="chip '+(q.due<today?'late':'due')+'" style="margin-left:4px">'+(q.due<today?'⚠ ':'due ')+q.due+'</span>':'';
-    return '<div class="step'+(done?' done':'')+'"><span>'+(done?'✅':'▫️')+'</span>'+
-      '<div class="grow">'+esc(q.title)+' <span class="chip '+q.diff+'" style="margin-left:6px">'+RPG.DIFF[q.diff].label+'</span>'+dueChip+'</div>'+
-      (done?'':'<button class="btn go small" onclick="doQuest(\''+q.id+'\')">Clear · '+RPG.DIFF[q.diff].xp+'xp</button>')+
-      '<button class="btn ghost small" title="Edit" aria-label="Edit step" onclick="editQuestModal(\''+q.id+'\')">✎</button>'+
-      '<button class="btn ghost small" aria-label="Delete step" onclick="delQuest(\''+q.id+'\')">✕</button></div>';
-  }).join('');
-  return '<div class="goal"><div class="t"><div class="title">🏆 '+esc(g.title)+'</div>'+
-    '<div><button class="btn go" onclick="doGoal(\''+g.id+'\')">Complete · 300xp/150💰</button>'+
-    '<button class="btn ghost" title="Edit" aria-label="Edit main quest" onclick="editGoalModal(\''+g.id+'\')">✎</button>'+
-    '<button class="btn ghost" aria-label="Delete main quest" onclick="delGoal(\''+g.id+'\')">✕</button></div></div>'+
+  /* the card shows the next three open steps; "Show all" opens the rest and
+     the finished ones. goalOpen survives re-renders, so clearing a step from
+     the open list does not snap it shut. */
+  var all=!!goalOpen[g.id];
+  var open=steps.filter(function(q){return !q.doneOn;});
+  var shown=all?steps:open.slice(0,3);
+  var more=steps.length-shown.length;
+  var finished=p.total>0&&p.done===p.total;
+  return '<div class="goal'+(flashIds[g.id]?' fresh':'')+'"><div class="t"><div class="title">🏆 '+esc(g.title)+'</div>'+moreBtn('g',g.id,'main quest')+'</div>'+
     (g.note?'<div class="hint">'+esc(g.note)+'</div>':'')+
     '<div class="bar"><i style="width:'+pct+'%"></i></div>'+
-    '<div class="pct">'+p.done+' / '+p.total+' steps · '+pct+'%'+((g.focusMin||0)>0?' · <span style="color:var(--blue)">⏳ '+fmtHm(g.focusMin)+' invested</span>':'')+'</div>'+
-    '<div class="steps">'+stepHtml+'</div>'+
-    '<div class="stepadd"><input id="step_'+g.id+'" placeholder="Add a step to this main quest…">'+
-    '<select id="stepd_'+g.id+'"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
-    '<input type="date" id="stepdue_'+g.id+'" title="Due date (optional)">'+
-    '<button class="btn go small" style="flex-shrink:0;white-space:nowrap" onclick="addStep(\''+g.id+'\')">Add step</button></div></div>';
+    '<div class="pct">'+p.done+' / '+p.total+' steps · '+pct+'%'+((g.focusMin||0)>0?' · ⏳ '+fmtHm(g.focusMin)+' invested':'')+'</div>'+
+    '<div class="steps">'+shown.map(stepRow).join('')+'</div>'+
+    (more>0?'<button type="button" class="btn ghost small stepsmore" onclick="goalOpen[\''+g.id+'\']=true;render()">Show all '+steps.length+' steps</button>'
+      :(all&&steps.length>3?'<button type="button" class="btn ghost small stepsmore" onclick="goalOpen[\''+g.id+'\']=false;render()">Show less</button>':''))+
+    (finished?'<button class="btn go wide" onclick="doGoal(\''+g.id+'\')">Complete · '+payTxt(300,150)+'</button>':'')+
+    addForm('step_'+g.id,'Add a step',
+      '<div class="stepadd"><input id="step_'+g.id+'" placeholder="Next step…">'+
+      '<select id="stepd_'+g.id+'" aria-label="Difficulty"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
+      '<input type="date" id="stepdue_'+g.id+'" title="Due date (optional)" aria-label="Due date">'+
+      '<button class="btn go small" style="flex-shrink:0;white-space:nowrap" onclick="addStep(\''+g.id+'\')">Add step</button></div>')+'</div>';
 }
-
+var goalOpen={};
+function stepRow(q){
+  var done=!!q.doneOn, today=RPG.todayKey();
+  var when=q.due?(done?'':(q.due<today?'<span class="when late">late</span>':'<span class="when">'+esc(dueLabel(q.due,today).replace('due ',''))+'</span>')):'';
+  return '<div class="step'+(done?' done':'')+'">'+tickHtml(done,false,'doQuest(\''+q.id+'\')','Clear step '+q.title,'sm')+
+    '<div class="grow">'+esc(q.title)+(q.diff==='hard'||q.diff==='epic'?' <span class="chip '+q.diff+'">'+RPG.DIFF[q.diff].label+'</span>':'')+'</div>'+when+
+    moreBtn('q',q.id,'step')+'</div>';
+}
+/* A typed add form, folded behind one "+ ..." row. The fields stay in the
+   page while folded (the tests and addQuest() read them by id), and which
+   folds are open survives re-renders, so adding three dailies in a row does
+   not mean reopening the fold each time. */
+var openForms={};
+function addForm(key,label,inner){
+  return '<details class="addform"'+(openForms[key]?' open':'')+' ontoggle="openForms[\''+key+'\']=this.open"><summary>'+svgIcon('plus','sm')+' '+label+'</summary><div class="form">'+inner+'</div></details>';
+}
 function renderQuests(){
-  var today=RPG.todayKey();
   var dailies=state.quests.filter(function(q){return q.recurring;});
   var chest=A.chestStatus(state);
   var sides=state.quests.filter(function(q){return !q.recurring && !q.doneOn && !q.main;});
   var goalsOpen=state.goals.filter(function(g){return !g.doneOn;});
   var goalHtml=goalsOpen.map(goalCard).join('') ||
-    emptyState('🏆','No main quest yet','A main quest is a big goal - the exam, the essay, the internship. Add one below and break it into steps.');
-
-  $('#view').innerHTML=bossStrip()+
-    '<div class="panel" style="border-color:var(--gold);margin-bottom:14px"><h3 style="color:var(--gold)">🏆 Main quests - the big goals</h3>'+goalHtml+
-      '<div class="form"><div class="row"><input id="gTitle" placeholder="New main quest… (e.g. Pass my driving test, Finish my portfolio)">'+
-      '<button class="btn go" onclick="addGoal()">🏆 Add main quest</button></div></div></div>'+
+    emptyState('🏆','No main quest yet','The exam, the essay, the internship: a big goal with steps.');
+  $('#view').innerHTML=(sysOn('boss')?bossStrip():'')+
+    '<div class="panel mains"><h3>Main quests'+(goalsOpen.length?' <span class="cnt">'+goalsOpen.length+'</span>':'')+'</h3>'+goalHtml+
+      addForm('g','New main quest','<div class="row"><input id="gTitle" placeholder="Pass my driving test…">'+
+      '<button class="btn go" onclick="addGoal()">Add</button></div>')+'</div>'+
     '<div class="grid two">'+
-    '<div><div class="panel"><h3>🔁 Daily quests <span class="cnt">'+chest.done+'/'+chest.total+'</span>'+chestChip()+'</h3>'+
-      '<div class="hint" style="margin-bottom:8px">Repeating tasks that reset every morning (e.g. plan tomorrow, revise 20 min). Clearing them all opens the daily chest.</div>'+
-      (dailies.map(questRow).join('')||emptyState('🔁','No dailies yet','Add a repeating task below - it resets every morning and feeds the daily chest.'))+
-      '<div class="form"><input id="dTitle" placeholder="New daily quest… (try: stretch every weekday)" oninput="quickParse(\'d\')"><div class="hint" id="dHint"></div>'+
-      '<div class="row"><select id="dDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
-      '<select id="dSkill">'+skillOptions()+'</select></div>'+
+    '<div><div class="panel"><h3>Daily quests'+chestChip()+'</h3>'+
+      (dailies.map(questRow).join('')||emptyState('🔁','No dailies yet','A task that resets every morning and feeds the daily chest.'))+
+      addForm('d','New daily','<input id="dTitle" placeholder="Stretch every weekday…" oninput="quickParse(\'d\')"><div class="hint" id="dHint"></div>'+
+      '<div class="row"><select id="dDiff" aria-label="Difficulty"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
+      '<select id="dSkill" aria-label="Life area">'+skillOptions()+'</select></div>'+
       '<div class="daysrow"><span class="plabel">repeat on:</span>'+MON_ORDER.map(function(i){
         return '<button type="button" class="dow'+(pendingDays.indexOf(i)>=0?' on':'')+'" onclick="toggleDow('+i+')">'+DOW[i][0]+'</button>';
-      }).join('')+'<span class="hint">none selected = every day</span></div>'+
-      '<button class="btn wide go" onclick="addDaily()">+ Add daily</button></div></div>'+
-    '<div class="panel" style="margin-top:14px">'+agendaPanel()+'</div></div>'+
-    '<div class="panel"><h3>📌 Side quests <span class="cnt">'+sides.length+'</span></h3>'+
-      '<div class="hint" style="margin-bottom:8px">One-off tasks with an optional due date (e.g. organize photo library, book dentist). For something that needs regular practice over time, like learning a dance, make it a 🏆 main quest and add steps, or a 🌱 habit with a weekly target.</div>'+
-      (sides.map(questRow).join('')||emptyState('📌','No side quests','Add a one-off task below. The ⬆ button upgrades one into a main quest.'))+
-      '<div class="form"><input id="qTitle" placeholder="New side quest… (try: book dentist by friday hard)" oninput="quickParse(\'q\')"><div class="hint" id="qHint"></div>'+
-      '<div class="row"><select id="qDiff"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
-      '<select id="qSkill">'+skillOptions()+'</select>'+
-      '<input type="date" id="qDue" title="Due date (optional)"></div>'+
-      '<button class="btn wide go" onclick="addQuest()">+ Add side quest</button></div></div></div>';
+      }).join('')+'<span class="hint">none = every day</span></div>'+
+      '<button class="btn wide go" onclick="addDaily()">Add daily</button>')+'</div>'+
+    '<details class="panel deadlines"'+(openForms.deadlines?' open':'')+' ontoggle="openForms.deadlines=this.open">'+agendaPanel()+'</details></div>'+
+    '<div class="panel"><h3>Side quests'+(sides.length?' <span class="cnt">'+sides.length+'</span>':'')+'</h3>'+
+      (sides.map(questRow).join('')||emptyState('📌','No side quests','One-off tasks, with a due date if they have one.'))+
+      addForm('q','New side quest','<input id="qTitle" placeholder="Book dentist by friday hard…" oninput="quickParse(\'q\')"><div class="hint" id="qHint"></div>'+
+      '<div class="row"><select id="qDiff" aria-label="Difficulty"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option><option value="epic">Epic</option></select>'+
+      '<select id="qSkill" aria-label="Life area">'+skillOptions()+'</select>'+
+      '<input type="date" id="qDue" title="Due date (optional)" aria-label="Due date"></div>'+
+      '<button class="btn wide go" onclick="addQuest()">Add side quest</button>')+'</div></div>';
 }
 /* toggle a weekday chip in place - must NOT re-render, or it wipes the half-typed quest form */
 function toggleDow(n){
@@ -720,16 +922,19 @@ function bossStrip(){
       '<button class="btn slip" onclick="slayBoss()">🗡️ SLAY</button>'+
       '<button class="btn ghost" aria-label="Abandon boss" onclick="abandonBoss()">✕</button></div>';
   }
+  /* No boss yet: one line, Sage's pick as a one-tap button, and the typed
+     form folded away. #bossTitle and #bossDue stay in the page while folded
+     (setBoss() and the tests read them). */
   var s0=RPG.bossSunday(), s1=RPG.bossSunday(null,1);
   function sunTxt(k){ return 'Sunday '+new Date(k+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
-  return '<div class="boss calm" style="border-color:var(--line)"><span class="ic" style="animation:none;opacity:.5">🐲</span><div class="grow">'+
-    '<div class="t" style="color:var(--muted)">No weekly boss named</div>'+
-    '<div class="sub">Pick THE task of the week - worth 500xp / 250💰 · due by the Sunday that closes its week.</div></div>'+
-    '<input id="bossTitle" placeholder="This week I will slay…" style="max-width:220px">'+
-    '<select id="bossDue" title="Which week does this boss close?" style="max-width:170px">'+
-      '<option value="'+s0+'">by '+sunTxt(s0)+'</option>'+
-      '<option value="'+s1+'">by '+sunTxt(s1)+'</option></select>'+
-    '<button class="btn" onclick="setBoss()">🐲 Name it</button></div>';
+  return '<div class="boss calm"><span class="ic" style="animation:none;opacity:.6">🐲</span><div class="grow">'+
+    '<div class="t">Weekly boss</div>'+
+    '<div class="sub">THE task of the week, worth '+payTxt(500,250)+'</div>'+bossPick()+
+    addForm('boss','Name your own','<div class="bossform"><input id="bossTitle" placeholder="This week I will slay…">'+
+      '<select id="bossDue" title="Which week does this boss close?" aria-label="Due">'+
+        '<option value="'+s0+'">by '+sunTxt(s0)+'</option>'+
+        '<option value="'+s1+'">by '+sunTxt(s1)+'</option></select>'+
+      '<button class="btn go" onclick="setBoss()">Name it</button></div>')+'</div></div>';
 }
 function setBoss(){
   var t=$('#bossTitle').value.trim(); if(!t) return;
@@ -747,37 +952,49 @@ function abandonBoss(){
 }
 function bossKillScreen(r){
   SND.rankup(); confetti(true); shake();
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--hp);font-size:72px">🐲</div>'+
-    '<div class="big" style="color:var(--hp)">BOSS SLAIN</div>'+
-    '<div class="sub">'+esc(r.title)+'</div>'+
-    '<div class="sub"><span style="color:var(--xp)">+'+r.xp+' XP</span> &nbsp; <span style="color:var(--gold)">+'+r.coins+' 💰</span></div>'+
-    '<button class="btn go" onclick="closeOverlay()">Glory ▶</button></div>';
+  var rows=[cerRow('✨','+'+r.xp+' XP')];
+  if(sysOn('rewards')) rows.push(cerRow('💰','+'+r.coins+' coins'));
+  ceremony({
+    badge:cerBadge('🐲'),
+    kicker:'BOSS SLAIN',
+    title:esc(r.title),
+    sub:'The task of the week is done.',
+    rows:rows,
+    primary:{label:'Glory',act:'closeOverlay()'}
+  });
 }
 
 function agendaPanel(){
   var items=A.agenda(state);
-  var names={overdue:'⚠ OVERDUE',today:'🔥 DUE TODAY',week:'📅 THIS WEEK',later:'🌙 LATER'};
-  var exportBtn='<button class="btn small right" onclick="exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">📅 Export due dates</button>';
-  if(!items.length) return '<h3>📅 Deadlines'+exportBtn+'</h3>'+emptyState('🗓️','Nothing scheduled','Give side quests a due date and they line up here by priority.');
-  var out='<h3>📅 Deadlines <span class="cnt">'+items.length+'</span>'+exportBtn+'</h3>', last='';
+  var names={overdue:'Late',today:'Due today',week:'This week',later:'Later'};
+  var exportBtn='<button class="btn small ghost right" onclick="event.preventDefault();exportICS()" title="Download an .ics file of quests with due dates for Apple/Google Calendar">'+svgIcon('calendar','sm')+' Export</button>';
+  if(!items.length) return '<summary><h3>Deadlines'+exportBtn+'</h3>'+svgIcon('chevron-down','sm')+'</summary>'+emptyState('🗓️','Nothing scheduled','Give a quest a due date and it lines up here.');
+  var out='<summary><h3>Deadlines <span class="cnt">'+items.length+'</span>'+exportBtn+'</h3>'+svgIcon('chevron-down','sm')+'</summary>', last='';
   items.forEach(function(it){
     if(it.bucket!==last){ out+='<div class="logday">'+names[it.bucket]+'</div>'; last=it.bucket; }
-    var when=it.days<0?(-it.days)+'d late':it.days===0?'today':it.days===1?'tomorrow':'in '+it.days+'d';
-    out+='<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+'</div>'+
-      '<span class="when">'+when+'</span>'+
-      '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
+    out+=agRow(it);
   });
   return out;
 }
-
+/* One dated row, shared by Deadlines and Coming up: the tick, the title (and
+   the main quest it belongs to), and when. .ag and .ag.overdue are what the
+   tests read. */
+function agRow(it){
+  var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
+  var when=it.days<0?(-it.days)+'d late':it.days===0?'today':it.days===1?'tomorrow':it.days<7?DOW[new Date(it.q.due+'T00:00:00').getDay()]:'in '+it.days+'d';
+  return '<div class="ag '+it.bucket+'">'+tickHtml(false,false,'doQuest(\''+it.q.id+'\')','Clear '+it.q.title,'sm')+
+    '<div class="grow">'+esc(it.q.title)+(mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'')+'</div>'+
+    '<span class="when">'+when+'</span></div>';
+}
 /* ---------- Today: the productivity dashboard ----------
    The order IS the product. Greeting, then only what is on fire (downed,
    wounded, atonement), two slim one-line slots (cloud nudge, Sage's line),
    the quick actions, then Now, Coming up, Habits today and the log card.
    The first row of Now has to be on screen at 375x812 without scrolling;
    anything added above it costs exactly that height, so new banners go
-   below Now or into a slot, never above it. Every class the tests read
+   below Now or into a slot, never above it. The one exception is Sage's
+   draft (draftCard): it is itself the list of what to do now, it shows only
+   until the plan is locked, and then Now is first again. Every class the tests read
    (.todayhead, .downbar, .woundbar, .redeembar, .nudgebar, .chestchip,
    .ag.overdue, .quick button.potion, #jNote, .hrbtn, #slHours) still renders
    here; move one and grep test-ui.js first. */
@@ -791,20 +1008,23 @@ function renderToday(){
     '<div class="todayhead"><span class="hi">'+greet+', '+esc(state.hero.name)+'</span>'+
       '<span class="dt">'+new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})+'</span>'+
       (boss?'<button class="bosschip" onclick="go(\'quests\')" title="Weekly boss: '+esc(boss.title)+'. Tap to see it">🐲 '+esc(boss.title)+' · '+A.bossDaysLeft(state)+'d</button>':'')+'</div>'+
-    (state.hero.downed?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
+    (state.hero.downed&&sysOn('stakes')?'<div class="downbar">💀 <b>Downed</b> - half XP &amp; no coins. Heal to full HP to <b>Rise</b> and earn normally again. <b>HP '+state.hero.hp+'/'+RPG.maxHpOf(state)+'</b>'+
       '<span class="nb"><button class="btn small go" onclick="goMarket(\'hotel\')" title="What happens when you’re defeated?">🛏️ Rest</button><button class="btn small ghost" onclick="openDefeatInfo()" aria-label="How defeat works">ⓘ</button></span></div>'
-      :(wounded?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
+      :(wounded&&sysOn('stakes')?'<div class="woundbar">🩸 <b>Wounded</b> - XP halved today. Rest at the Hotel or log good sleep to recover.</div>':''))+
     redemptionBar()+
-    /* the nudge is one line now: the text truncates, the two buttons never do.
-       The .ghost dismiss and the cloudNudgeOff flag are what the test clicks. */
+    sageLine()+
+    quickActions()+
+    draftCard()+
+    nowPanel()+
+    nextLine()+
+    comingUp()+
+    habitsToday()+
+    /* the cloud nudge is a reminder, not today's work, so it sits under the
+       habits. One line: the text truncates, the two buttons never do. The
+       .ghost dismiss and the cloudNudgeOff flag are what the test clicks. */
     (cloudNudgeDue()?'<div class="nudgebar">☁️ <span class="grow"><b>Protect your progress.</b> Your save lives only in this browser; free cloud sync keeps it safe.</span>'+
       '<span class="nb"><button class="btn small go" onclick="openSettings()">Set up</button>'+
       '<button class="btn small ghost" onclick="state.settings.cloudNudgeOff=true;persist();render()">Later</button></span></div>':'')+
-    sageLine()+
-    quickActions()+
-    nowPanel()+
-    comingUp()+
-    habitsToday()+
     logCard()+
     /* On a phone the quick actions row is fixed above the tab bar, so the
        last card needs this much room to scroll clear of it. Empty on desktop
@@ -824,25 +1044,22 @@ function sageLine(){
     '<button class="btn ghost small" onclick="toggleMascot(true)" aria-label="More from Sage">More</button></div>';
 }
 /* Three 44px buttons, plus the Focus Elixir when one is held (a test looks
-   for .quick button.potion). Add lands on the Quests form for now; phase 6
-   swaps quickAdd() for the smart add sheet and nothing else here changes. */
+   for .quick button.potion). Add is the primary one: it opens the capture
+   sheet, which is the fastest way anything gets onto the board. */
 function quickActions(){
   var potion=state.inventory.potion||0;
   return '<div class="quick qa" role="group" aria-label="Quick actions">'+
-    '<button class="qab" onclick="quickAdd()">'+svgIcon('plus')+'<span>Add</span></button>'+
+    '<button class="qab primary" onclick="quickAdd()">'+svgIcon('plus')+'<span>Add</span></button>'+
     '<button class="qab" onclick="go(\'focus\')">'+svgIcon('timer')+'<span>Focus</span></button>'+
     '<button class="qab" onclick="askSage()">'+svgIcon('sparkles')+'<span>Ask Sage</span></button>'+
     (potion>0?'<button class="qab potion" onclick="usePotion()" title="Focus Elixir: ×2 XP for the rest of today">🧪<span>Elixir ×'+potion+'</span></button>':'')+
     '</div>';
 }
-function quickAdd(){
-  go('quests');
-  var el=$('#qTitle'); if(!el) return;
-  /* jsdom has no scrollIntoView, and an old WebView may throw on the options
-     object, so both are guarded: focusing the field is the part that matters */
-  if(el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
-  el.focus();
-}
+/* Add opens the capture sheet (talk, paste or type; Sage sorts it). The
+   typed forms are still on the Quests and Habits tabs for anyone who wants
+   to fill every field by hand. The name quickAdd is kept because the empty
+   Now panel and older markup call it. */
+function quickAdd(){ openCapture(); }
 /* Chat needs the Edge Function, which needs a signed-in user. Signed out, the
    owl still answers with the offline briefing. */
 function askSage(){ if(cloudOn()) openSageChat(); else toggleMascot(true); }
@@ -850,37 +1067,52 @@ function askSage(){ if(cloudOn()) openSageChat(); else toggleMascot(true); }
    (Clear, Focus, edit, delete all come from questRow). A one-off cleared today
    stays in the list with its check so the count reads 3/3 instead of the row
    vanishing under the user's thumb. */
+/* A long list shows its first five rows and one "Show n more" line. The
+   cut is per list (key), and opening one survives re-renders until the day
+   changes, so clearing a row in the open list does not fold it again. */
+var foldOpen={}, foldDay=null;
+function foldRows(html,key){
+  if(foldDay!==RPG.todayKey()){ foldDay=RPG.todayKey(); foldOpen={}; }
+  if(html.length<=6 || foldOpen[key]) return html.join('');
+  return html.slice(0,5).join('')+'<button type="button" class="btn ghost small foldmore" onclick="foldOpen[\''+key+'\']=true;render()">Show '+(html.length-5)+' more</button>';
+}
 function nowPanel(){
   var today=RPG.todayKey(), now=new Date();
   var dailies=state.quests.filter(function(q){return q.recurring && RPG.questActiveOn(q,now);});
   var due=state.quests.filter(function(q){return !q.recurring && q.due===today && (!q.doneOn||q.doneOn===today);});
   var rows=dailies.concat(due);
+  /* a plan locked today takes over the panel (planPanel, further down) */
+  var st=A.planStatus(state);
+  if(st.active && !st.skipped && st.total) return planPanel(st, rows);
   var done=rows.filter(function(q){return q.doneOn===today;}).length;
-  var body=rows.length?rows.map(questRow).join('')
+  var body=rows.length?foldRows(rows.map(questRow),'now')
     :emptyState('☀️','Nothing due right now','Add a quest, or bank some deep work.',
       '<div class="erow"><button class="btn go" onclick="quickAdd()">'+svgIcon('plus')+' Add a quest</button>'+
       '<button class="btn" onclick="go(\'focus\')">'+svgIcon('timer')+' Start focus</button></div>');
-  return '<div class="panel now"><h3>Now'+(rows.length?' <span class="cnt">'+done+'/'+rows.length+'</span>':'')+chestRing()+'</h3>'+body+'</div>';
+  /* after "Not today" the draft stays away; this is the way back to it */
+  var replan=(st.active && st.skipped && RPG.dailyDraft(state).items.length)?'<button class="btn ghost small planedit" onclick="editPlan()">Plan today</button>':'';
+  return '<div class="panel now"><h3>Now'+(rows.length?' <span class="cnt">'+done+'/'+rows.length+'</span>':'')+replan+chestRing()+'</h3>'+body+'</div>';
 }
 /* Coming up: Late (only when something is overdue), Tomorrow, This week. The
    Today group the spec lists is deliberately not here: a quest due today is
    already a full row in Now, and the same title twice on one screen makes
    both counts lie. Anything past seven days stays on the Quests tab agenda,
    which has the room for it. .ag and .ag.overdue are what the tests read. */
+var comingOpen=false;
 function comingUp(){
   var items=A.agenda(state).filter(function(it){return it.bucket!=='today' && it.days<=7;});
+  if(!items.length) return '';
+  /* folded to one line by default; it opens by itself when something is late,
+     because late work is the one thing on this list that cannot wait */
+  var late=items.some(function(it){return it.days<0;});
   var out='', last='';
   items.forEach(function(it){
     var grp=it.days<0?'Late':it.days===1?'Tomorrow':'This week';
     if(grp!==last){ out+='<div class="logday">'+grp+'</div>'; last=grp; }
-    var mainG=it.q.main?state.goals.find(function(g){return g.id===it.q.main;}):null;
-    var when=it.days<0?(-it.days)+'d late':it.days===1?'tomorrow':it.days<7?DOW[new Date(it.q.due+'T00:00:00').getDay()]:'in '+it.days+'d';
-    out+='<div class="ag '+it.bucket+'"><div class="grow">'+esc(it.q.title)+(mainG?'<div class="submeta">🏆 '+esc(mainG.title)+'</div>':'')+'</div>'+
-      '<span class="when">'+when+'</span>'+
-      '<button class="btn go small" onclick="doQuest(\''+it.q.id+'\')">Clear</button></div>';
+    out+=agRow(it);
   });
-  return '<div class="panel comingup"><h3>Coming up'+(items.length?' <span class="cnt">'+items.length+'</span>':'')+'</h3>'+
-    (out||'<div class="empty">Nothing due this week. Give a quest a due date and it lines up here.</div>')+'</div>';
+  return '<details class="panel comingup"'+(late||comingOpen?' open':'')+' ontoggle="comingOpen=this.open"><summary><h3>Coming up <span class="cnt">'+items.length+'</span>'+
+    (late?'<span class="chip late">Late</span>':'')+'</h3>'+svgIcon('chevron-down','sm')+'</summary>'+out+'</details>';
 }
 /* Habits today: the good habits as the same rows the Habits tab draws, then
    the monsters folded behind one "Slipped?" row. slippedOpen survives the
@@ -889,11 +1121,18 @@ function comingUp(){
 var slippedOpen=false;
 function habitsToday(){
   var today=RPG.todayKey();
-  var good=state.habits.filter(function(x){return x.type==='good';});
-  var bad=state.habits.filter(function(x){return x.type==='bad';});
+  /* a habit that is in today's plan is drawn there, not twice on one screen */
+  var st=A.planStatus(state), inPlan={};
+  if(st.active && !st.skipped) st.items.forEach(function(it){ if(it.kind==='habit') inPlan[it.id]=1; });
+  var allGood=state.habits.filter(function(x){return x.type==='good';});
+  var good=allGood.filter(function(x){return !inPlan[x.id];});
+  /* monsters appear here only once HP and monsters are open (never in Calm) */
+  var bad=sysOn('stakes')?state.habits.filter(function(x){return x.type==='bad';}):[];
   var kept=good.filter(function(x){return x.lastDoneOn===today;}).length;
   return '<div class="panel habits"><h3>Habits today'+(good.length?' <span class="cnt">'+kept+'/'+good.length+'</span>':'')+'</h3>'+
-    (good.map(goodHabitRow).join('')||emptyState('🌱','No habits yet','Something small you want to do most days.','<button class="btn" onclick="go(\'habits\')">Plant one</button>'))+
+    ((good.length?foldRows(good.map(goodHabitRow),'habits'):'')||(allGood.length
+      ?'<div class="empty">Your habits for today are in the plan above.</div>'
+      :emptyState('🌱','No habits yet','Something small you want to do most days.','<button class="btn" onclick="go(\'habits\')">Plant one</button>')))+
     (bad.length?'<details class="slipped"'+(slippedOpen?' open':'')+' ontoggle="slippedOpen=this.open"><summary>'+svgIcon('chevron-down','sm')+'Slipped? <span class="hint">'+bad.length+' monster'+(bad.length===1?'':'s')+', log it honestly</span></summary>'+
       bad.map(monsterRow).join('')+'</details>':'')+
     '</div>';
@@ -919,8 +1158,14 @@ function logCard(){
       '<div class="grow"><div class="title">'+(mo?'Mood: '+esc(mo.label):'Sleep logged')+'</div><div class="meta">'+(bits.join(' · ')||'logged')+'</div></div>'+
       '<button class="btn ghost" title="Edit" aria-label="Edit today\'s log" onclick="openLog()">'+svgIcon('pencil','sm')+'</button>'+archive+'</div></div>';
   }
-  return '<div class="panel logcard"><div class="logrow"><button class="logmain" onclick="openLog()"><span class="lmood" aria-hidden="true">📔</span>'+
-    '<span class="grow"><span class="title">Log your day</span><span class="meta">Mood, one honest line, sleep · +15 XP</span></span>'+svgIcon('chevron-down')+'</button>'+archive+'</div></div>';
+  /* From the reminder hour on (6pm unless changed), and once something was
+     done today, the same row reads as the Evening Debrief: Sage's line is
+     ready, so logging is a mood tap and Save. "+15 XP" stays in both
+     wordings, a test reads it. */
+  var deb=RPG.debrief(state), hr=(state.settings.reminderHour==null?18:state.settings.reminderHour);
+  var evening=!deb.empty && (new Date().getHours()>=hr || A.planStatus(state).complete);
+  return '<div class="panel logcard'+(evening?' evening':'')+'"><div class="logrow"><button class="logmain" onclick="'+(evening?'closeTheDay()':'openLog()')+'"><span class="lmood" aria-hidden="true">'+(evening?'🦉':'📔')+'</span>'+
+    '<span class="grow"><span class="title">'+(evening?'Close the day':'Log your day')+'</span><span class="meta">'+(evening?'Sage wrote your line. Pick a mood and save · +15 XP':'Mood, one honest line, sleep · +15 XP')+'</span></span>'+svgIcon('chevron-down')+'</button>'+archive+'</div></div>';
 }
 function openLog(){ logOpen=true; logAnim=true; render(); }
 function openJournalArchive(){
@@ -947,57 +1192,53 @@ function habitDots(h){
    payout sits in the tooltip. "n/N this wk" is asserted by a test. */
 function goodHabitRow(h){
   var today=RPG.todayKey(), done=h.lastDoneOn===today;
-  var bits=[];
-  if(h.skillId&&skillName(h.skillId)) bits.push(skillName(h.skillId));
-  bits.push(h.target>=7?'every day':h.target+'× a week');
-  bits.push(h.target<7
-    ? '🔥 '+A.weekStreak(h)+' wk'+(A.weekStreak(h)===1?'':'s')
-    : '🔥 '+h.streak+' day'+(h.streak===1?'':'s'));
-  var wk=h.target<7?'<span class="wkring">'+miniRing(A.weekCount(h)/h.target,20,'var(--info)')+'<span class="wk">'+A.weekCount(h)+'/'+h.target+' this wk</span></span>':'';
-  return '<div class="item'+(done?' done':'')+'"><div class="grow"><div class="title">'+esc(h.title)+'</div>'+
-    '<div class="meta" title="Keeping it pays +'+(12+Math.min(10,h.streak+1))+' XP and 6 coins">'+habitDots(h)+
-    '<span>'+bits.join(', ')+'</span>'+wk+'</div></div>'+
-    (done?'<span style="color:var(--good);font-weight:700">'+svgIcon('check')+' today</span>'
-      :'<button class="btn go" onclick="doHabit(\''+h.id+'\')">Done today</button>')+
-    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
-    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+  var bits=[], st=h.target<7?A.weekStreak(h):h.streak;
+  if(h.target<7) bits.push(A.weekCount(h)+'/'+h.target+' this wk');
+  if(st>0) bits.push('🔥 '+st+(h.target<7?' wk'+(st===1?'':'s'):' day'+(st===1?'':'s')));
+  else if(h.target>=7) bits.push('every day');
+  return '<div class="item h'+(done?' done':'')+(flashIds[h.id]?' fresh':'')+'">'+
+    tickHtml(done,false,'doHabit(\''+h.id+'\')','Done today: '+h.title)+
+    '<div class="grow"><div class="title">'+esc(h.title)+'</div>'+
+    '<div class="meta" title="Keeping it pays +'+(12+Math.min(10,h.streak+1))+' XP'+(sysOn('rewards')?' and 6 coins':'')+'">'+bits.join(' · ')+'</div></div>'+
+    habitDots(h)+moreBtn('h',h.id,'habit')+'</div>';
 }
 /* One monster row: clean days, the honest cost of a slip, the menace meter
    once it has grown, and the I slipped control. Shared by the Habits tab and
    Today's "Slipped?" fold. */
 function monsterRow(h){
   var days=A.cleanDays(h);
-  var best=Math.max(h.bestClean||0,days);
   var men=RPG.menaceOf(h);
   var damp=Math.max(0.5,1-0.2*RPG.boonCount(state,'warden'));
   var dmg=Math.round(12*men*damp);
   var menPct=Math.round((men-1)/(2.5-1)*100);
   var menClass=men>=2?' hot':men>1.3?' warm':'';
   return '<div class="item monster"><div class="grow"><div class="title">'+esc(h.title)+(men>1?' <span class="menaceTag'+menClass+'">menace ×'+men.toFixed(1)+'</span>':'')+'</div>'+
-    '<div class="meta"><span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span>'+
-    '<span>best: '+best+', slips: '+h.slips+'</span>'+
-    '<span class="chip late" title="What one honest slip costs you right now">−'+dmg+' ❤️ −10 💰</span></div>'+
+    '<div class="meta"><span class="cost" title="What one honest slip costs you right now">a slip costs −'+dmg+' ❤️'+(sysOn('rewards')?' −10 💰':'')+'</span> · '+
+    '<span class="clean">🛡 '+days+' day'+(days===1?'':'s')+' clean</span></div>'+
     (men>1?'<div class="menacebar"><i class="'+menClass.trim()+'" style="width:'+menPct+'%"></i></div>':'')+'</div>'+
-    '<button class="btn slip" onclick="slip(\''+h.id+'\')">I slipped</button>'+
-    '<button class="btn ghost" title="Edit" aria-label="Edit" onclick="editHabitModal(\''+h.id+'\')">'+svgIcon('pencil','sm')+'</button>'+
-    '<button class="btn ghost" title="Delete" aria-label="Delete" onclick="delHabit(\''+h.id+'\')">'+svgIcon('trash-2','sm')+'</button></div>';
+    '<button class="btn slip small" onclick="slip(\''+h.id+'\')">I slipped</button>'+moreBtn('m',h.id,'monster')+'</div>';
 }
 function renderHabits(){
   var good=state.habits.filter(function(h){return h.type==='good';});
   var bad=state.habits.filter(function(h){return h.type==='bad';});
   $('#view').innerHTML='<div class="grid two">'+
-    '<div class="panel"><h3>🌱 Grow - good habits <span class="hint" style="margin-left:auto">checkable again every morning</span></h3>'+
-    (good.map(goodHabitRow).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days - read 20 pages, a 30-minute walk…'))+
-    '<div class="form"><input id="hgTitle" placeholder="New good habit…">'+
-    '<div class="row"><select id="hgSkill">'+skillOptions()+'</select>'+
-    '<select id="hgTarget" style="max-width:130px"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
-    '<button class="btn go" onclick="addHabit(\'good\')">+ Add</button></div>'+presetChips('good')+'</div></div>'+
-    '<div class="panel"><h3>👾 Fight - bad habits <button class="btn small right" onclick="openDefeatInfo()" title="What happens if a monster knocks you out?">💀 What if I lose?</button></h3>'+
-    (bad.map(monsterRow).join('')||emptyState('👾','No monsters named','Name the habits you\u2019re fighting. Every slip you log honestly hits your HP - the more you feed a monster, the harder it bites.'))+
-    '<div class="form"><input id="hbTitle" placeholder="New monster…">'+
-    '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">+ Add monster</button>'+presetChips('bad')+'</div></div></div>';
+    '<div class="panel"><h3>Good habits'+(good.length?' <span class="cnt">'+good.filter(function(h){return h.lastDoneOn===RPG.todayKey();}).length+'/'+good.length+'</span>':'')+'</h3>'+
+    (good.map(goodHabitRow).join('')||emptyState('🌱','Plant your first habit','Something small you want to do most days.'))+
+    addForm('hg','New habit','<input id="hgTitle" placeholder="Read 20 pages…">'+
+    '<div class="row"><select id="hgSkill" aria-label="Life area">'+skillOptions()+'</select>'+
+    '<select id="hgTarget" style="max-width:130px" aria-label="How often"><option value="7">Every day</option><option value="6">6×/week</option><option value="5">5×/week</option><option value="4">4×/week</option><option value="3">3×/week</option><option value="2">2×/week</option><option value="1">1×/week</option></select>'+
+    '<button class="btn go" onclick="addHabit(\'good\')">Add</button></div>'+presetChips('good'))+'</div>'+
+    /* monsters: the full panel once HP and monsters are open, the locked
+       teaser while a staged hero is still below level 3, nothing in Calm.
+       "Fight - bad habits" is read by a test. */
+    (sysOn('stakes')
+      ?'<div class="panel"><h3>Fight - bad habits <button class="btn small ghost right" onclick="openDefeatInfo()" title="What happens if a monster knocks you out?">💀 What if I lose?</button></h3>'+
+        (bad.map(monsterRow).join('')||emptyState('👾','No monsters named','The habits you are fighting. An honest slip costs HP.'))+
+        addForm('hb','New monster','<input id="hbTitle" placeholder="Doomscrolling…">'+
+        '<button class="btn wide slip" style="background:var(--panel)" onclick="addHabit(\'bad\')">Add monster</button>'+presetChips('bad'))+'</div>'
+      :(state.settings.intensity==='calm'?'':lockedPanel('stakes')))+
+    '</div>';
 }
-
 /* ---------- focus tab (pomodoro) ---------- */
 function fmtTime(ms){
   var s=Math.max(0,Math.ceil(ms/1000)), m=Math.floor(s/60), r=s%60;
@@ -1073,7 +1314,7 @@ function sessionStats(f){
   var workedMin=Math.floor(A.focusWorkedMs(state)/60000);
   var xp=Math.round(workedMin*1.2), coins=Math.round(workedMin*0.6);
   return '<div class="sesh"><span>worked <b class="g" id="seshMin">'+workedMin+'</b> min</span>'+
-    '<span>banked so far <b id="seshPay">'+xp+'xp / '+coins+'💰</b></span>'+
+    '<span>banked so far <b id="seshPay">'+payTxt(xp,coins).replace('/',' / ')+'</b></span>'+
     '<span>cycles <b>'+f.cycles+'</b></span></div>';
 }
 /* The Focus button on a quest row. It cannot touch the form directly, because
@@ -1141,7 +1382,7 @@ function renderFocus(){
     var modes=[[25,5,'25 / 5'],[50,10,'50 / 10'],[90,15,'90 / 15'],[50,0,'FREE RUN']];
     $('#view').innerHTML=head+'<div class="panel focusbox">'+
       '<h3 style="justify-content:center">⏳ Focus - get paid for deep work</h3>'+
-      '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP + 0.6 💰 - you collect when you hit stop, whether that is after 20 minutes or 3 hours. Breaks heal +3 ❤️. <b>You need to focus at least 5 minutes before any XP or coins are earned.</b></div>'+
+      '<div class="hint">Pomodoro cycles that loop until you stop. Every worked minute pays 1.2 XP'+(sysOn('rewards')?' + 0.6 💰':'')+' - you collect when you hit stop, whether that is after 20 minutes or 3 hours.'+(sysOn('stakes')?' Breaks heal +3 ❤️.':'')+' <b>You need to focus at least 5 minutes before anything is earned.</b></div>'+
       '<div class="durchips">'+modes.map(function(m){
         var on=!focusMode.custom&&focusMode.work===m[0]&&focusMode.brk===m[1];
         return '<button class="'+(on?'on':'')+'" onclick="focusMode={work:'+m[0]+',brk:'+m[1]+',custom:false};render()">'+m[2]+'</button>';}).join('')+
@@ -1261,7 +1502,7 @@ function checkFocus(){
       ring.setAttribute('stroke-dashoffset',C*(1-pct));
     }
     var sm=$('#seshMin'), sp=$('#seshPay');
-    if(sm){ var wm=Math.floor(A.focusWorkedMs(state)/60000); sm.textContent=wm; if(sp) sp.textContent=Math.round(wm*1.2)+'xp / '+Math.round(wm*0.6)+'💰'; }
+    if(sm){ var wm=Math.floor(A.focusWorkedMs(state)/60000); sm.textContent=wm; if(sp) sp.textContent=payTxt(Math.round(wm*1.2),Math.round(wm*0.6)).replace('/',' / '); }
   }
 }
 
@@ -1280,7 +1521,12 @@ function shopIcon(title,tab){
    PRESETS.shop.*) but every section is always on the page at once now - see
    goMarket() for how a link still lands on one of them. */
 function renderMarket(){
-  $('#view').innerHTML='<div>'+balanceHero()+suggestedSection()+yourRewardsSection()+protectionSection()+guiltyPleasuresSection()+restSection()+'</div>';
+  /* Before the Market opens (staged heroes) this screen explains what it is
+     and what opens it. Guilty pleasures and Rest both act on HP, so they
+     wait for HP and monsters and never show in Calm. */
+  if(!sysOn('rewards')){ $('#view').innerHTML='<div>'+lockedPanel('rewards')+'</div>'; return; }
+  var hp=sysOn('stakes');
+  $('#view').innerHTML='<div>'+balanceHero()+suggestedSection()+yourRewardsSection()+protectionSection()+(hp?guiltyPleasuresSection()+restSection():'')+'</div>';
 }
 function toggleEscalate(){ state.settings.escalate=state.settings.escalate===false; persist(); render(); }
 
@@ -1298,12 +1544,11 @@ function balanceHero(){
   });
   var escOn=state.settings.escalate!==false;
   return '<div class="panel" id="shop-balance"><h3>Reward shop'+
-    '<button class="btn small ghost right" onclick="toggleEscalate()">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
+    '<button class="btn small ghost right" onclick="toggleEscalate()" title="Surge raises the price each time you repeat the same treat in one day, so a coin hoard cannot buy the whole shelf at once">'+(escOn?'📈 Surge ON':'➖ Surge OFF')+'</button></h3>'+
     '<div class="balnum" id="balCoins">💰 '+state.hero.coins+'</div>'+
     '<div class="balrow"><span>Earned today <b style="color:var(--ok)">+'+earned+' 💰</b></span>'+
     '<span>Spent today <b style="color:var(--text-2)">'+spent+' 💰</b></span></div>'+
-    '<div class="hint">You earn coins by clearing quests and keeping habits. Spend them here, guilt free.</div>'+
-    '<div class="hint">Surge raises the price each time you repeat the same treat in one day, so a coin hoard cannot buy the whole shelf in one sitting. Turn it off any time.</div>'+
+    '<div class="hint">Earned by clearing quests and keeping habits. Spend them guilt free.</div>'+
     '</div>';
 }
 
@@ -1341,7 +1586,7 @@ function suggestedSection(){
   var idxs=suggestedRewards();
   if(!idxs.length) return '';
   return '<div class="panel" id="shop-suggested" style="margin-top:14px"><h3>✨ Suggested for you</h3>'+
-    '<div class="hint" style="margin-bottom:10px">Matched to what is already on your board. One tap stocks it below.</div>'+
+    '<div class="hint" style="margin-bottom:10px">One tap puts it on your shelf.</div>'+
     '<div class="shopgrid">'+idxs.map(function(i){
       var it=PRESETS.shop.market[i];
       return '<div class="scard sugg"><div class="sicon" aria-hidden="true">'+shopIcon(it[0],'market')+'</div>'+
@@ -1382,14 +1627,13 @@ function shopCard(i){
 function yourRewardsSection(){
   var items=state.shop.filter(function(i){return i.tab==='market' && !i.special;});
   return '<div class="panel" id="shop-market" style="margin-top:14px"><h3>🛒 Your rewards</h3>'+
-    '<div class="hint" style="margin-bottom:10px">Everyday treats. Earn them, then enjoy them guilt-free, that is the whole point.</div>'+
     (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
-      :emptyState('🛒','Empty shelf','Stock rewards you actually want - that is what makes coins matter. Add one below.'))+
-    '<div class="form"><input id="sTitle-market" placeholder="New reward… (e.g. Cinema night)">'+
-    '<div class="row"><input id="sPrice-market" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
-    '<input id="sLimit-market" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
-    '<button class="btn buy" onclick="addShop(\'market\')">+ Stock it</button></div></div>'+
-    presetChips('shop','market')+'</div>';
+      :emptyState('🛒','Empty shelf','Stock a reward you actually want. It is what makes coins matter.'))+
+    /* no preset chips here: Suggested for you, above, offers the same list */
+    addForm('s-market','Stock your own reward','<input id="sTitle-market" placeholder="Cinema night…">'+
+    '<div class="row"><input id="sPrice-market" type="number" min="1" placeholder="price" aria-label="Price in coins" style="max-width:110px">'+
+    '<input id="sLimit-market" type="number" min="0" placeholder="max/day" aria-label="Most per day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'market\')">Stock it</button></div>')+'</div>';
 }
 
 /* Protection: the Streak Shield always shows here, even before it has ever
@@ -1418,15 +1662,14 @@ function protectionSection(){
 function guiltyPleasuresSection(){
   var items=state.shop.filter(function(i){return i.tab==='black';});
   return '<div class="panel" id="shop-black" style="margin-top:14px"><h3>🕶️ Guilty pleasures</h3>'+
-    '<div class="hint" style="margin-bottom:10px">The treats you would rather not have right now. One costs coins and HP, the price climbs, and you can only cave twice a day. It beats lying to yourself.</div>'+
+    '<div class="hint" style="margin-bottom:10px">Costs coins and HP, twice a day at most. It beats lying to yourself.</div>'+
     (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
       :emptyState('🕶️','Nothing stocked here','Add the treat you already reach for anyway - naming it is more honest than pretending.'))+
-    '<div class="form"><input id="sTitle-black" placeholder="New guilty pleasure…">'+
-    '<div class="row"><input id="sPrice-black" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
-    '<input id="sDmg" type="number" min="0" placeholder="−HP" style="max-width:90px">'+
-    '<input id="sLimit-black" type="number" min="0" placeholder="max/day (optional)" style="max-width:150px" title="0 = unlimited">'+
-    '<button class="btn buy" onclick="addShop(\'black\')">+ Stock it</button></div></div>'+
-    presetChips('shop','black')+'</div>';
+    addForm('s-black','Add a guilty pleasure','<input id="sTitle-black" placeholder="Netflix past midnight…">'+
+    '<div class="row"><input id="sPrice-black" type="number" min="1" placeholder="price" aria-label="Price in coins" style="max-width:110px">'+
+    '<input id="sDmg" type="number" min="0" placeholder="−HP" aria-label="HP it costs" style="max-width:90px">'+
+    '<input id="sLimit-black" type="number" min="0" placeholder="max/day" aria-label="Most per day (optional)" style="max-width:150px" title="0 = unlimited">'+
+    '<button class="btn buy" onclick="addShop(\'black\')">Stock it</button></div>'+presetChips('shop','black'))+'</div>';
 }
 
 function restSection(){
@@ -1434,12 +1677,11 @@ function restSection(){
   return '<div class="panel" id="shop-hotel" style="margin-top:14px"><h3>🛏️ Rest</h3>'+
     '<div class="hint" style="margin-bottom:10px">Heals HP, never surges, never capped.</div>'+
     (items.length?'<div class="shopgrid">'+items.map(shopCard).join('')+'</div>'
-      :emptyState('🛏️','Nothing stocked here','Add a way to heal up - a nap, a walk, an early night.'))+
-    '<div class="form"><input id="sTitle-hotel" placeholder="New way to rest…">'+
-    '<div class="row"><input id="sPrice-hotel" type="number" min="1" placeholder="price 💰" style="max-width:110px">'+
-    '<input id="sHp" type="number" min="0" placeholder="+HP" style="max-width:90px">'+
-    '<button class="btn buy" onclick="addShop(\'hotel\')">+ Stock it</button></div></div>'+
-    presetChips('shop','hotel')+'</div>';
+      :emptyState('🛏️','Nothing stocked here','A nap, a walk, an early night.'))+
+    addForm('s-hotel','Add a way to rest','<input id="sTitle-hotel" placeholder="Power nap…">'+
+    '<div class="row"><input id="sPrice-hotel" type="number" min="1" placeholder="price" aria-label="Price in coins" style="max-width:110px">'+
+    '<input id="sHp" type="number" min="0" placeholder="+HP" aria-label="HP it heals" style="max-width:90px">'+
+    '<button class="btn buy" onclick="addShop(\'hotel\')">Stock it</button></div>'+presetChips('shop','hotel'))+'</div>';
 }
 
 /* The daily log form: mood faces, the note, the sleep row (quick hours, the
@@ -1458,10 +1700,11 @@ function dailyLogForm(){
       var on=(pendingMood||((entry||{}).mood))===m.key;
       return '<button class="'+(on?'on':'')+'" title="'+m.label+'" aria-label="Mood: '+m.label+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingMood=\''+m.key+'\';render()">'+m.emoji+'</button>';
     }).join('')+'</div>'+
+    sageNoteChip()+
     '<textarea id="jNote" rows="3" placeholder="One honest line about today… (optional)" oninput="pendingNote=this.value">'+esc(pendingNote!=null?pendingNote:((entry||{}).note||''))+'</textarea>'+
     '<div class="flabel">🌙 Sleep last night '+(sl?'<span class="cnt" style="font-size:10px">logged ✓</span>':'')+'</div>'+
     '<div class="row sleeprow">'+
-    [7,8,9].map(function(n){
+    sleepQuick().map(function(n){
       var on=hrs!==''&&Number(hrs)===n;
       return '<button type="button" class="hrbtn'+(on?' on':'')+'" aria-pressed="'+(on?'true':'false')+'" onclick="pendingHours='+n+';render()">'+n+'h</button>';
     }).join('')+
@@ -1475,7 +1718,7 @@ function dailyLogForm(){
 function renderJournal(){
   var entry=state.journal[RPG.todayKey()];
   $('#view').innerHTML=viewBackHead('Journal')+'<div class="grid two">'+
-    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +15xp/5💰 · sleep heals ❤️')+'</h3>'+
+    '<div class="panel"><h3>📔 Daily log '+(entry?'<span class="cnt">saved ✓</span>':'· +'+payTxt(15,5)+(sysOn('stakes')?' · sleep heals ❤️':''))+'</h3>'+
     dailyLogForm()+'</div>'+
     '<div class="panel"><h3>📔 Archive <span class="cnt">'+Object.keys(state.journal).length+' entr'+(Object.keys(state.journal).length===1?'y':'ies')+'</span></h3>'+
     journalArchive()+'</div></div>';
@@ -1573,7 +1816,7 @@ function streakPanel(){
 /* trophy shelf: every weekly boss slain */
 function trophyShelf(){
   var t=RPG.bossTrophies(state);
-  if(!t.length) return '';
+  if(!t.length || !sysOn('boss')) return '';
   return '<div class="panel"><h3>Trophy shelf <span class="cnt">'+t.length+' boss'+(t.length===1?'':'es')+' slain</span></h3>'+
     '<div class="trophies">'+t.map(function(x){
       return '<div class="trophy"><span class="ti">🏆</span><div><div class="tt">'+esc(x.title)+'</div><div class="td">'+x.day+'</div></div></div>';
@@ -1769,6 +2012,7 @@ function weekRings(w){
    tiles, the 7-day charts, then the panels that were already here. Every
    .panel is a sibling inside .progress, which is a grid with the gap between
    them, so no panel carries its own margin. */
+var achAll=false, logAll=false;
 function renderStats(){
   var w=RPG.weekStats(state);
   var maxXp=Math.max.apply(null,w.days.map(function(d){return w.per[d].xp;}).concat([1]));
@@ -1776,14 +2020,28 @@ function renderStats(){
     var v=w.per[d].xp;
     return chartCol(v,v/maxXp,dayLetter(d),'pgXp');
   }).join('');
-  var achHtml=RPG.ACHIEVEMENTS.map(function(a){
+  /* Achievements: the earned ones, then only the next four to aim for. The
+     full list of thirty is one tap away (achAll), so the page does not end in
+     a wall of greyed-out badges. */
+  var achGot=[], achNext=[];
+  RPG.ACHIEVEMENTS.forEach(function(a){
     var got=state.achievements.find(function(u){return u.id===a.id;});
-    return '<div class="ach '+(got?'unlocked':'locked')+'"><span class="ic">'+a.icon+'</span>'+
+    var row='<div class="ach '+(got?'unlocked':'locked')+'"><span class="ic">'+a.icon+'</span>'+
       '<div><div class="n">'+a.name+'</div><div class="d">'+a.desc+(got?' · '+got.on:'')+'</div></div></div>';
-  }).join('');
+    (got?achGot:achNext).push(row);
+  });
+  var achShown=achAll?achGot.concat(achNext):achGot.concat(achNext.slice(0,4));
+  var achHtml=achShown.join('');
+  var achMore=achShown.length<RPG.ACHIEVEMENTS.length
+    ?'<button type="button" class="btn ghost small foldmore" onclick="achAll=true;render()">Show all '+RPG.ACHIEVEMENTS.length+'</button>':'';
+  /* Adventure log: the three most recent days that have entries; older days
+     wait behind "Show older" (logAll). A save with months of play would
+     otherwise print every action ever taken at the bottom of this page. */
   var byDay={};
   state.log.forEach(function(e){ (byDay[e.day]=byDay[e.day]||[]).push(e); });
-  var days=Object.keys(byDay).sort().reverse();
+  var allDays=Object.keys(byDay).sort().reverse();
+  var days=logAll?allDays:allDays.slice(0,3);
+  var logMore=days.length<allDays.length?'<button type="button" class="btn ghost small foldmore" onclick="logAll=true;render()">Show older days</button>':'';
   var logHtml=days.map(function(d){
     return '<div class="logday">'+(d===RPG.todayKey()?'TODAY':d)+'</div>'+
       byDay[d].map(function(e){
@@ -1800,12 +2058,13 @@ function renderStats(){
   }).join('')||'<div class="empty">Nothing logged yet. Clear a quest and it lands here.</div>';
   /* the tiles that are not already a ring or a streak number above them;
      "defeats" and "comebacks" appear once there has been a defeat (a test
-     looks for both words) */
+     looks for both words). Coin tiles wait for the Market and the monster
+     tile for HP and monsters, like everywhere else (staged heroes, Calm). */
   var tiles='<div class="statgrid">'+
-    '<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">coins earned</div></div>'+
-    '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">coins spent</div></div>'+
+    (sysOn('rewards')?'<div class="stat"><div class="v">'+w.tot.earned+'</div><div class="k">coins earned</div></div>'+
+      '<div class="stat"><div class="v">'+w.tot.spent+'</div><div class="k">coins spent</div></div>':'')+
     '<div class="stat"><div class="v b">'+w.tot.quests+'</div><div class="k">quests cleared</div></div>'+
-    '<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>'+
+    (sysOn('stakes')?'<div class="stat"><div class="v r">'+w.tot.slips+'</div><div class="k">monster hits</div></div>':'')+
     ((state.counters.deaths||0)>0?'<div class="stat"><div class="v r">'+state.counters.deaths+'</div><div class="k">defeats</div></div>'+
       '<div class="stat"><div class="v w">'+(state.counters.comebacks||0)+'</div><div class="k">comebacks</div></div>':'')+
     '</div>';
@@ -1816,7 +2075,8 @@ function renderStats(){
     '<div class="panel herocard">'+heroSheetTop('card')+'</div>'+
     /* render() swaps #skillsRow into this slot right after the view is built */
     '<div class="panel lifeareas"><h3>Life areas <span class="cnt">'+state.skills.length+'</span></h3><div id="skillsSlot"></div></div>'+
-    '<div class="panel thisweek"><h3>This week <span class="cnt">last 7 days</span></h3>'+weekRings(w)+reviewBox()+'</div>'+
+    '<div class="panel thisweek"><h3>This week <span class="cnt">last 7 days</span></h3>'+weekRings(w)+chroniclePanel()+reviewBox()+'</div>'+
+    ladderPanel()+
     streakPanel()+
     tiles+
     '<div class="panel xpchart"><h3>XP over 7 days <span class="cnt">'+w.tot.xp+' XP</span></h3>'+
@@ -1828,10 +2088,10 @@ function renderStats(){
     focusPanel()+
     insightsPanel()+
     trophyShelf()+
-    leaderboardPanel()+
+    (sysOn('social')?leaderboardPanel():'')+
     '<div class="panel"><h3>Achievements <span class="cnt">'+state.achievements.length+'/'+RPG.ACHIEVEMENTS.length+'</span></h3>'+
-    '<div class="achgrid">'+achHtml+'</div></div>'+
-    '<div class="panel"><h3>Adventure log</h3><div class="advlog">'+logHtml+'</div></div>'+
+    '<div class="achgrid">'+achHtml+'</div>'+achMore+'</div>'+
+    '<div class="panel"><h3>Adventure log</h3><div class="advlog">'+logHtml+'</div>'+logMore+'</div>'+
     '</div>';
 }
 
@@ -1880,6 +2140,7 @@ function afterAction(){
   if(state.hero.downed && state.hero.hp>=RPG.maxHpOf(state)){ maybeRise(); }
   var fresh=RPG.checkAchievements(state);
   if(fresh.length){ persist(); renderTabs(); announceAchievements(fresh); }
+  gmAfter();   // was the day just won, did a system just open? (see "Sage as game master (UI)")
 }
 
 /* ---------- action handlers ---------- */
@@ -1901,23 +2162,43 @@ function doUndo(btn){
   toast('<span class="p">↩ Restored</span>');
 }
 
+/* A tick tapped by mistake can be taken back: the toast the clear shows
+   gets an Undo button, which restores the save from just before the tap
+   (the same snapshot undo that deleting and slipping use). */
+function offerUndo(snap){
+  var box=$('#toasts'), last=box&&box.lastElementChild;
+  if(!last || last.querySelector('.undobtn')) return;
+  undoSnap=snap;
+  last.classList.add('undo');
+  var b=document.createElement('button'); b.type='button'; b.className='undobtn'; b.textContent='↩ Undo';
+  b.onclick=function(){ doUndo(b); };
+  last.appendChild(b);
+}
 function doQuest(id){
-  var wasFirst=(state.counters.quests||0)===0;
-  var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck(); afterAction();
+  var wasFirst=(state.counters.quests||0)===0, snap=JSON.stringify(state);
+  var r=A.completeQuest(state,id); persist(); render(); fx(r); if(r&&r.xp>0){ popCheck(); comboHit(); offerUndo(snap); } afterAction();
   if(wasFirst && r && state.counters.quests===1 && !state.firstQuestCelebrated){
     state.firstQuestCelebrated=true; persist();
-    var mySeq=overlaySeq;   // snapshot: don't interrupt whatever's open now, and don't fire late if something NEW opened meanwhile
-    setTimeout(function(){ if(overlaySeq===mySeq && !$('#overlay').classList.contains('show')) firstQuestScreen(); }, 650);
+    /* It used to be dropped when anything else opened first (a won day, a
+       level). It now waits in the ceremony queue and shows after the rest.
+       The short delay lets the completion burst play first. */
+    setTimeout(function(){ cerQueue.push(firstQuestScreen); cerPump(); }, 650);
   }
 }
 function firstQuestScreen(){
   SND.ach(); if(!reduceMotion()) confetti();
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--xp);font-size:56px">🎉</div>'+
-    '<div class="big" style="color:var(--xp)">FIRST QUEST DONE!</div>'+
-    '<div class="sub">That just earned you <b style="color:var(--xp)">XP</b> (fills your bar and levels you up) and <b style="color:var(--gold)">coins</b> (spend them on real rewards in the 🏪 Market).</div>'+
-    '<div class="sub" style="color:var(--muted)">Clear all of a day’s dailies to pop the 🎁 chest, and keep a daily streak to multiply everything. That’s the whole game.</div>'+
-    '<button class="btn go" id="fqGo" disabled style="opacity:.5" onclick="closeOverlay()">Let’s go ▶ <span id="fqCd">3</span></button></div>';
+  ceremony({
+    badge:cerBadge('🎉'),
+    kicker:'FIRST QUEST DONE',
+    title:'That is the whole game',
+    rows:[
+      sysOn('rewards')
+        ? cerRow('✨','You earned XP and coins','XP fills your bar and levels you up. Coins buy real rewards in the Market.')
+        : cerRow('✨','You earned XP','Fill the bar to level up. Each of the next levels opens a new part of the game.'),
+      cerRow('🎁','Clear every daily','All of a day’s dailies done opens the chest.'),
+      cerRow('🔥','Come back tomorrow','A daily streak multiplies all your XP, up to 1.5 times.')],
+    primary:{label:'Let’s go <span id="fqCd">3</span>',act:'closeOverlay()',attrs:'id="fqGo" disabled style="opacity:.5"'}
+  });
   /* 3-second unlock so the explanation actually gets read */
   var left=3;
   var iv=setInterval(function(){
@@ -1990,7 +2271,8 @@ function delGoal(id){
   withUndo('🗑 Main quest deleted'+(g?': '+esc(g.title):'')+' (steps kept as side quests)', function(){ A.deleteGoal(state,id); });
 }
 function doHabit(id){
-  var r=A.doHabit(state,id); persist(); render(); fx(r); if(r&&r.xp>0) popCheck();
+  var snap=JSON.stringify(state);
+  var r=A.doHabit(state,id); persist(); render(); fx(r); if(r&&r.xp>0){ popCheck(); comboHit(); offerUndo(snap); }
   if(r&&r.allHabits){ confetti(); toast('🌟 <span class="c">Every habit kept today - +'+r.bonusCoins+' bonus 💰</span>'); }
   afterAction();
 }
@@ -2041,8 +2323,8 @@ function claimChest(){ var r=A.claimChest(state); persist(); render(); if(r){ ch
 function chestAnim(r){
   if(reduceMotion()){ chestScreen(r); return; }
   var o=$('#overlay'); o.className='show'; var mySeq=(o.dataset.seq=++overlaySeq);
-  o.innerHTML='<div class="levelbox"><div class="chestshake" aria-hidden="true">🎁</div>'+
-    '<div class="sub">The chest rattles…</div></div>';
+  o.innerHTML='<div class="levelbox cer"><div class="cer-rays" aria-hidden="true"></div><div class="chestshake" aria-hidden="true">🎁</div>'+
+    '<div class="cer-kicker">DAILY CHEST</div><div class="sub cer-sub">The chest rattles…</div></div>';
   /* only reveal if THIS rattle is still the overlay showing - a different
      overlay opening in the meantime (achievement, level-up, first-quest...)
      must never get overwritten by a stale reveal firing 1.7s late */
@@ -2074,16 +2356,19 @@ function openSkillModal(){
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>✨ NEW LIFE AREA</h2>'+
     '<div class="flabel">Name</div><input id="skName" maxlength="20" placeholder="e.g. French, Driving, Music">'+
-    '<div class="flabel">Pick an emoji</div><div class="avpick" id="skEmojiGrid">'+SKILL_EMOJIS.map(function(e){
+    /* every entry here has a pixel drawing in art.js (EMOJI). The value
+       saved is still the emoji, so older app versions and friends' devices
+       keep showing something sensible; the swap draws it here. There is no
+       free-text field any more: a typed emoji would have no drawing. */
+    '<div class="flabel">Pick an icon</div><div class="avpick" id="skEmojiGrid">'+SKILL_EMOJIS.map(function(e){
       return '<button type="button" onclick="skPickEmoji(this,\''+e+'\')">'+e+'</button>';}).join('')+'</div>'+
-    '<div class="setrow"><input id="skIcon" maxlength="4" placeholder="…or type any emoji" style="max-width:200px"><span class="hint">overrides the grid pick</span></div>'+
     '<div class="setrow" style="margin-top:12px"><button class="btn go" onclick="saveSkill()">Create</button>'+
     '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
   $('#skName').focus();
 }
 function saveSkill(){
   var n=$('#skName').value.trim(); if(!n){ toast('<span class="h">Give it a name</span>','dmg'); return; }
-  var ic=$('#skIcon').value.trim()||skIconSel||'✨';
+  var ic=skIconSel||'✨';
   var s=A.addSkill(state,n,ic);
   if(!s){ toast('<span class="h">Life-area limit reached ('+RPG.MAX_SKILLS+')</span>','dmg'); return; }
   persist(); closeModal(); render();
@@ -2105,127 +2390,77 @@ function exportICS(){
   toast('<span class="p">📅 Calendar file downloaded - open it to import</span>');
 }
 
-/* ---------- character customization ---------- */
-var AVATARS=['🧙','🦸','🥷','🤺','🧝','🧑‍🚀','🦊','🐺','🐉','🦁','🛡️','🏹','🧛','🤖','👑','🐯','🦅','🔥','🌟','🎮','🧗','🏋️','📚','🚀',
-  '🧚','🧜','🧞','🦄','🐲','🦉','🐢','🦋','🌸','🍀','⚡','💫','🎨','🎸','⚽','🏀','🧑‍🍳','🧑‍⚕️','🧑‍💻','🧑‍🎓','🧑‍🔬','🕵️','🦹','🐼'];
-/* hand-drawn vector portraits: stored as short tokens (fit the 8-char avatar
-   column, so they sync and show on friends' devices too) */
+/* ---------- character customization ----------
+   Heroes are pixel portraits drawn in art.js (PX.hero). The save stores a
+   short token ('@knight'), which fits the 8-character avatar column, so it
+   syncs and shows on friends' devices too. `emoji` is only the plain-text
+   stand-in for places a drawing cannot go (a notification, the share card's
+   alt text). Renaming a token breaks every save that wears it: add new heroes,
+   never rename old ones. */
 var SVG_AVATARS={
-  '@knight':{name:'Knight',emoji:'🛡️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#34455e"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8ea3bd"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#5c748f"/><circle cx="24" cy="20" r="10.5" fill="#c7d2de"/><path d="M13.5 20a10.5 10.5 0 0 1 21 0l-1.5 3h-18z" fill="#93a7ba"/><rect x="15" y="19" width="18" height="4.6" rx="2.3" fill="#22304a"/><path d="M24 5.5l2.8 5.5h-5.6z" fill="#e2574c"/><circle cx="24" cy="10.4" r="1.6" fill="#f0b429"/></svg>'},
-  '@mage':{name:'Mage',emoji:'🧙',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4b3a78"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7c64b8"/><circle cx="24" cy="24" r="8" fill="#f2c9a2"/><path d="M16 30q8 8 16 0v6q-8 5-16 0z" fill="#e8e4f2"/><path d="M24 4l7 15h-14z" fill="#8f76cc"/><path d="M12 19h24l-2.5 3h-19z" fill="#6b52a8"/><circle cx="30" cy="9" r="1.7" fill="#f5c542"/><circle cx="21" cy="24" r="1.2" fill="#3a2d55"/><circle cx="27" cy="24" r="1.2" fill="#3a2d55"/></svg>'},
-  '@rogue':{name:'Rogue',emoji:'🥷',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#232936"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3d4657"/><path d="M24 7c8 0 12 6.5 12 14l-2 6h-20l-2-6c0-7.5 4-14 12-14z" fill="#4b5568"/><path d="M16 20a8 8 0 0 1 16 0l-1 5h-14z" fill="#141821"/><path d="M17.5 21.5h4.5l-.7 2.6h-3.1z" fill="#66e0b8"/><path d="M26 21.5h4.5l-.7 2.6h-3.1z" fill="#66e0b8"/><path d="M13 27h22l-2 3h-18z" fill="#333c4d"/></svg>'},
-  '@ranger':{name:'Ranger',emoji:'🏹',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#274232"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4e7a54"/><path d="M9 46a15 11 0 0 1 30 0h-5a10 8 0 0 0-20 0z" fill="#3b5f42"/><circle cx="24" cy="23" r="8" fill="#e9bd93"/><path d="M24 6c7.5 0 11.5 5.5 11.5 12l-3.5 4 .5-6h-17l.5 6-3.5-4c0-6.5 4-12 11.5-12z" fill="#5c8a4e"/><path d="M31 8l6-3-2 7z" fill="#d8c46a"/><circle cx="21" cy="23" r="1.2" fill="#2c3a26"/><circle cx="27" cy="23" r="1.2" fill="#2c3a26"/></svg>'},
-  '@paladin':{name:'Paladin',emoji:'✨',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#6d5a24"/><path d="M12 8a12 5 0 0 0 24 0" fill="none" stroke="#ffe08a" stroke-width="2.4"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#e5c860"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#c2a63e"/><circle cx="24" cy="22" r="10" fill="#f5e3ae"/><path d="M14 22a10 10 0 0 1 20 0l-1.5 3h-17z" fill="#dcbe62"/><rect x="16" y="21" width="16" height="4.4" rx="2.2" fill="#57430f"/><path d="M23 10h2v6h-2zM20.5 12.5h7v2h-7z" fill="#8a6d1d"/></svg>'},
-  '@witch':{name:'Witch',emoji:'🪄',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#3d2b52"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#6a4a8c"/><circle cx="24" cy="25" r="8" fill="#efc39b"/><path d="M15 30q9 6 18 0v6q-9 5-18 0z" fill="#4e3a68"/><path d="M24 4l6 13h-12z" fill="#7b5aa6"/><path d="M10 17h28l-3 3.4h-22z" fill="#5d4383"/><circle cx="35" cy="8" r="1.6" fill="#8be0c8"/><circle cx="21" cy="25" r="1.2" fill="#432e21"/><circle cx="27" cy="25" r="1.2" fill="#432e21"/><path d="M21.5 29.5q2.5 2 5 0" fill="none" stroke="#432e21" stroke-width="1.2" stroke-linecap="round"/></svg>'},
-  '@monk':{name:'Monk',emoji:'🧘',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#7a4a22"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#d98c3f"/><path d="M9 46a15 11 0 0 1 30 0l-8-1-3-6h-8l-3 6z" fill="#b56f28"/><circle cx="24" cy="20" r="9.5" fill="#eab88b"/><path d="M14.5 20a9.5 9.5 0 0 1 19 0" fill="none" stroke="#d8a271" stroke-width="1.4"/><circle cx="21" cy="21" r="1.2" fill="#4a3018"/><circle cx="27" cy="21" r="1.2" fill="#4a3018"/><path d="M21 26q3 2.2 6 0" fill="none" stroke="#4a3018" stroke-width="1.3" stroke-linecap="round"/><circle cx="24" cy="13.6" r="1" fill="#c98f5f"/></svg>'},
-  '@bard':{name:'Bard',emoji:'🎸',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f4a4a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#3f8a80"/><circle cx="24" cy="23" r="8.5" fill="#edbf98"/><path d="M14 17q10-9 21-1l-3.5 5q-7-6-14.5-1z" fill="#c8486b"/><circle cx="33.5" cy="13.5" r="3" fill="#c8486b"/><path d="M35 10l5-4-1.5 6z" fill="#f0d264"/><circle cx="21" cy="23" r="1.2" fill="#3c2a1c"/><circle cx="27" cy="23" r="1.2" fill="#3c2a1c"/><path d="M20.5 27.5q3.5 2.8 7 0" fill="none" stroke="#3c2a1c" stroke-width="1.3" stroke-linecap="round"/></svg>'},
-  '@samurai':{name:'Samurai',emoji:'🥋',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4a1f24"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8c3a42"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#6b2b32"/><circle cx="24" cy="21" r="10" fill="#d9535e"/><path d="M14 21a10 10 0 0 1 20 0l-1.5 3.5h-17z" fill="#a63a44"/><rect x="15.5" y="20" width="17" height="4.4" rx="2.2" fill="#2b1216"/><path d="M13 12l-4-5 7 2zM35 12l4-5-7 2z" fill="#e5b04c"/><circle cx="24" cy="12" r="2" fill="#e5b04c"/></svg>'},
-  '@viking':{name:'Viking',emoji:'🪓',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#2e3b46"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7a6a4f"/><circle cx="24" cy="22" r="8.5" fill="#e9bd93"/><path d="M15 30q9 7 18 0v7q-9 5-18 0z" fill="#c9822e"/><path d="M15 21a9 9 0 0 1 18 0l-1 2h-16z" fill="#9aa7b3"/><path d="M12 16l-5-8 8 4zM36 16l5-8-8 4z" fill="#d8d3c8"/><circle cx="21" cy="23" r="1.2" fill="#3a2a1a"/><circle cx="27" cy="23" r="1.2" fill="#3a2a1a"/><path d="M18 27q6 5 12 0l-1 4q-5 3-10 0z" fill="#c9822e"/></svg>'},
-  '@druid':{name:'Druid',emoji:'🌿',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#1f3a26"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4e7a54"/><circle cx="24" cy="23" r="8" fill="#dfb08c"/><path d="M24 6c8 0 12 6 11 13l-4 3 1-7h-16l1 7-4-3c-1-7 3-13 11-13z" fill="#3e6b45"/><path d="M11 14q4-6 9-4-5 4-3 8-5 0-6-4z" fill="#7bd88f"/><path d="M37 14q-4-6-9-4 5 4 3 8 5 0 6-4z" fill="#7bd88f"/><circle cx="21" cy="23" r="1.2" fill="#33241a"/><circle cx="27" cy="23" r="1.2" fill="#33241a"/><path d="M21 27.5q3 2.4 6 0" fill="none" stroke="#33241a" stroke-width="1.2" stroke-linecap="round"/></svg>'},
-  '@pirate':{name:'Pirate',emoji:'🏴‍☠️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#20303e"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#7a3b32"/><circle cx="24" cy="23" r="8.5" fill="#e2ac80"/><path d="M12 18q12-11 24 0l-2 4q-10-8-20 0z" fill="#c03a30"/><circle cx="36" cy="20" r="1.5" fill="#f0d264"/><path d="M17.5 21.5h6.5v3.4h-6.5z" fill="#20242c"/><path d="M15 20l16-3" stroke="#20242c" stroke-width="1.4"/><circle cx="28" cy="23.5" r="1.3" fill="#33241a"/><path d="M20.5 29q4 2.6 7.5.4" fill="none" stroke="#33241a" stroke-width="1.3" stroke-linecap="round"/><circle cx="16" cy="27" r="1.3" fill="#f0d264"/></svg>'},
-  '@valkyr':{name:'Valkyrie',emoji:'🕊️',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#3a3550"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#8f9fc9"/><path d="M9 46a15 11 0 0 1 30 0h-6a9 7 0 0 0-18 0z" fill="#6b7aa8"/><circle cx="24" cy="22" r="8.5" fill="#f0c8a0"/><path d="M15 30q9 6 18 0v6q-9 5-18 0z" fill="#e5c860"/><path d="M15 21a9 9 0 0 1 18 0l-1 2.4h-16z" fill="#c3cede"/><path d="M12 17q-6-2-7-9 7 1 9 6zM36 17q6-2 7-9-7 1-9 6z" fill="#e8ecf5"/><circle cx="21" cy="23" r="1.2" fill="#3a2d20"/><circle cx="27" cy="23" r="1.2" fill="#3a2d20"/></svg>'},
-  '@alchem':{name:'Alchemist',emoji:'🧪',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#233a3a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#4a6b5f"/><circle cx="24" cy="23" r="8.5" fill="#ecc3a0"/><path d="M13 15h22l-2 4h-18z" fill="#396056"/><path d="M16 9h16l2 6h-20z" fill="#2b4a42"/><circle cx="20" cy="23.5" r="2.6" fill="none" stroke="#d8b545" stroke-width="1.5"/><circle cx="28" cy="23.5" r="2.6" fill="none" stroke="#d8b545" stroke-width="1.5"/><path d="M22.6 23.5h2.8" stroke="#d8b545" stroke-width="1.5"/><circle cx="20" cy="23.5" r="1" fill="#66e0b8"/><circle cx="28" cy="23.5" r="1" fill="#66e0b8"/><path d="M21 28.5q3 2.2 6 0" fill="none" stroke="#4a3322" stroke-width="1.2" stroke-linecap="round"/></svg>'},
-  '@robot':{name:'Automaton',emoji:'🤖',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#25303c"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#5c748f"/><rect x="14" y="13" width="20" height="17" rx="5" fill="#9fb2c6"/><rect x="17" y="18" width="14" height="7" rx="3.5" fill="#1a232e"/><circle cx="21" cy="21.5" r="1.8" fill="#59c2ff"/><circle cx="27" cy="21.5" r="1.8" fill="#59c2ff"/><rect x="20" y="27" width="8" height="1.8" rx="0.9" fill="#3d4c5e"/><path d="M24 7v4" stroke="#9fb2c6" stroke-width="2"/><circle cx="24" cy="6" r="2" fill="#f5c542"/></svg>'},
-  '@kitsune':{name:'Kitsune',emoji:'🦊',svg:'<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" fill="#4a2a1a"/><path d="M9 46a15 11 0 0 1 30 0z" fill="#a8562a"/><path d="M13 10l3 10 6-6zM35 10l-3 10-6-6z" fill="#d97b3f"/><path d="M15 12l1.6 6 3.4-3.4zM33 12l-1.6 6-3.4-3.4z" fill="#f5e0d0"/><path d="M24 14c6.5 0 10 4.5 10 9 0 5.5-4.5 9-10 9s-10-3.5-10-9c0-4.5 3.5-9 10-9z" fill="#e08a4a"/><path d="M24 24q-5 6-2 8h4q3-2-2-8z" fill="#f5e0d0"/><circle cx="19.5" cy="22.5" r="1.4" fill="#2b1810"/><circle cx="28.5" cy="22.5" r="1.4" fill="#2b1810"/><path d="M23 28.6h2l-1 1.4z" fill="#2b1810"/></svg>'}
+  '@knight':{name:'Knight',emoji:'🛡️'},   '@mage':{name:'Mage',emoji:'🧙'},
+  '@rogue':{name:'Rogue',emoji:'🥷'},     '@ranger':{name:'Ranger',emoji:'🏹'},
+  '@paladin':{name:'Paladin',emoji:'✨'}, '@witch':{name:'Witch',emoji:'🪄'},
+  '@monk':{name:'Monk',emoji:'🧘'},       '@bard':{name:'Bard',emoji:'🎸'},
+  '@samurai':{name:'Samurai',emoji:'🥋'}, '@viking':{name:'Viking',emoji:'🪓'},
+  '@druid':{name:'Druid',emoji:'🌿'},     '@pirate':{name:'Pirate',emoji:'🏴‍☠️'},
+  '@valkyr':{name:'Valkyrie',emoji:'🕊️'}, '@alchem':{name:'Alchemist',emoji:'🧪'},
+  '@robot':{name:'Automaton',emoji:'🤖'}, '@kitsune':{name:'Kitsune',emoji:'🦊'}
 };
-/* "design your own" hero: 5 layers encoded as a sync-safe token like #03214
-   (fits the 8-char avatar column, renders identically on friends' devices) */
-var AVB={
-  skin:['#f6d7b8','#eebe98','#d9a066','#b07b4f','#8a5a3b','#6b4630'],
-  hairC:['#2d2622','#5b3a24','#a5652a','#d9a441','#c9483c','#8a8f98','#7b5aa6','#3f8a80'],
-  outfit:['#5c748f','#7b5aa6','#3f8a80','#c8486b','#c2a63e','#5c8a4e','#4b5568','#b56f28'],
-  hairNames:['Short','Long','Spiky','Bun','Hood','Bald'],
-  accNames:['None','Glasses','Headband','Crown','Earring','Warpaint']
-};
-function isCustomAv(av){ return /^#[0-9a-z]{5}$/i.test(String(av||'')); }
-function customAvSvg(t){
-  var v=String(t).slice(1).split('').map(function(c){ return parseInt(c,36)||0; });
-  var skin=AVB.skin[v[0]%AVB.skin.length], hs=v[1]%6, hc=AVB.hairC[v[2]%AVB.hairC.length],
-      oc=AVB.outfit[v[3]%AVB.outfit.length], ac=v[4]%6;
-  var hair='';
-  if(hs===0) hair='<path d="M15 21a9 9 0 0 1 18 0l-2 1.6q-7-6.5-14 0z" fill="'+hc+'"/>';
-  else if(hs===1) hair='<path d="M15 21a9 9 0 0 1 18 0l1.5 12h-4.5l-.5-8q-5.5-5-11 0l-.5 8h-4.5z" fill="'+hc+'"/>';
-  else if(hs===2) hair='<path d="M15 22l-1.5-7.5 4.5 3 2-5.5 4 4.5 4-4.5 2 5.5 4.5-3-1.5 7.5q-9-6.5-18 0z" fill="'+hc+'"/>';
-  else if(hs===3) hair='<path d="M15 21a9 9 0 0 1 18 0l-2 1.4q-7-6-14 0z" fill="'+hc+'"/><circle cx="24" cy="10.5" r="3.4" fill="'+hc+'"/>';
-  else if(hs===4) hair='<path d="M24 8c8 0 12 6.5 12 14l-2 5h-2.5l.5-6h-16l.5 6H14l-2-5c0-7.5 4-14 12-14z" fill="'+oc+'"/>';
-  var acc='';
-  if(ac===1) acc='<circle cx="20.5" cy="23" r="2.7" fill="none" stroke="#20242c" stroke-width="1.4"/><circle cx="27.5" cy="23" r="2.7" fill="none" stroke="#20242c" stroke-width="1.4"/><path d="M23.2 23h1.6" stroke="#20242c" stroke-width="1.4"/>';
-  else if(ac===2) acc='<rect x="15.5" y="17.4" width="17" height="3" rx="1.5" fill="'+oc+'"/>';
-  else if(ac===3) acc='<path d="M17.5 13.5l3 2.8 3.5-4.3 3.5 4.3 3-2.8-1 5h-11z" fill="#f0c33c"/>';
-  else if(ac===4) acc='<circle cx="15.6" cy="26" r="1.3" fill="#f0c33c"/>';
-  else if(ac===5) acc='<path d="M27 19.5l3.6 4.4M30.6 19.5L27 23.9" stroke="#c94f4f" stroke-width="1.4" stroke-linecap="round"/>';
-  return '<svg viewBox="0 0 48 48" aria-hidden="true">'+
-    '<circle cx="24" cy="24" r="22" fill="#20242e"/>'+
-    '<circle cx="24" cy="24" r="22" fill="'+oc+'" opacity="0.3"/>'+
-    '<path d="M9 46a15 11 0 0 1 30 0z" fill="'+oc+'"/>'+
-    '<circle cx="24" cy="22" r="8.5" fill="'+skin+'"/>'+
-    hair+
-    '<circle cx="21" cy="23" r="1.2" fill="#3a2b1e"/><circle cx="27" cy="23" r="1.2" fill="#3a2b1e"/>'+
-    '<path d="M21 27.4q3 2.3 6 0" fill="none" stroke="#3a2b1e" stroke-width="1.2" stroke-linecap="round"/>'+
-    acc+'</svg>';
+/* Saves from before the pixel heroes may still wear an emoji avatar ('🥷').
+   Those are drawn as the closest hero, so nobody wakes up to a broken face.
+   Anything not listed here gets a free hero picked from the emoji itself,
+   which keeps it the same on every device. The save is never rewritten. */
+var LEGACY_AV={'🧙':'@mage','🥷':'@rogue','🤺':'@knight','🛡️':'@knight','🛡':'@knight','⚔️':'@knight',
+  '🏹':'@ranger','🧝':'@ranger','🧘':'@monk','🎸':'@bard','🤖':'@robot','🦊':'@kitsune','🪓':'@viking',
+  '🧪':'@alchem','🧑‍🔬':'@alchem','🪄':'@witch','🧚':'@witch','🌿':'@druid','🏴‍☠️':'@pirate',
+  '🕊️':'@valkyr','🦅':'@valkyr','🥋':'@samurai','✨':'@paladin','👑':'@paladin','🐉':'@samurai','🐲':'@samurai'};
+var FREE_HEROES=['@knight','@mage','@rogue','@ranger','@monk','@bard'];
+function legacyHero(av){
+  var s=String(av||'');
+  if(LEGACY_AV[s]) return LEGACY_AV[s];
+  var n=0; for(var i=0;i<s.length;i++) n=(n*31+s.charCodeAt(i))%9973;
+  return FREE_HEROES[n%FREE_HEROES.length];
 }
-/* avatar -> safe HTML (vector portrait for tokens, escaped text for emojis) */
+/* "design your own" heroes from the old builder: 5 layers encoded as a
+   sync-safe token like #03214. No new ones can be made, but saves that wear
+   one still draw it (PX.customHero in art.js). */
+function isCustomAv(av){ return /^#[0-9a-z]{5}$/i.test(String(av||'')); }
+function customDigits(t){ return String(t).toLowerCase().slice(1).split('').map(function(c){ return parseInt(c,36)||0; }); }
+/* avatar -> safe HTML. Always a drawing: a hero token, a custom design, or a
+   legacy emoji shown as its closest hero. Nothing typed by a user reaches the
+   page from here, so there is nothing to escape. */
 function avHtml(av){
-  var d=SVG_AVATARS[av]; if(d) return '<span class="svgav">'+d.svg+'</span>';
-  if(isCustomAv(av)) return '<span class="svgav">'+customAvSvg(String(av).toLowerCase())+'</span>';
-  return esc(av||'🧙');
+  if(!window.PX) return esc(avPlain(av));
+  if(SVG_AVATARS[av]) return '<span class="svgav">'+PX.hero(String(av).slice(1))+'</span>';
+  if(isCustomAv(av)) return '<span class="svgav">'+PX.customHero(customDigits(av))+'</span>';
+  return '<span class="svgav">'+PX.hero(legacyHero(av).slice(1))+'</span>';
 }
 function avPlain(av){ var d=SVG_AVATARS[av]; if(d) return d.emoji; if(isCustomAv(av)) return '🧑'; return av||'🧙'; }  // canvas + notifications
 
-/* ----- the builder itself ----- */
-var builderSel=null, builderReturn=null;
-function builderToken(){ return '#'+builderSel.map(function(n){ return n.toString(36); }).join(''); }
-function openAvatarBuilder(from){
-  builderReturn=from||'character';
-  var cur=pickedAv||(state&&state.hero.avatar)||'';
-  if(isCustomAv(cur)) builderSel=String(cur).toLowerCase().slice(1).split('').map(function(c){ return parseInt(c,36)||0; });
-  else if(!builderSel) builderSel=[0,0,0,0,0];
-  renderBuilder();
-}
-function bSet(i,v){ builderSel[i]=v; renderBuilder(); }
-function bRandom(){
-  builderSel=[AVB.skin.length,6,AVB.hairC.length,AVB.outfit.length,6].map(function(n){ return Math.floor(Math.random()*n); });
-  renderBuilder();
-}
-function renderBuilder(){
-  var m=$('#modal'); m.className='modal show';
-  function row(label,i,n,swatches){
-    var out='<div class="flabel">'+label+'</div><div class="bldrow">';
-    for(var j=0;j<n;j++){
-      var on=builderSel[i]===j;
-      out+='<button type="button" class="bld'+(on?' on':'')+(swatches?' sw':'')+'"'+(swatches?' style="background:'+swatches[j]+'"':'')+
-        ' aria-pressed="'+on+'" onclick="bSet('+i+','+j+')">'+(swatches?'':esc((i===1?AVB.hairNames:AVB.accNames)[j]))+'</button>';
-    }
-    return out+'</div>';
-  }
-  m.innerHTML='<div class="box"><h2>🎨 DESIGN YOUR HERO</h2>'+
-    '<div class="bldprev">'+avHtml(builderToken())+'</div>'+
-    row('Skin',0,AVB.skin.length,AVB.skin)+
-    row('Hair',1,6,null)+
-    row('Hair color',2,AVB.hairC.length,AVB.hairC)+
-    row('Outfit',3,AVB.outfit.length,AVB.outfit)+
-    row('Extra',4,6,null)+
-    '<div class="setrow" style="margin-top:12px"><button class="btn" onclick="bRandom()">🎲 Surprise me</button>'+
-    '<button class="btn go" onclick="bDone()">✓ Use this hero</button>'+
-    '<button class="btn" onclick="bCancel()">Cancel</button></div></div>';
-}
-function bDone(){ pickedAv=builderToken(); bCancel(); }
-function bCancel(){ if(builderReturn==='onboarding'||!state) onboarding(); else openCharacter(); }
+/* There is no design-your-own builder any more: heroes are earned by
+   levelling up, which is what makes the rarer ones worth having. A hero
+   someone designed before (a "#xxxxx" token) still draws (avHtml) and stays
+   wearable, it just cannot be made or edited. */
 var pickedAv=null;
-/* avatar picker with two small tabs (designed heroes / emoji) + a distinct
-   Customize button - everything at once was too much on one screen */
+/* avatar picker: every hero in the order they open (the free ones first,
+   then by level), each card framed in its rarity colour. A locked hero is
+   shown greyed with the level that opens it: something to climb to. A hero
+   designed with the old builder is offered as well while it is worn. */
+var RARITY={common:'Common',rare:'Rare',epic:'Epic',legendary:'Legendary'};
+function heroTier(k){ return window.PX?PX.tier(String(k).slice(1)):'common'; }
 function avPickerHtml(from){
-  var bReturn=from==='onboarding'?'onboarding':'character';
-  return '<div class="avtabs">'+
-    '<button type="button" class="'+(avTab==='heroes'?'on':'')+'" aria-pressed="'+(avTab==='heroes')+'" onclick="avTab=\'heroes\';'+from+'()">🛡️ Heroes</button>'+
-    '<button type="button" class="'+(avTab==='emoji'?'on':'')+'" aria-pressed="'+(avTab==='emoji')+'" onclick="avTab=\'emoji\';'+from+'()">😀 Emoji</button>'+
-    '<button type="button" class="customize" title="Design your own hero" aria-label="Design your own hero" onclick="openAvatarBuilder(\''+bReturn+'\')">🎨 Customize</button></div>'+
-    (avTab==='heroes'
-      ?'<div class="avpick svgrow">'+Object.keys(SVG_AVATARS).map(function(k){
-          return '<button class="'+(pickedAv===k?'on':'')+'" title="'+SVG_AVATARS[k].name+'" aria-label="'+SVG_AVATARS[k].name+'" onclick="pickedAv=\''+k+'\';'+from+'()">'+avHtml(k)+'</button>';}).join('')+
-        (isCustomAv(pickedAv)?'<button class="on" title="Your design" onclick="openAvatarBuilder(\''+bReturn+'\')">'+avHtml(pickedAv)+'</button>':'')+'</div>'
-      :'<div class="avpick scroll">'+AVATARS.map(function(a){
-          return '<button class="'+(pickedAv===a?'on':'')+'" onclick="pickedAv=\''+a+'\';'+from+'()">'+a+'</button>';}).join('')+'</div>');
+  var keys=Object.keys(SVG_AVATARS).sort(function(a,b){ return skinNeed(a)-skinNeed(b); });
+  return '<div class="avpick svgrow">'+keys.map(function(k){
+      var t=heroTier(k), name=SVG_AVATARS[k].name, tag=t==='common'?'':' · '+RARITY[t];
+      if(skinLocked(k)) return '<button type="button" data-k="'+k+'" class="locked t-'+t+'" disabled title="'+name+tag+', opens at level '+skinNeed(k)+'" aria-label="'+name+tag+', opens at level '+skinNeed(k)+'">'+avHtml(k)+'<span class="lk">Lv '+skinNeed(k)+'</span></button>';
+      return '<button type="button" data-k="'+k+'" class="t-'+t+(pickedAv===k?' on':'')+'" title="'+name+tag+'" aria-label="'+name+tag+'" onclick="pickedAv=\''+k+'\';'+from+'()">'+avHtml(k)+'</button>';
+    }).join('')+
+    /* the token is checked by isCustomAv (# and five letters or digits), so it
+       is safe inside the onclick */
+    (function(){ var own=isCustomAv(pickedAv)?pickedAv:(state&&isCustomAv(state.hero.avatar)?state.hero.avatar:null);
+      return own?'<button type="button" class="'+(pickedAv===own?'on':'')+'" title="Your design" aria-label="Your design" onclick="pickedAv=\''+own+'\';'+from+'()">'+avHtml(own)+'</button>':''; })()+'</div>'+
+    '<div class="avlegend"><span class="t-rare">Rare</span><span class="t-epic">Epic</span><span class="t-legendary">Legendary</span></div>';
 }
 /* The top of the Hero sheet, and since Revamp 8 the hero card on Progress too.
    This is where everything the compact header stopped showing now lives: the
@@ -2262,8 +2497,9 @@ function heroSheetTop(where){
     (nr
       ?'<button class="btn ghost small ranknext" aria-label="Next rank '+nr.code+' at level '+nr.min+'. See all ranks" onclick="openRanks()">▲ Rank '+nr.code+' at Lv.'+nr.min+' '+svgIcon('chevron-right','sm')+'</button>'
       :'<button class="btn ghost small ranknext" aria-label="Max rank reached. Ascend into a new season" onclick="openAscend()">✦ Max rank. Ascend into a new season '+svgIcon('chevron-right','sm')+'</button>')+
-    '<div class="hpline"><span>❤️ HP '+h.hp+' / '+maxHp+'</span>'+
-      '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button>'+
+    /* the HP half of this row waits for HP and monsters (staged heroes, Calm) */
+    '<div class="hpline">'+(sysOn('stakes')?'<span>❤️ HP '+h.hp+' / '+maxHp+'</span>'+
+      '<button class="btn small" onclick="openDefeatInfo()">What happens at zero HP?</button>':'')+
       (card?'<button class="btn small" onclick="openCharacter()" title="Name, title, avatar, theme">'+svgIcon('pencil','sm')+' Customize</button>':'')+
     '</div>'+
     todayGlance()+
@@ -2277,11 +2513,10 @@ function openCharacter(){
   var m=$('#modal'); m.className='modal show';
   m.innerHTML='<div class="box"><h2>🧝 CHARACTER</h2>'+
     heroSheetTop()+
+    '<div class="flabel">Avatar</div>'+avPickerHtml('openCharacter')+
     '<div class="flabel">Name</div><input id="chName" maxlength="24" value="'+esc(keepN)+'">'+
     '<div class="flabel">Title (shown under your name)</div><input id="chTitle" maxlength="34" placeholder="e.g. Essay Slayer · Route Master" value="'+esc(keepT)+'">'+
     titleChips()+
-    '<div class="flabel">Avatar</div>'+avPickerHtml('openCharacter')+
-    (avTab==='emoji'?'<div class="setrow"><input id="chCustomAv" maxlength="4" placeholder="…or type any emoji" style="max-width:180px"><span class="hint">overrides the grid pick</span></div>':'')+
     '<div class="flabel">Theme</div><div class="themes">'+Object.keys(THEMES).map(function(k){
       var t=THEMES[k];
       return '<button class="'+(state.settings.theme===k?'on':'')+'" title="'+t.name+'" style="background:'+t.panel+'" onclick="setTheme(\''+k+'\')"><i style="background:'+t.accent+'"></i></button>';
@@ -2361,13 +2596,14 @@ function doAscend(boonId){
 }
 function ascendScreen(r){
   SND.rankup(); confetti(true); setTimeout(function(){confetti(true);},500); shake();
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="rankbig" style="color:var(--gold);font-size:64px">♻️</div>'+
-    '<div class="big" style="color:var(--gold)">ASCENDED</div>'+
-    '<div class="rankname" style="color:var(--gold)">SEASON '+r.ascension+'</div>'+
-    '<div class="sub">A new climb begins from Lv.1. Permanent boon gained:</div>'+
-    '<div class="sub"><b>'+r.boon.icon+' '+esc(r.boon.name)+'</b> - '+esc(r.boon.desc)+'</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Begin ▶</button></div>';
+  ceremony({
+    badge:cerBadge('♻️'),
+    kicker:'ASCENDED',
+    title:'Season '+r.ascension,
+    sub:'A new climb begins from level 1.',
+    rows:[cerRow(r.boon.icon,'Permanent boon: '+esc(r.boon.name),esc(r.boon.desc))],
+    primary:{label:'Begin',act:'closeOverlay()'}
+  });
 }
 function titleChips(){
   var unlocked=state.achievements.map(function(u){
@@ -2378,7 +2614,7 @@ function titleChips(){
   return '<div class="hint" style="margin-top:6px">Unlocked titles - tap to wear:</div><div class="titlechips">'+
     unlocked.map(function(a){
       return '<button onclick="wearTitle(\''+a.id+'\')">'+a.icon+' '+esc(a.name)+'</button>';
-    }).join('')+'</div>'+(locked?'<div class="hint">'+locked+' more locked in 📊 Stats → Achievements.</div>':'');
+    }).join('')+'</div>'+(locked?'<div class="hint">'+locked+' more locked in Progress → Achievements.</div>':'');
 }
 function wearTitle(id){
   var a=RPG.ACHIEVEMENTS.find(function(x){return x.id===id;});
@@ -2402,7 +2638,7 @@ function openTitlePicker(){
     '<button class="btn go" onclick="wearCustomTitle()">Wear it</button></div>'+
     '<div class="setrow" style="margin-top:10px">'+(state.hero.title?'<button class="btn" onclick="wearTitleNow(null)">✕ No title</button>':'')+
     '<button class="btn" onclick="closeModal()">Close</button></div>'+
-    (locked?'<div class="hint" style="margin-top:8px">'+locked+' more titles locked in 📊 Stats → Achievements.</div>':'')+'</div>';
+    (locked?'<div class="hint" style="margin-top:8px">'+locked+' more titles locked in Progress → Achievements.</div>':'')+'</div>';
 }
 function wearTitleNow(id){
   if(id===null){ state.hero.title=''; }
@@ -2419,9 +2655,7 @@ function setTheme(k){ state.settings.theme=k; persist(); applyTheme(); openChara
 function saveCharacter(){
   var n=$('#chName').value.trim(); if(n) state.hero.name=n;
   state.hero.title=$('#chTitle').value.trim();
-  var customEl=$('#chCustomAv');
-  var custom=customEl?customEl.value.trim():'';
-  state.hero.avatar=custom||pickedAv||state.hero.avatar;
+  state.hero.avatar=pickedAv||state.hero.avatar;
   pickedAv=null;
   persist(); closeModal(); render();
 }
@@ -2442,8 +2676,7 @@ function openSettings(){
         return '<option value="'+h+'"'+((state.settings.reminderHour==null?18:state.settings.reminderHour)===h?' selected':'')+'>'+(h%12||12)+':00 '+(h<12?'AM':'PM')+'</option>';
       }).join('')+'</select></div>'+
       '<div class="hint" style="margin-top:2px;margin-bottom:8px">Today’s unfinished dailies get a friendly reminder at this time.</div>':'')+
-    '<div class="setrow"><button class="btn'+(state.settings.hardcore?' hcon':'')+'" onclick="toggleHardcore()" title="Defeat costs half your coins and revives you at just 10 HP">'+(state.settings.hardcore?'💀 Hardcore ON':'🛡️ Hardcore OFF')+'</button>'+
-    '<span class="hint" style="flex:1;align-self:center">Defeat bites harder: bigger coin loss, lower revival HP.</span></div>'+
+    '<div class="flabel">Game intensity</div>'+intensityControl(state.settings.intensity||'classic','setIntensity')+
     '<div class="flabel">🌙 Rest days <span class="hint" style="display:inline">- your streak won’t break on these</span></div>'+
     '<div class="daysrow">'+MON_ORDER.map(function(i){
       return '<button type="button" class="dow'+((state.settings.restDays||[]).indexOf(i)>=0?' on':'')+'" onclick="toggleRestDay('+i+')">'+DOW[i][0]+'</button>';
@@ -2463,11 +2696,9 @@ function openSettings(){
   if(state.settings.friends && cloudOn()) setTimeout(loadFriendList,0);
 }
 function toggleSound(){ state.settings.sound=!state.settings.sound; persist(); openSettings(); if(state.settings.sound) SND.earn(); }
-function toggleHardcore(){
-  if(!state.settings.hardcore && !confirm('Turn on Hardcore? Being defeated will cost half your coins and revive you at just 10 HP. You can turn it off any time.')) return;
-  state.settings.hardcore=!state.settings.hardcore; persist(); openSettings();
-  toast(state.settings.hardcore?'💀 <span class="h">Hardcore ON - defeat bites hard now</span>':'🛡️ <span class="p">Hardcore off</span>');
-}
+/* Kept as a shortcut between Classic and Hardcore (older markup and a test
+   call it). The real control is the Game intensity row, see setIntensity. */
+function toggleHardcore(){ setIntensity(state.settings.hardcore?'classic':'hardcore'); }
 function toggleRestDay(i){
   var rd=state.settings.restDays=state.settings.restDays||[];
   var at=rd.indexOf(i); if(at>=0) rd.splice(at,1); else rd.push(i);
@@ -2522,11 +2753,14 @@ function mendStreak(){
   var r=A.redeemStreak(state); persist(); render();
   if(!r||r.fail) return;
   SND.rankup(); confetti(true); sparks('🕯');
-  var o=$('#overlay'); o.className='show'; o.dataset.seq=++overlaySeq;
-  o.innerHTML='<div class="levelbox"><div class="rankbig" style="font-size:64px">🕯</div>'+
-    '<div class="big" style="color:var(--orange)">STREAK MENDED</div>'+
-    '<div class="sub">The flame burns again - <b style="color:var(--orange)">'+r.streak+' days</b> and counting.</div>'+
-    '<button class="btn go" onclick="closeOverlay()">Onward ▶</button></div>';
+  ceremony({
+    cls:'daywon',
+    badge:'<span class="cer-flame" aria-hidden="true">🕯</span><span class="cer-num">'+r.streak+'</span>',
+    kicker:'STREAK MENDED',
+    title:r.streak+' days and counting',
+    sub:'The flame burns again, as if it never went out.',
+    primary:{label:'Onward',act:'closeOverlay()'}
+  });
   afterAction();
 }
 
@@ -2593,14 +2827,23 @@ function shareRecap(){
   var d0=new Date(w.days[0]+'T00:00:00'), d1=new Date(w.days[6]+'T00:00:00');
   ctx.fillText(d0.toLocaleDateString(undefined,{month:'short',day:'numeric'})+' - '+d1.toLocaleDateString(undefined,{month:'short',day:'numeric'}),540,168);
   // avatar + name
-  ctx.font='150px serif'; ctx.fillText(avPlain(h.avatar),540,340);
+  /* the hero as pixel tiles, painted straight onto the canvas (art.js) */
+  if(window.PX){
+    var av=h.avatar;
+    if(SVG_AVATARS[av]) PX.paint(ctx,'hero',String(av).slice(1),455,200,170);
+    else if(isCustomAv(av)) PX.paint(ctx,'custom',customDigits(av),455,200,170);
+    else PX.paint(ctx,'hero',legacyHero(av).slice(1),455,200,170);
+  } else { ctx.font='150px serif'; ctx.fillText(avPlain(h.avatar),540,340); }
   ctx.fillStyle=C.ink; ctx.font='700 56px Karla, sans-serif'; ctx.fillText(h.name,540,430);
   ctx.fillStyle=C.gold; ctx.font='700 34px "IBM Plex Mono", monospace';
-  ctx.fillText(r.code+' · '+r.name.toUpperCase()+'   LV.'+h.level+((h.ascension||0)>0?'   ✦ S'+h.ascension:''),540,478);
+  ctx.fillText(r.code+' · '+r.name.toUpperCase()+'   LV.'+h.level+((h.ascension||0)>0?'   S'+h.ascension:''),540,478);
   if(h.title){ ctx.fillStyle=C.muted; ctx.font='italic 30px Karla, sans-serif'; ctx.fillText('“'+h.title+'”',540,522); }
   // stat tiles
   var tiles=[['XP EARNED',w.tot.xp,C.xp],['QUESTS',w.tot.quests,C.blue],['FOCUS',Math.floor(w.tot.focusMin/60)+'h'+(w.tot.focusMin%60?String(w.tot.focusMin%60).padStart(2,'0'):''),C.gold],
-             ['HABITS KEPT',w.tot.habits,C.xp],['STREAK',h.streak+'d',C.hp],['COINS',w.tot.earned,C.gold]];
+             ['HABITS KEPT',w.tot.habits,C.xp],['STREAK',h.streak+'d',C.hp],
+             /* coins only once the Market is open (staged heroes); before that the
+                sixth tile is the number of days the hero showed up this week */
+             sysOn('rewards')?['COINS',w.tot.earned,C.gold]:['DAYS ACTIVE',w.days.filter(function(d){return w.per[d].xp>0;}).length+'/7',C.gold]];
   var tw=300, th=150, gap=24, x0=(1080-3*tw-2*gap)/2, y0=590;
   tiles.forEach(function(t,i){
     var x=x0+(i%3)*(tw+gap), y=y0+Math.floor(i/3)*(th+gap);
@@ -2611,7 +2854,7 @@ function shareRecap(){
   });
   // mood strip
   ctx.font='44px serif';
-  w.moods.forEach(function(m,i){ ctx.fillText(m.emoji,340+i*68,975); });
+  w.moods.forEach(function(m,i){ var nm=window.PX&&PX.forEmoji(m.emoji); if(nm) PX.paint(ctx,'icon',nm,340+i*68-22,937,44); else ctx.fillText(m.emoji,340+i*68,975); });
   ctx.fillStyle=C.muted; ctx.font='500 26px "IBM Plex Mono", monospace';
   ctx.fillText('scale-my-life.vercel.app',540,1032);
   // export
@@ -2652,10 +2895,13 @@ function cloudSection(){
     '<div class="hint">Synced as <b>'+esc(sess.user.email||'')+'</b>'+(ls?' · last sync '+new Date(ls).toLocaleString():'')+'</div>'+
     '<div class="setrow" style="margin-top:6px"><button class="btn go" onclick="cloudSyncNow()">⟳ Sync now</button>'+
     '<button class="btn" onclick="cloudSignOut()">Sign out</button></div>'+
-    '<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button>'+
-    '<button class="btn" onclick="toggleFriends()">'+(state.settings.friends?'🤝 Friends: ON':'🤝 Enable friends')+'</button></div>'+
-    '<div class="hint">'+(state.settings.board?'On the global board - sharing name, avatar, title, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those seven small fields - never your save.')+'</div>'+
-    friendsBox()+
+    /* leaderboard and friends are a staged system (level 5) */
+    (sysOn('social')
+      ?'<div class="setrow"><button class="btn" onclick="toggleBoard()">'+(state.settings.board?'🏆 Leaderboard: IN':'🏆 Join the leaderboard')+'</button>'+
+        '<button class="btn" onclick="toggleFriends()">'+(state.settings.friends?'🤝 Friends: ON':'🤝 Enable friends')+'</button></div>'+
+        '<div class="hint">'+(state.settings.board?'On the global board - sharing name, avatar, title, level, rank, weekly XP, best streak.':'Global board is opt-in. Only ever shares those seven small fields - never your save.')+'</div>'+
+        friendsBox()
+      :'<div class="hint">Leaderboard and friends open at level 5.</div>')+
     '<div class="hint" id="cMsg"></div>';
 }
 function cloudMsg(t,bad){ var el=$('#cMsg'); if(el) el.innerHTML=bad?'<span class="h">'+esc(t)+'</span>':'<span class="p">'+esc(t)+'</span>'; }
@@ -2732,6 +2978,7 @@ function afterCloudSignIn(){
 }
 function cloudSignOut(){ SMLCloud.signOut().then(function(){ openSettings(); toast('☁️ Signed out - save stays on this device'); }); }
 function toggleBoard(){
+  if(!sysOn('social')) return;
   if(!cloudOn()){ toast('<span class="h">Sign in first to join the leaderboard</span>','dmg'); return; }
   if(state.settings.board){
     state.settings.board=false; persist(); openSettings();
@@ -2757,6 +3004,7 @@ function cloudSyncNow(){
   });
 }
 function toggleFriends(){
+  if(!sysOn('social')) return;
   if(!cloudOn()){ toast('<span class="h">Sign in first to use friends</span>','dmg'); return; }
   state.settings.friends=!state.settings.friends; persist(); openSettings();
   if(state.settings.friends){ SMLCloud.pushBoard(boardProfile(), !!state.settings.board).then(function(){ toast('🤝 <span class="c">Friends on - share your code!</span>'); }); }
@@ -2861,7 +3109,10 @@ function showProfile(id){
   m.innerHTML='<div class="box">'+head+body+foot+'</div>';
 }
 function unfriendFrom(id){ SMLCloud.removeFriend(id).then(function(){ closeModal(); toast('🤝 <span class="c">Friend removed</span>'); render(); }); }
-function closeModal(){ $('#modal').className='modal'; }
+/* capStop: the capture sheet may have the microphone running, and Escape or a
+   tap elsewhere closes the sheet through here, so the recording must end here
+   too or it would keep listening behind a closed sheet. */
+function closeModal(){ var m=$('#modal'); m.className='modal'; m.removeAttribute('aria-labelledby'); m.setAttribute('aria-label','Dialog'); if(typeof capStop==='function') capStop(); }
 /* modal accessibility: Escape closes, Tab stays trapped inside, and focus moves
    into the dialog when it opens */
 function modalFocusables(m){
@@ -2869,9 +3120,19 @@ function modalFocusables(m){
   return Array.prototype.filter.call(f, function(el){ return !el.disabled && (el.offsetParent!==null || !('offsetParent' in el)); });
 }
 document.addEventListener('keydown', function(e){
+  var ov=document.getElementById('overlay');
+  if(e.key==='Escape' && ov && ov.classList.contains('show') && ov.getAttribute('role')==='dialog'){
+    /* a disabled main button (the first-quest countdown) means "read this
+       first", so Escape waits for it like the button does */
+    var main=ov.querySelector('.cer-act .btn');
+    if(!main || !main.disabled){ e.preventDefault(); closeOverlay(); }
+    return;
+  }
   var m=document.getElementById('modal');
   if(!m || !m.classList.contains('show')) return;
-  if(e.key==='Escape'){ e.preventDefault(); closeModal(); return; }
+  /* Escape closes a sheet, but never the wizard before a hero exists: there
+     would be nothing behind it but an empty app until a reload */
+  if(e.key==='Escape'){ e.preventDefault(); if(state) closeModal(); return; }
   if(e.key!=='Tab') return;
   var f=modalFocusables(m); if(!f.length) return;
   var first=f[0], last=f[f.length-1];
@@ -2964,7 +3225,7 @@ function saveEditHabit(id){
    be trusted to sit still. */
 var tourStep=0;
 var TOUR=[
-  {tab:'today', sel:'#hud', title:'Your hero', body:'Your hero, level, XP, coins and streak live here'},
+  {tab:'today', sel:'#hud', title:'Your hero', body:'Your hero, level, XP and streak live here'},
   {tab:'today', sel:'#tabs', title:'Getting around', body:'Five places: Today, Quests, Habits, Rewards, Progress'},
   {tab:'today', sel:'#view .panel', title:'Today', body:'Today shows what to do now'},
   {tab:'quests', sel:'#view .panel', title:'Quests', body:'Big goals with steps, side quests and dailies'},
@@ -2977,6 +3238,8 @@ function showTourStep(){
   if(tourStep<0){ tourStep=0; }
   if(tourStep>=TOUR.length){ endTour(true); return; }
   var s=TOUR[tourStep];
+  /* the Rewards stop talks about spending coins: skip it while the Market is closed */
+  if(s.tab==='market' && !sysOn('rewards')){ tourStep+=(tourStep>0&&tourDir<0)?-1:1; showTourStep(); return; }
   var run=function(){
     var el=null; s.sel.split(',').some(function(sel){ el=document.querySelector(sel.trim()); return !!el; });
     if(el&&el.scrollIntoView){ try{ el.scrollIntoView({block:'center'}); }catch(e){} }
@@ -3003,8 +3266,9 @@ function positionTour(el){
     '<button class="btn small go" onclick="tourNext()">'+(tourStep===TOUR.length-1?'Done ✓':'Next ▶')+'</button></div></div>';
   host.innerHTML=hole+tip;
 }
-function tourNext(){ tourStep++; showTourStep(); }
-function tourPrev(){ tourStep--; showTourStep(); }
+var tourDir=1;   // which way a skipped stop moves on (Back walks back over it)
+function tourNext(){ tourDir=1; tourStep++; showTourStep(); }
+function tourPrev(){ tourDir=-1; tourStep--; showTourStep(); }
 function endTour(done){
   var h=document.getElementById('tour'); if(h){ h.className=''; h.innerHTML=''; }
   if(done===true){ toast('🎉 <span class="p">You’re all set - go clear a quest!</span>'); go('today'); }
@@ -3066,29 +3330,58 @@ function tut(i){
 }
 function tutSkip(){ if(state){ closeModal(); } else { onboarding(); } }
 
-/* ---------- onboarding: the six-step wizard ----------
-   boot() opens this when there is no save. Steps: 1 hero, 2 path, 3 day,
-   4 habits, 5 quests, 6 rewards, then a Ready screen whose Start button is
-   createHero(). Each tap re-renders the current step (onboarding(obStep)),
-   so every pick lives in the module-level `ob` object, not in the DOM: a
-   re-render that read its values back from the DOM would lose them.
+/* ---------- onboarding: the four-step wizard ----------
+   boot() opens this when there is no save. Steps: 1 hero, 2 day (time,
+   struggle, game intensity, each explained in plain words), 3 plate (the
+   capture sheet: packs and a list of what is really going on), 4 board
+   (everything Sage will set up, grouped by where it came from, as toggles)
+   with the Start button, which is createHero(). There is no path step any
+   more: the plate step personalises the board far better, so every new
+   board starts from the Balanced preset ('general'). Each tap re-renders
+   the current step (onboarding(obStep)), so every pick lives in the
+   module-level `ob` object, not in the DOM: a re-render that read its values
+   back from the DOM would lose them. The plate step keeps its state in `cap`
+   (see "capture" further down), which is why going Back and forward again
+   shows the same text and cards.
+
+   What is NOT here any more, on purpose: a rewards step (the Market opens
+   later with its own moment and its own suggestions), a Ready screen, and
+   the automatic tour. A new hero starts with a small game and each system
+   introduces itself when it opens (see STAGES in core.js). The tour is still
+   in Settings.
 
    Three picks are still owned by older variables because the controls that
    write them are shared with the Character sheet: pickedAv (the avatar
-   picker and the hero builder), pickedTheme (previewTheme, also read by
-   applyTheme before a save exists) and pickedPaths (togglePath, which the
-   tests read directly). obSync() copies those three into `ob` before every
+   picker), pickedTheme (previewTheme, also read by applyTheme before a save
+   exists) and pickedPaths (always Balanced now; togglePath stays for older
+   code paths). obSync() copies those three into `ob` before every
    render and inside createHero, so createHero reads one object. If you add a
    pick, add it to obFresh() as well or it will leak into the next hero after
    a reset. */
-var OB_STEPS=6;
-var OB_MINUTES=[[15,'15 min'],[30,'30 min'],[60,'60 min or more']];
-var OB_STRUGGLES=[['phone','Phone'],['procrastination','Procrastination'],['sleep','Sleep'],['junk','Junk food'],['none','None']];
-/* the monster a struggle adds on step 4. The ids are stored on
+var OB_STEPS=4;
+/* Game intensity, written for someone who has never seen the app: no word
+   here (HP, monster) is assumed known. Keep it in step with INTENSITY, the
+   Settings version further down. */
+var OB_MODES=[
+  ['calm','🌿','Calm','Just progress. Tasks and habits earn XP and levels, and nothing can go wrong.'],
+  ['classic','⚔️','Classic','From level 3 you get a health bar. Bad habits become monsters: an honest slip costs a little health, rest brings it back. Run out and you earn less until you recover.'],
+  ['hardcore','💀','Hardcore','Classic with real stakes: running out of health also costs half your coins.']
+];
+var OB_MINUTES=[[15,'15 min'],[30,'30 min'],[60,'1 hour or more']];
+/* what the time answer changes: the size of Sage's morning plan (draftTarget
+   in core.js: 3, 4 or 5 picks) and how many daily quests start switched on
+   (obBudget below). Keep the numbers here in step with those two. */
+var OB_MINUTE_HINT={15:'Sage suggests 3 small things each morning, and you start with 2 daily quests.',
+  30:'Sage suggests 4 things each morning, and you start with 3 daily quests.',
+  60:'Sage suggests 5 things each morning, and you start with every daily quest.'};
+var OB_STRUGGLES=[['phone','Phone'],['procrastination','Procrastination'],['sleep','Sleep'],['junk','Junk food'],
+  ['gaming','Gaming'],['spending','Spending'],['workout','Skipping workouts'],['none','Nothing in particular']];
+/* the monster (bad habit to fight) a struggle adds. The ids are stored on
    state.settings.onboard.struggle and the Rewards screen matches on them, so
    renaming an id here means renaming it there too. */
-var OB_MONSTERS={phone:'Doomscrolling',procrastination:'Putting off the hard task',sleep:'Late-night scrolling',junk:'Junk food binge'};
-function obFresh(){ return {name:'',avatar:null,paths:['general'],theme:null,minutes:30,struggle:'none',habitsOff:{},questsOff:{},rewardsOff:{},targets:{},custom:''}; }
+var OB_MONSTERS={phone:'Doomscrolling',procrastination:'Putting off the hard task',sleep:'Late-night scrolling',junk:'Junk food binge',
+  gaming:'Gaming instead of working',spending:'Impulse buying',workout:'Skipping the workout'};
+function obFresh(){ return {name:'',avatar:null,paths:['general'],theme:null,minutes:30,struggle:'none',intensity:'classic',habitsOff:{},questsOff:{},targets:{}}; }
 var ob=obFresh(), obStep=1, obSug=null;
 function obSync(){
   ob.avatar=pickedAv||ob.avatar||'🧙';
@@ -3100,7 +3393,7 @@ function obSync(){
    however many quests a blend of paths seeds. */
 function obBudget(min){ return min===15?2:(min===30?3:Infinity); }
 /* The suggestions ARE the board the picked paths would seed, read off a
-   throwaway state. Running the real seeder keeps steps 4 to 6 in step with
+   throwaway state. Running the real seeder keeps the board step in step with
    PATHS in core.js without a second copy of the presets. createHero runs the
    same function over the real state, so the row order shown is the row order
    kept: change the filter here and the two go out of sync. */
@@ -3111,22 +3404,23 @@ function obLists(st){
   /* market items only, minus the protection items (Streak Shield): those are
      not "rewards you picked", the Rewards screen shows them under Protection */
   st.shop.forEach(function(s){ if(s.tab==='market'&&!s.special) rewards.push({id:s.id,title:s.title,price:s.price}); });
-  return {habits:habits,quests:quests,rewards:rewards};
+  /* skills: the life areas this blend of paths produces. The plate step reads
+     them (capSkills) to guess an area for each task before a hero exists. */
+  return {habits:habits,quests:quests,rewards:rewards,skills:st.skills};
 }
 function obSuggest(){ return obLists(RPG.seedPreset(RPG.newState('preview', ob.avatar||'🧙'), ob.paths)); }
 /* Is a suggested item switched on? ob.<kind>Off[title] true means the user
    turned it off, false means turned it back on; absent means the default:
-   habits on, dailies inside the time budget on, the first three rewards on. */
+   habits on, dailies inside the time budget on. */
 function obOn(kind,it,i){
   var off=ob[kind+'Off'], t=it.title;
-  if(Object.prototype.hasOwnProperty.call(off,t)) return !off[t];
+  if(off && Object.prototype.hasOwnProperty.call(off,t)) return !off[t];
   if(kind==='quests') return it.di<0 || it.di<obBudget(ob.minutes);
-  if(kind==='rewards') return i<3;
   return true;
 }
 /* the toggles pass an index into obSug rather than the title, so no title
    ever lands inside an onclick attribute (an apostrophe would break it) */
-function obToggle(kind,i){ var it=obSug&&obSug[kind]&&obSug[kind][i]; if(!it) return; ob[kind+'Off'][it.title]=obOn(kind,it,i); onboarding(obStep); }
+function obToggle(kind,i){ var it=obSug&&obSug[kind]&&obSug[kind][i]; if(!it||!ob[kind+'Off']) return; ob[kind+'Off'][it.title]=obOn(kind,it,i); onboarding(obStep); }
 function obToggleMonster(){ var t=OB_MONSTERS[ob.struggle]; if(!t) return; ob.habitsOff[t]=!ob.habitsOff[t]; onboarding(obStep); }
 function obTarget(i,n){ var it=obSug&&obSug.habits[i]; if(!it) return; ob.targets[it.title]=n; onboarding(obStep); }
 function obPick(key,val){ ob[key]=val; onboarding(obStep); }
@@ -3135,11 +3429,46 @@ function obNext(){
     if(!obNameCheck()){ var e=$('#obNameErr'); if(e) e.style.display=''; var i=$('#obName'); if(i) i.focus(); return; }
     ob.name=$('#obName').value.trim();
   }
-  if(obStep===5){ var c=$('#obCustom'); if(c) ob.custom=c.value; }
-  onboarding(obStep+1);
+  onboarding(Math.min(OB_STEPS,obStep+1));
 }
 function obBack(){ onboarding(Math.max(1,obStep-1)); }
-function obSkip(){ onboarding(OB_STEPS+1); }   // straight to Ready; picks not yet made keep their defaults
+function obSkip(){ onboarding(OB_STEPS); }
+/* one question on the Your day step: the question, its answers, and a line
+   saying what the answer changes in the app */
+function obQ(q,controls,hint){ return '<div class="obq"><div class="obqt">'+q+'</div>'+controls+(hint?'<div class="hint obqh">'+hint+'</div>':'')+'</div>'; }
+function obModes(){
+  return '<div class="obmodes" role="group" aria-label="Game intensity">'+OB_MODES.map(function(o){ var on=ob.intensity===o[0];
+    return '<button type="button" class="obmode'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obPick(\'intensity\',\''+o[0]+'\')">'+
+      '<span class="omi" aria-hidden="true">'+o[1]+'</span><span class="grow"><b>'+o[2]+(o[0]==='classic'?' <span class="omrec">Recommended</span>':'')+'</b><small>'+o[3]+'</small></span></button>';
+  }).join('')+'</div>';
+}
+function obStruggleHint(){
+  var mon=OB_MONSTERS[ob.struggle];
+  if(!mon) return 'Nothing to track for now. You can add a bad habit any time from the Habits tab.';
+  if(ob.intensity==='calm') return 'Calm has no monsters, so this only tunes the rewards Sage suggests. Pick Classic below to fight it.';
+  return 'Sage adds “'+esc(mon)+'” as a bad habit to fight. When you slip, you log it honestly; every clean day builds a streak. It also tunes the rewards Sage suggests.';
+}
+/* The board step. Each plate card keeps its index into obPlate, so a toggle
+   finds it again without putting a title inside an onclick attribute. */
+var obPlate=[];
+function obPlateToggle(i){ var it=obPlate[i]; if(!it||!cap) return; var o=cap.over[it.key]=cap.over[it.key]||{}; o.off=!it.off; onboarding(obStep); }
+function obPlateRow(it,i){
+  var on=!it.off, K=CAP_KIND[it.kind], meta=K[1];
+  if(it.kind==='habit') meta=it.target>=7?'Habit, every day':'Habit, '+it.target+'× a week';
+  if(it.kind==='monster') meta='Bad habit, from level 3';
+  if(it.kind==='main'&&it.steps&&it.steps.length) meta+=', '+it.steps.length+' steps';
+  if(it.due&&(it.kind==='main'||it.kind==='side')) meta+=', '+capDateLabel(it.due);
+  var steps='';
+  if(on&&it.kind==='main'&&it.steps&&it.steps.length){
+    steps='<ol class="obsteps">'+it.steps.slice(0,3).map(function(st){ return '<li>'+esc(st.title)+'</li>'; }).join('')+
+      (it.steps.length>3?'<li class="more">and '+(it.steps.length-3)+' more</li>':'')+'</ol>';
+  }
+  return '<div class="obitem'+(on?' on':'')+'"><button type="button" class="obtog" aria-pressed="'+on+'" onclick="obPlateToggle('+i+')">'+
+    '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span><span class="obmeta">'+meta+'</span></button>'+steps+'</div>';
+}
+function obGroup(head,sub,rows){
+  return '<section class="obgroup"><div class="obghead">'+head+'</div>'+(sub?'<div class="obgsub">'+sub+'</div>':'')+'<div class="oblist">'+rows+'</div></section>';
+}
 function obDots(step){
   var h='';
   for(var j=1;j<=OB_STEPS;j++) h+='<i class="'+(j<step?'done':(j===step?'on':''))+'"></i>';
@@ -3172,62 +3501,65 @@ function obThemesHtml(){
   }).join('')+'</div>';
 }
 function onboarding(step){
-  obStep=step||1; obSync();
+  obStep=Math.max(1,Math.min(OB_STEPS,step||1)); obSync();
   pickedAv=pickedAv||'🧙';
+  /* the plate step owns `cap`; it is created once per wizard run and survives
+     Back and Continue. Leaving the step stops a running microphone. */
+  if(!cap) cap=capFresh();
+  capStop();
   var s=obStep, title='', copy='', body='', nav='', mon=OB_MONSTERS[ob.struggle];
   if(s===1){
     title='Your hero'; copy='Name your character and pick a look.';
     body='<input id="obName" placeholder="Hero name" maxlength="24" autocomplete="off" value="'+esc(ob.name)+'" oninput="obNameCheck()">'+
       '<div class="hint" id="obNameErr" style="color:var(--danger);display:none">Give your hero a name to continue.</div>'+
       '<div class="flabel">Avatar</div>'+avPickerHtml('onboarding')+
+      '<div class="hint">More heroes open as you level up.</div>'+
       '<div class="flabel">Look</div>'+obThemesHtml();
   } else if(s===2){
-    title='Your path'; copy='Pick ALL that fit, the board blends them.';
-    body='<div class="pathpick">'+RPG.PATHS.map(function(p){ var on=ob.paths.indexOf(p.id)>=0;
-      return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="togglePath(\''+p.id+'\')"><span class="pi">'+p.icon+'</span><b>'+esc(p.name)+'</b><small>'+esc(p.blurb)+'</small></button>';
-    }).join('')+'</div>';
+    title='Your day'; copy='Three quick questions so Sage can plan days that fit you.';
+    body=obQ('How much time can you give your goals on a normal day?',obChips('minutes',OB_MINUTES),OB_MINUTE_HINT[ob.minutes]||'')+
+      obQ('What gets in your way the most?',obChips('struggle',OB_STRUGGLES),obStruggleHint())+
+      obQ('How much game do you want?',obModes(),'You can change this any time in Settings.');
   } else if(s===3){
-    title='Your day'; copy='How much time, and what gets in the way.';
-    body='<div class="flabel">Time per day</div>'+obChips('minutes',OB_MINUTES)+
-      '<div class="flabel">Biggest struggle</div>'+obChips('struggle',OB_STRUGGLES);
-  } else if(s===4){
     obSug=obSuggest();
-    title='Habits to start'; copy='Turn off any you do not want, set how often.';
-    body='<div class="oblist">'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i)); }).join('')+'</div>'+
-      (mon?'<div class="flabel">Monster to fight</div><div class="oblist"><div class="obitem'+(ob.habitsOff[mon]?'':' on')+'">'+
-        '<button type="button" class="obtog" aria-pressed="'+!ob.habitsOff[mon]+'" onclick="obToggleMonster()">'+
-        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(mon)+'</span><span class="obmeta">costs HP when you slip</span></button></div></div>':'');
-  } else if(s===5){
-    obSug=obSuggest();
-    title='First quests'; copy='Dailies that fit your time are on. Toggle any.';
-    body='<div class="oblist">'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),it.recurring?'daily':''); }).join('')+'</div>'+
-      '<div class="flabel">Your own (optional)</div>'+
-      '<input id="obCustom" placeholder="Add one of your own" maxlength="60" autocomplete="off" value="'+esc(ob.custom)+'" oninput="ob.custom=this.value">';
-  } else if(s===6){
-    obSug=obSuggest();
-    title='Rewards'; copy='What your coins will buy. Add more later.';
-    body='<div class="oblist">'+obSug.rewards.map(function(it,i){ var on=obOn('rewards',it,i);
-      return '<button type="button" class="obcard'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="obToggle(\'rewards\','+i+')">'+
-        '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(it.title)+'</span><span class="obprice">💰 '+it.price+'</span></button>'; }).join('')+'</div>';
+    title='What is on your plate?'; copy='Tap a pack, or type your tasks one at a time and press Enter. Sage turns them into quests.';
+    body=capBody('wizard');
   } else {
-    title='Ready when you are';
-    body='<div class="obready"><div class="obav">'+avHtml(ob.avatar)+'</div><div class="obheroname">'+esc(ob.name||'Hero')+'</div></div>'+
-      '<div class="oblines">'+
-      '<div class="obline">'+svgIcon('coins')+'<span>Clear quests and keep habits to earn XP and coins</span></div>'+
-      '<div class="obline">'+svgIcon('flame')+'<span>Keep the streak, Sage will help</span></div>'+
-      '<div class="obline">'+svgIcon('gift')+'<span>Spend coins on the rewards you picked</span></div></div>';
+    obSug=obSuggest();
+    title='Your board'; copy='Everything Sage will set up, grouped by where it came from. Untick anything you do not want.';
+    obPlate=capBuild(obSug.skills);
+    var calm=ob.intensity==='calm', groups=[], byPack={}, own=[];
+    obPlate.forEach(function(it,i){
+      if(it.pack){
+        var g=byPack[it.packIndex];
+        if(!g){ g=byPack[it.packIndex]={pack:it.pack,pi:it.packIndex,rows:''}; groups.push(g); }
+        g.rows+=obPlateRow(it,i);
+      } else own.push(obPlateRow(it,i));
+    });
+    body=groups.map(function(g){
+      var pk=RPG.packById(g.pack), pm=cap.packs[g.pi]||{};
+      return obGroup(pk.icon+' '+esc(pk.name)+(pm.name?' <span class="obgname">'+esc(pm.name)+'</span>':''),'From the pack you picked',g.rows);
+    }).join('')+
+      (own.length?obGroup('✍️ Your own tasks','What you typed or said',own.join('')):'')+
+      obGroup('🌱 Starter set','A few basics so day one is not empty',
+        '<div class="obsub">Habits</div>'+obSug.habits.map(function(it,i){ return obRow('habits',i,it,obOn('habits',it,i)); }).join('')+
+        (mon&&!calm?'<div class="obsub">Bad habit to fight</div><div class="obitem'+(ob.habitsOff[mon]?'':' on')+'">'+
+          '<button type="button" class="obtog" aria-pressed="'+!ob.habitsOff[mon]+'" onclick="obToggleMonster()">'+
+          '<span class="obbox">'+svgIcon('check','sm')+'</span><span class="obname">'+esc(mon)+'</span><span class="obmeta">from level 3</span></button></div>':'')+
+        '<div class="obsub">Daily quests</div>'+obSug.quests.map(function(it,i){ return obRow('quests',i,it,obOn('quests',it,i),it.recurring?'daily':''); }).join(''));
   }
-  if(s>OB_STEPS){
-    nav='<button class="btn go wide" id="obStart" onclick="createHero()">Start</button>'+
+  if(s===OB_STEPS){
+    nav='<button class="btn go wide" id="obStart" onclick="createHero()">Start my adventure</button>'+
       '<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button></div>';
   } else {
-    nav='<button class="btn go wide" id="obNext" onclick="obNext()">Continue</button>'+
+    nav='<button class="btn go wide" id="obNext" onclick="obNext()">'+(s===3?'Build my board':'Continue')+'</button>'+
       (s>1?'<div class="obnav"><button type="button" class="btn ghost" onclick="obBack()">'+svgIcon('chevron-left','sm')+' Back</button>'+
-        (s>=3?'<button type="button" class="btn ghost" onclick="obSkip()">Skip</button>':'')+'</div>':'');
+        '<button type="button" class="btn ghost" onclick="obSkip()">Skip</button></div>':'');
   }
   var m=$('#modal'); m.className='modal show';
-  m.innerHTML='<div class="box obwiz">'+obDots(s)+'<h2>'+title+'</h2>'+(copy?'<p class="obcopy">'+copy+'</p>':'')+body+nav+'</div>';
+  m.innerHTML='<div class="box obwiz'+(s===3?' obplatestep':'')+'">'+obDots(s)+'<h2>'+title+'</h2>'+(copy?'<p class="obcopy">'+copy+'</p>':'')+body+nav+'</div>';
   if(s===1){ var inp=$('#obName'); if(inp && !inp.value) inp.focus(); obNameCheck(); }
+  if(s===3) capRender();
 }
 function previewTheme(k){
   if(!THEMES[k]) return;
@@ -3267,24 +3599,776 @@ function createHero(){
     else if(ob.targets[it.title]) A.editHabit(state,it.id,{target:ob.targets[it.title]});
   });
   L.quests.forEach(function(it,i){ if(!obOn('quests',it,i)) A.deleteQuest(state,it.id); });
-  L.rewards.forEach(function(it,i){ if(!obOn('rewards',it,i)) A.deleteShopItem(state,it.id); });
+  /* The path's rewards all stay on the shelf. Nobody picks them here any
+     more: the Market is closed on day one and opens with them already in it. */
+  A.setIntensity(state, ob.intensity||'classic');
   var mon=OB_MONSTERS[ob.struggle];
-  if(mon){
+  if(mon && state.settings.intensity!=='calm'){
     /* a path may already seed the same monster (Doomscrolling): keep that one
        rather than adding a twin, and drop it if the user switched the row off */
     var twins=state.habits.filter(function(h){ return h.type==='bad'&&h.title.toLowerCase()===mon.toLowerCase(); });
     if(ob.habitsOff[mon]) twins.forEach(function(h){ A.deleteHabit(state,h.id); });
     else if(!twins.length) A.addHabit(state,{title:mon,type:'bad'});
   }
-  if(ob.custom&&ob.custom.trim()) A.addQuest(state,{title:ob.custom.trim(),diff:'normal'});
-  /* the Rewards screen reads this to suggest rewards; keep exactly this shape */
+  /* The plate. The cards were drawn against throwaway life areas (no hero
+     existed yet), so they are rebuilt here against the real ones before being
+     added. Same text, same corrections, real ids. */
+  if(cap){
+    var plate=capBuild(state.skills).filter(function(it){ return !it.off; });
+    if(plate.length) A.addCaptured(state, plate);
+  }
+  capStop(); cap=null;
+  /* A hero made here plays the staged game: a small first day, the rest of
+     the systems arriving as events (STAGES in core.js). Delete this line and
+     every new hero gets all fifteen systems at once again. */
+  state.stage={on:true,got:{}};
+  /* the Rewards screen and the Daily Draft read this; keep exactly this shape */
   state.settings.onboard={paths:paths.slice(),struggle:ob.struggle,minutes:ob.minutes};
   if(ob.theme&&THEMES[ob.theme]) state.settings.theme=ob.theme;
   pickedAv=null; pickedTheme=null; pickedPaths=['general']; ob=obFresh(); obStep=1; obSug=null;
+  hudPrev=null;
   RPG.addLog(state,'🎮','A new adventure begins. Welcome, '+n+'!');
   persist(); applyTheme(); closeModal(); render(); confetti();
-  setTimeout(function(){ startTour(); }, 700); // interactive spotlight tour for first-timers
+  /* No tour here. Today opens on Sage's draft, which is the next thing to do,
+     and each system explains itself the day it opens. */
 }
+/* ====================================================================
+   Sage as game master (UI)
+   --------------------------------------------------------------------
+   Everything in this section is the user-facing side of the engine block
+   with the same name in core.js. The split is strict: core.js decides
+   (what a sentence means, what today's plan should be, which system
+   opens when); this file only draws those decisions and passes the
+   user's taps back through RPG.actions. If a rule about WHAT happens
+   seems to be missing here, it is in core.js.
+
+   Contents, in order: hero skins by level, the capture sheet, the Daily
+   Draft and the plan, the day-won and now-open ceremonies, the Evening
+   Debrief helpers, the "what opens next" pieces, game intensity.
+   ==================================================================== */
+
+/* ---------- hero skins that open with level ----------
+   The level a designed hero becomes wearable. Six are free from the start;
+   the rest arrive one at a time, the rarer-looking ones last, so a level-up
+   regularly hands over something to wear. Only heroes on the staged game see
+   locks: a save from before stages keeps all sixteen (skinLocked returns false
+   for it), and whatever a hero already wears is never taken away.
+   To move a skin, change its number. A skin missing from this table is free. */
+var SKIN_LEVEL={'@knight':1,'@mage':1,'@rogue':1,'@ranger':1,'@monk':1,'@bard':1,
+  '@witch':2,'@druid':3,'@pirate':4,'@viking':5,'@alchem':6,'@paladin':8,'@valkyr':10,'@robot':12,'@samurai':15,'@kitsune':20};
+function skinNeed(k){ return SKIN_LEVEL[k]||1; }
+function skinLocked(k){
+  var need=skinNeed(k);
+  if(need<=1) return false;
+  if(!state) return true;                    // the wizard, before a hero exists: starters only
+  if(!RPG.staged(state)) return false;       // older saves keep everything
+  return state.hero.level<need && state.hero.avatar!==k;
+}
+/* the skins that open exactly at this level, for the level-up screen */
+function skinsAt(lv){
+  if(!state || !RPG.staged(state) || lv<2) return [];
+  return Object.keys(SKIN_LEVEL).filter(function(k){ return SKIN_LEVEL[k]===lv; });
+}
+
+/* ---------- capture: one button, no task types ----------
+   The sheet behind the Add button. The user talks, pastes or types several
+   things at once; RPG.parseDump turns the text into items and this draws
+   them as cards whose chips can be tapped to change the guess.
+
+   `cap` is the open sheet's state and is null when no sheet is open:
+     text      what is in the box
+     over      the user's corrections, keyed by item (see capBuild)
+     packs     quest packs added, each {id,name,date}
+     packForm  id of the pack whose little form is open, or null
+     items     the cards as last drawn (handlers look items up by index here)
+     rec       the running speech recognition, or null
+
+   Corrections are stored separately from the items on purpose. The items are
+   rebuilt from the text on every keystroke, so a correction written onto an
+   item would be lost on the next letter typed. Keyed corrections survive.
+   A life-area correction is stored by NAME, not id: the onboarding wizard
+   uses this same code before a save exists, when ids are throwaway. */
+var cap=null;
+var CAP_KIND={side:['📌','Side quest'],daily:['🔁','Daily'],habit:['🌱','Habit'],main:['🏆','Main quest'],monster:['👾','Monster']};
+var CAP_TARGETS=[7,5,3,2,1];
+var CAP_DIFFS=['easy','normal','hard','epic'];
+/* lines: tasks already added with Enter (or the Add button); text: what is
+   still in the box; pick: the chip whose option list is open, {key,what};
+   note: the "pack added" line, {pi,n,name} */
+function capFresh(){ return {text:'',lines:[],over:{},packs:[],packForm:null,items:[],rec:null,base:'',seen:{},pick:null,note:null}; }
+/* Calm has no monsters, so a "stop doomscrolling" is offered as a plain quest
+   instead. Reads the wizard's pick when there is no hero yet. */
+function capCalm(){ return state ? state.settings.intensity==='calm' : (ob.intensity==='calm'); }
+function capKinds(){ return RPG.CAPTURE_KINDS.filter(function(k){ return k!=='monster' || !capCalm(); }); }
+function capSkills(){ return state ? state.skills : ((obSug&&obSug.skills)||[]); }
+function capMicOk(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function capHas(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
+function capApply(it,o,skills,now){
+  if(o.diff && RPG.DIFF[o.diff]) it.diff=o.diff;
+  if(capHas(o,'area')){ it.skillId=null; skills.forEach(function(k){ if(k.name===o.area) it.skillId=k.id; }); }
+  if(o.target && it.kind==='habit') it.target=o.target;
+  /* a pack's main quest takes its date from the pack (capPackDate re-plans
+     its steps); any other dated card takes the date set on its chip */
+  if(capHas(o,'due') && (it.kind==='side'||(it.kind==='main'&&!it.pack))) RPG.captureDue(it,o.due,now);
+  it.off=!!o.off;
+}
+/* The cards for the current text, packs and corrections, against a given set
+   of life areas. Called on every change by capRender, and once more by
+   createHero with the real hero's areas. */
+function capBuild(skills){
+  var now=new Date(), out=[];
+  if(!cap) return out;
+  RPG.parseDump(cap.lines.concat([cap.text]).join('\n'), now, skills).forEach(function(it){
+    var key='t:'+it.text.toLowerCase(), o=cap.over[key]||{};
+    var want=o.kind || ((it.kind==='monster'&&capCalm())?'side':null);
+    if(want==='monster'&&capCalm()) want='side';   // Calm has no monsters, even one picked by hand earlier
+    if(want && want!==it.kind){ var re=RPG.captureItem(it.text, now, skills, want); if(re) it=re; }
+    it.key=key; capApply(it,o,skills,now); out.push(it);
+  });
+  cap.packs.forEach(function(pk,pi){
+    RPG.buildPack(pk.id,{name:pk.name,date:pk.date},now,skills).forEach(function(it,i){
+      if(it.kind==='monster' && capCalm()) return;
+      it.key='p:'+pi+':'+i; it.pack=pk.id; it.packIndex=pi;
+      capApply(it,cap.over[it.key]||{},skills,now); out.push(it);
+    });
+  });
+  return out;
+}
+function capDateLabel(due){
+  var d=new Date(due+'T00:00:00');
+  return isNaN(d.getTime()) ? due : d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+/* One card. data-i and data-w are how capRefocus finds the chip that was just
+   tapped after the list is redrawn; without them a keyboard user would be
+   thrown back to the top of the sheet on every change. Chips on a pack card
+   show its type as plain text: a pack is a planned set, and turning its main
+   quest into a habit would leave the rest of the pack making no sense. */
+function capCard(it,i){
+  var K=CAP_KIND[it.kind], sk=null, chips='', extra='';
+  capSkills().forEach(function(k){ if(k.id===it.skillId) sk=k; });
+  var open=cap.pick&&cap.pick.key===it.key?cap.pick.what:null;
+  /* a chip that opens its list of options; the ▾ says there is a list */
+  function chip(what,cls,label,aria){
+    return '<button type="button" class="capchip '+cls+(open===what?' open':'')+'" data-w="'+what+'" aria-expanded="'+(open===what)+'" onclick="capPickOpen('+i+',\''+what+'\')" aria-label="'+aria+'. Tap to choose">'+label+svgIcon('chevron-down','sm')+'</button>';
+  }
+  chips+=it.pack
+    ? '<span class="capchip kind">'+K[0]+' '+K[1]+'</span>'
+    : chip('kind','kind',K[0]+' '+K[1],'Type: '+K[1]);
+  if(it.kind==='side'||it.kind==='daily') chips+=chip('diff',it.diff,RPG.DIFF[it.diff].label,'Difficulty: '+RPG.DIFF[it.diff].label);
+  if(it.kind==='habit'){ var often=it.target>=7?'Every day':it.target+'× a week'; chips+=chip('target','',often,'How often: '+often); }
+  if(it.kind!=='monster') chips+=chip('area',sk?'area':'',sk?esc(sk.icon)+' '+esc(sk.name):'No area','Life area: '+(sk?esc(sk.name):'none'));
+  if(it.kind==='daily' && it.days && it.days.length)
+    chips+='<span class="capchip">'+MON_ORDER.filter(function(n){return it.days.indexOf(n)>=0;}).map(function(n){return DOW[n];}).join(' ')+'</span>';
+  if(it.kind==='side'||it.kind==='main'){
+    var dl=it.due?capDateLabel(it.due):'';
+    /* the real date input is stretched invisibly over the chip, so a tap on
+       the chip opens the phone's own date picker. On a pack's main quest the
+       date belongs to the pack: changing it re-plans every step. */
+    var onch=(it.pack&&it.kind==='main')?'capPackDate('+it.packIndex+',this.value)':'capDue('+i+',this.value)';
+    chips+='<label class="capchip date'+(dl?'':' bare')+'" data-w="due" title="'+(dl?'Change the date':'Add a date')+'">'+svgIcon('calendar','sm')+(dl?'<span>'+dl+'</span>':'')+'<input type="date" min="'+RPG.todayKey()+'" value="'+(it.due||'')+'" aria-label="'+(dl?'Due date':'Add a due date')+'" onchange="'+onch+'"></label>';
+  }
+  var picker='';
+  if(open){
+    var opts=capOpts(open), cur=capCur(open,it,sk);
+    picker='<div class="cappick" role="group" aria-label="Choose">'+opts.map(function(o,j){ var on=String(o[0])===String(cur);
+      return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="capPickSet('+i+',\''+open+'\','+j+')">'+o[1]+'</button>'; }).join('')+'</div>';
+  }
+  if(it.kind==='main' && it.steps && it.steps.length)
+    extra='<div class="capsteps">'+it.steps.length+' step'+(it.steps.length===1?'':'s')+', first: '+esc(it.steps[0].title)+(it.note?' · '+esc(it.note):'')+'</div>';
+  if(it.kind==='monster' && !sysOn('stakes'))
+    extra='<div class="capsteps">Stays out of sight until monsters appear at level 3</div>';
+  /* .new plays the slide-in once per card: the list is redrawn on every
+     keystroke and every chip tap, and replaying it each time made the whole
+     list blink */
+  var fresh=!cap.seen[it.key]; cap.seen[it.key]=1;
+  return '<div class="capcard'+(it.off?' off':'')+(fresh?' new':'')+'" data-i="'+i+'">'+
+    '<button type="button" class="capbox" data-w="box" aria-pressed="'+(!it.off)+'" aria-label="Include: '+esc(it.title)+'" onclick="capToggle('+i+')">'+svgIcon('check','sm')+'</button>'+
+    '<div class="grow"><div class="captitle">'+esc(it.title)+'</div><div class="capchips">'+chips+'</div>'+picker+extra+'</div></div>';
+}
+/* The choices behind each chip, as [value, label]. Labels can hold a life
+   area's own name, which is why they are escaped. */
+function capOpts(what){
+  if(what==='kind') return capKinds().map(function(k){ return [k, CAP_KIND[k][0]+' '+CAP_KIND[k][1]]; });
+  if(what==='diff') return CAP_DIFFS.map(function(d){ return [d, RPG.DIFF[d].label]; });
+  if(what==='target') return CAP_TARGETS.map(function(n){ return [n, n>=7?'Every day':n+'× a week']; });
+  if(what==='area') return [['','No area']].concat(capSkills().map(function(k){ return [k.name, esc(k.icon)+' '+esc(k.name)]; }));
+  return [];
+}
+function capCur(what,it,sk){ return what==='kind'?it.kind:what==='diff'?it.diff:what==='target'?it.target:(sk?sk.name:''); }
+function capPickOpen(i,what){
+  var it=cap&&cap.items[i]; if(!it) return;
+  cap.pick=(cap.pick&&cap.pick.key===it.key&&cap.pick.what===what)?null:{key:it.key,what:what};
+  capRender();
+  var first=document.querySelector('#capList [data-i="'+i+'"] .cappick button.on')||document.querySelector('#capList [data-i="'+i+'"] .cappick button');
+  if(first&&first.focus){ try{ first.focus(); }catch(e){} } else capRefocus(i,what);
+}
+function capPickSet(i,what,j){
+  var x=capOver(i); if(!x) return;
+  var o=capOpts(what)[j]; if(!o) return;
+  if(what==='kind'){ x.o.kind=o[0]; delete x.o.target; }
+  else if(what==='diff') x.o.diff=o[0];
+  else if(what==='target') x.o.target=o[0];
+  else if(what==='area') x.o.area=o[0];
+  cap.pick=null; capRender(); capRefocus(i,what);
+}
+/* Redraws the parts of the sheet that change (the cards and the Add button)
+   and never the text box: rewriting the box while someone types would throw
+   the cursor to the end on every letter. */
+function capRender(){
+  if(!cap) return;
+  cap.items=capBuild(capSkills());
+  var list=$('#capList'); if(!list) return;
+  var html='', lastPack=-1;
+  cap.items.forEach(function(it,i){
+    if(it.pack && it.packIndex!==lastPack){
+      lastPack=it.packIndex;
+      var pk=RPG.packById(it.pack), pm=cap.packs[it.packIndex]||{};
+      html+='<div class="cappackhead'+(cap.note&&cap.note.pi===it.packIndex?' flash':'')+'" data-pack="'+it.packIndex+'"><span>'+pk.icon+' '+esc(pk.name)+(pm.name?' · '+esc(pm.name):'')+'</span>'+
+        '<button type="button" class="btn ghost small" aria-label="Remove the '+esc(pk.name)+' pack" onclick="capPackRemove('+it.packIndex+')">'+svgIcon('x','sm')+'</button></div>';
+    }
+    html+=capCard(it,i);
+  });
+  list.innerHTML=html || (cap.text.trim()?'<div class="capempty">Nothing Sage can turn into a task yet. Keep going.</div>':'');
+  var note=$('#capNote');
+  if(note) note.innerHTML=cap.note?'<div class="capnote">'+svgIcon('check','sm')+'<span><b>'+esc(cap.note.name)+'</b> added: '+cap.note.n+' item'+(cap.note.n===1?'':'s')+' in your list below.</span>'+
+    '<button type="button" class="btn ghost small" onclick="capSeePack()">See them</button></div>':'';
+  var n=cap.items.filter(function(it){return !it.off;}).length;
+  var foot=$('#capFoot');
+  if(foot) foot.innerHTML='<button class="btn go wide" id="capGo"'+(n?'':' disabled')+' onclick="capAdd()">'+(n?'Add '+n+' to my board':'Nothing to add yet')+'</button>';
+  var cnt=$('#capCount'); if(cnt) cnt.textContent=n?n+' on the list':'';
+}
+function capRefocus(i,what){
+  var el=document.querySelector('#capList [data-i="'+i+'"] [data-w="'+what+'"]');
+  if(el && el.tagName==='LABEL') el=el.querySelector('input');   // the date chip: focus its input
+  if(el && el.focus){ try{ el.focus(); }catch(e){} }
+}
+/* Typing while the microphone runs stops it first: dictation rewrites the box
+   from where it started listening, which would wipe what was just typed. */
+function capInput(v){ if(!cap) return; if(cap.rec) capStop(); cap.text=String(v||''); capRender(); }
+/* One task at a time: Enter (or the Add button) moves what is in the box into
+   the list and empties the box for the next one. Shift+Enter still makes a
+   new line, and a pasted list is split by Sage as before. */
+var capShift=false;
+function capKey(e){
+  capShift=!!e.shiftKey;
+  /* keyCode 229 is the Enter that confirms Japanese or Chinese input in Safari */
+  if(e.key==='Enter' && !e.shiftKey && !e.isComposing && e.keyCode!==229){ e.preventDefault(); capCommit(); }
+}
+/* Phone keyboards do not always send a keydown for Enter (Android often
+   reports key 229), but they do announce the line break they are about to
+   insert. Catching it here makes Enter add the task on a phone as well. */
+function capBefore(e){
+  if((e.inputType==='insertLineBreak'||e.inputType==='insertParagraph') && !capShift){ e.preventDefault(); capCommit(); }
+}
+function capCommit(fromVoice){
+  if(!cap) return;
+  if(cap.rec) capStop();
+  var t=String(cap.text||'').trim(); if(!t) { if(!fromVoice) capFocusBox(true); return; }
+  /* text that adds no card (just "ok", a duplicate, or a list already at its
+     limit of 20) stays in the box with the reason, instead of vanishing */
+  var now=new Date(), sk=capSkills();
+  var had=RPG.parseDump(cap.lines.join('\n'), now, sk).length, got=RPG.parseDump(cap.lines.concat([t]).join('\n'), now, sk).length;
+  if(got<=had){
+    var cnt=$('#capCount'); if(cnt) cnt.textContent=had>=20?'The list is full: add these first':'Nothing new in that line';
+    if(!fromVoice) capFocusBox(true);
+    return;
+  }
+  cap.lines.push(t); cap.text='';
+  var box=$('#capText'); if(box) box.value='';
+  capRender(); if(!fromVoice) capFocusBox(true);
+}
+/* the "pack added" line: scroll its cards into view and light them up */
+function capSeePack(){
+  var h=cap&&cap.note?document.querySelector('#capList .cappackhead[data-pack="'+cap.note.pi+'"]'):null;
+  if(h&&h.scrollIntoView){ try{ h.scrollIntoView({block:'start',behavior:'smooth'}); }catch(e){ h.scrollIntoView(); } }
+}
+function capNoted(pi){
+  var pk=RPG.packById(cap.packs[pi].id);
+  cap.note={pi:pi,name:pk?pk.name:'Pack',n:0};
+  capRender();
+  cap.note.n=cap.items.filter(function(it){ return it.pack&&it.packIndex===pi; }).length;
+  capRender();
+  var h=document.querySelector('#capList .cappackhead[data-pack="'+pi+'"]');
+  if(h&&h.scrollIntoView){ try{ h.scrollIntoView({block:'nearest',behavior:'smooth'}); }catch(e){} }
+  /* the line goes away by itself, or the highlight would replay on every
+     keystroke (the list is redrawn as you type) */
+  var note=cap.note, mine=cap;
+  setTimeout(function(){ if(cap===mine&&cap.note===note){ cap.note=null; capRender(); } },5000);
+}
+/* a pack's own date (exam day, application deadline): changing it re-plans
+   the main quest's steps backward from the new date */
+function capPackDate(pi,v){ if(!cap||!cap.packs[pi]) return; cap.packs[pi].date=v||''; capRender(); }
+function capOver(i){
+  var it=cap&&cap.items[i]; if(!it) return null;
+  return {it:it, o:(cap.over[it.key]=cap.over[it.key]||{})};
+}
+function capToggle(i){ var x=capOver(i); if(!x) return; x.o.off=!x.it.off; capRender(); capRefocus(i,'box'); }
+function capCycle(i,what){
+  var x=capOver(i); if(!x) return;
+  var it=x.it, o=x.o;
+  if(what==='kind'){ var ks=capKinds(); o.kind=ks[(ks.indexOf(it.kind)+1)%ks.length]; delete o.target; }
+  else if(what==='diff') o.diff=CAP_DIFFS[(CAP_DIFFS.indexOf(it.diff)+1)%CAP_DIFFS.length];
+  else if(what==='target') o.target=CAP_TARGETS[(CAP_TARGETS.indexOf(it.target)+1)%CAP_TARGETS.length];
+  else if(what==='area'){
+    var names=[''].concat(capSkills().map(function(k){return k.name;})), cur='';
+    capSkills().forEach(function(k){ if(k.id===it.skillId) cur=k.name; });
+    o.area=names[(names.indexOf(cur)+1)%names.length];
+  }
+  capRender(); capRefocus(i,what);
+}
+function capDue(i,v){ var x=capOver(i); if(!x) return; x.o.due=v||''; capRender(); capRefocus(i,'due'); }
+/* packs: a pack with a question opens its small form first, the others are
+   added in one tap */
+function capPackFormDraw(){
+  var pf=$('#capPackForm'); if(!pf) return;
+  var pk=cap&&cap.packForm?RPG.packById(cap.packForm):null;
+  pf.innerHTML=pk?'<div class="packform"><div class="pfhead">'+pk.icon+' <b>'+esc(pk.name)+'</b></div>'+
+    (pk.ask?'<label class="pflabel" for="pkName">'+esc(pk.ask)+'</label><input id="pkName" maxlength="60" autocomplete="off" placeholder="'+esc(pk.eg||'')+'…">':'')+
+    (pk.date?'<label class="pflabel" for="pkDate">'+esc(pk.date)+'</label><input id="pkDate" type="date" min="'+RPG.todayKey()+'">':'')+
+    '<div class="pfact"><button type="button" class="btn go small" onclick="capPackAdd()">Add this plan</button>'+
+    '<button type="button" class="btn ghost small" onclick="capPackCancel()">Cancel</button></div></div>':'';
+}
+function capPack(id){
+  var pk=RPG.packById(id); if(!pk||!cap) return;
+  if(pk.ask||pk.date){
+    cap.packForm=id; capPackFormDraw();
+    var f=$('#pkName')||$('#pkDate'); if(f){ try{ f.focus(); }catch(e){} }
+    return;
+  }
+  cap.packs.push({id:id,name:'',date:''}); capNoted(cap.packs.length-1);
+}
+function capPackAdd(){
+  if(!cap||!cap.packForm) return;
+  var n=$('#pkName'), d=$('#pkDate');
+  cap.packs.push({id:cap.packForm,name:n?n.value.trim():'',date:d?d.value:''});
+  cap.packForm=null; capPackFormDraw(); capNoted(cap.packs.length-1);
+}
+/* Back to the text box, but on a phone only when asked (force): focusing it
+   raises the on-screen keyboard over the microphone and the packs. Enter and
+   the Add button pass force, because the person is typing anyway. */
+function capFocusBox(force){
+  var fine=false; try{ fine=!!(window.matchMedia&&window.matchMedia('(pointer: fine)').matches); }catch(e){}
+  var b=$('#capText'); if((force||fine)&&b&&b.focus){ try{ b.focus(); }catch(e){} }
+}
+function capPackCancel(){ if(!cap) return; cap.packForm=null; capPackFormDraw(); }
+function capPackRemove(pi){
+  if(!cap) return;
+  cap.packs.splice(pi,1); cap.note=null; cap.pick=null;
+  /* pack corrections are keyed by the pack's position ('p:<pack>:<card>').
+     The removed pack's are dropped; every pack after it moved up one place,
+     so its corrections are renumbered to follow it. */
+  var next={};
+  Object.keys(cap.over).forEach(function(k){
+    var m=/^p:(\d+):(\d+)$/.exec(k);
+    if(!m){ next[k]=cap.over[k]; return; }
+    var j=+m[1];
+    if(j<pi) next[k]=cap.over[k];
+    else if(j>pi) next['p:'+(j-1)+':'+m[2]]=cap.over[k];
+  });
+  cap.over=next;
+  capRender(); capFocusBox();
+}
+/* Voice: the browser's own speech recognition, where it exists (Chrome, Edge,
+   Safari). It costs nothing and needs no key, which is why it is the route
+   taken. Two things to know before changing it:
+   - In Chrome the audio is sent to Google to be transcribed. The sheet says
+     so under the box and privacy.html says so too. Keep the three in step.
+   - A browser without it simply shows no microphone (capMicOk), so typing and
+     pasting are always the fallback, never an error.
+   Each finished phrase is closed with a full stop, because parseDump splits
+   on sentence ends and speech arrives with no punctuation at all. */
+function capMicDraw(){
+  var b=$('#capMic'); if(!b) return;
+  var on=!!(cap&&cap.rec);
+  b.classList.toggle('on',on);
+  b.setAttribute('aria-pressed',on?'true':'false');
+  b.setAttribute('aria-label','Voice input');
+}
+var CAP_LANGS=[['en-US','EN'],['fr-FR','FR']];
+function capLang(){ var v='en-US'; try{ v=localStorage.getItem('sml.voiceLang')||'en-US'; }catch(e){} return v==='fr-FR'?'fr-FR':'en-US'; }
+function capLangSet(v){ try{ localStorage.setItem('sml.voiceLang',v); }catch(e){} var b=$('#capLang'); if(b) b.innerHTML=capLangHtml(); }
+function capLangHtml(){ var cur=capLang(); return CAP_LANGS.map(function(l){ var on=l[0]===cur;
+  return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="capLangSet(\''+l[0]+'\')" title="Listen in '+(l[1]==='EN'?'English':'French')+'">'+l[1]+'</button>'; }).join(''); }
+function capStop(){ if(cap&&cap.rec){ var r=cap.rec; cap.rec=null; try{ r.abort(); }catch(e){} } capMicDraw(); }
+function capMic(){
+  if(!cap) return;
+  if(cap.rec){ try{ cap.rec.stop(); }catch(e){} return; }
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return;
+  var r; try{ r=new SR(); }catch(e){ return; }
+  /* The language is the one picked on the EN/FR switch (English by default),
+     not the browser's: a French phone listening for French while you speak
+     English is what made dictation come out as nonsense. */
+  r.lang=capLang(); r.interimResults=true; r.continuous=true; r.maxAlternatives=1;
+  var t=cap.text.replace(/\s+$/,'');
+  cap.base=t?(t+(/[.!?;]$/.test(t)?' ':'. ')):'';
+  /* `mine` is the sheet this recognizer belongs to. Its events can arrive
+     after that sheet closed and a new one opened (an aborted recognizer still
+     fires onend), so every handler checks it is still the live one before
+     touching anything. Without this a late onend would clear the NEW sheet's
+     recognizer and leave the microphone running with no way to stop it. */
+  var mine=cap;
+  r.onresult=function(ev){
+    if(cap!==mine||mine.rec!==r) return;
+    /* rebuilt from every result each time. Chrome on Android repeats the
+       whole phrase so far as each new final result, so a final that starts
+       with the previous one replaces it instead of being added again. */
+    var parts=[], interim='';
+    for(var i=0;i<ev.results.length;i++){
+      var said=String(ev.results[i][0].transcript||'').trim(); if(!said) continue;
+      if(!ev.results[i].isFinal){ interim+=said+' '; continue; }
+      var last=parts.length?parts[parts.length-1].toLowerCase():'', now=said.toLowerCase();
+      if(last && now.indexOf(last)===0) parts[parts.length-1]=said;
+      else if(!(last && last.indexOf(now)===0)) parts.push(said);
+    }
+    cap.text=(cap.base+parts.map(function(p){ return p+'. '; }).join('')+interim).slice(0,2000);
+    var box=$('#capText'); if(box) box.value=cap.text;
+    capRender();
+  };
+  r.onerror=function(ev){
+    if(cap!==mine||mine.rec!==r) return;
+    var why=ev&&ev.error;
+    if(why==='not-allowed'||why==='service-not-allowed') toast('<span class="h">The microphone is blocked. Allow it in the browser, or type instead.</span>','dmg');
+    else if(why==='network') toast('<span class="h">Voice needs a connection in this browser. Type or paste instead.</span>','dmg');
+    else if(why==='no-speech') toast('<span class="h">I did not hear anything. Tap the microphone and try again.</span>','dmg');
+  };
+  /* when listening ends, what was said goes into the list like a typed task */
+  r.onend=function(){ if(mine.rec===r){ mine.rec=null; mine.text=mine.text.replace(/\s+$/,''); if(cap===mine) capCommit(true); } if(cap===mine) capMicDraw(); };
+  try{ r.start(); cap.rec=r; }catch(e){ cap.rec=null; }
+  capMicDraw();
+}
+/* The body shared by the Add sheet ('sheet') and step 3 of the onboarding
+   wizard ('wizard'). The wizard supplies its own title and buttons, so only
+   the sheet gets the header and the Add button. */
+function capBody(where){
+  var sheet=where==='sheet';
+  return (sheet?'<div class="caphead"><span class="sowl" aria-hidden="true">🦉</span><div class="grow"><h2 id="capTitle">What is on your plate?</h2>'+
+      '<p class="capsub">Type a task and press Enter, then the next one. Sage sorts out the rest.</p></div>'+
+      '<button type="button" class="btn ghost small" aria-label="Close" onclick="capClose()">'+svgIcon('x')+'</button></div>':'')+
+    '<div class="capin"><textarea id="capText" rows="2" maxlength="2000" autocomplete="off" enterkeyhint="enter" aria-label="A task, in your own words" '+
+      'placeholder="Finish the marketing essay by friday…" oninput="capInput(this.value)" onkeydown="capKey(event)" onkeyup="capShift=event.shiftKey" onbeforeinput="capBefore(event)">'+esc(cap.text)+'</textarea>'+
+      (capMicOk()?'<button type="button" class="capmic" id="capMic" aria-pressed="false" aria-label="Voice input" onclick="capMic()">'+svgIcon('mic')+'</button>':'')+'</div>'+
+    '<div class="capbar"><span class="hint">One task, then Enter. Pasting a list works too.</span>'+
+      (capMicOk()?'<span class="caplang" id="capLang" role="group" aria-label="Voice language">'+capLangHtml()+'</span>':'')+
+      '<button type="button" class="btn small capcommit" onclick="capCommit()">'+svgIcon('plus','sm')+' Add</button></div>'+
+    (capMicOk()?'<div class="hint capvoice">Voice uses your browser’s speech service. In Chrome the audio goes to Google to be turned into text.</div>':'')+
+    '<div class="flabel">Or start from a pack</div>'+
+    '<div class="cappacks" role="group" aria-label="Quest packs">'+RPG.PACKS.map(function(pk){
+      return '<button type="button" class="cappack" onclick="capPack(\''+pk.id+'\')" title="'+esc(pk.blurb)+'"><span aria-hidden="true">'+pk.icon+'</span>'+esc(pk.name)+'</button>';
+    }).join('')+'</div>'+
+    '<div id="capPackForm"></div><div id="capNote" aria-live="polite"></div>'+
+    '<div class="capmeta"><span id="capCount" aria-live="polite"></span></div>'+
+    '<div id="capList" class="caplist"></div>'+
+    (sheet?'<div id="capFoot" class="capfoot"></div>':'');
+}
+function openCapture(){
+  cap=capFresh();
+  var m=$('#modal'); m.className='modal show';
+  m.innerHTML='<div class="box capsheet">'+capBody('sheet')+'</div>';
+  m.setAttribute('aria-labelledby','capTitle');   // removed again by closeModal
+  m.setAttribute('aria-label','What is on your plate?');
+  capRender();
+  /* Focus the box only where there is a real keyboard. On a phone, focusing
+     it would raise the on-screen keyboard over the microphone and the packs,
+     which are the two ways in that need no typing at all. */
+  var fine=false; try{ fine=!!(window.matchMedia&&window.matchMedia('(pointer: fine)').matches); }catch(e){}
+  var ta=$('#capText'); if(fine&&ta){ try{ ta.focus(); }catch(e){} }
+}
+function capClose(){ capStop(); cap=null; closeModal(); }
+function capSummary(out){
+  function n(c,one,many){ return c?c+' '+(c===1?one:many):''; }
+  var bits=[n(out.main,'main quest','main quests')+(out.main&&out.steps?' ('+out.steps+' steps)':''),
+    n(out.side,'side quest','side quests'), n(out.daily,'daily','dailies'),
+    n(out.habit,'habit','habits'), n(out.monster,'monster','monsters')].filter(function(b){return !!b;});
+  if(!out.total) return '<span class="h">Those were already on the board</span>';
+  return '<span class="p">On the board: '+bits.join(', ')+'</span>'+(out.skipped?' <span class="hint" style="display:inline">('+out.skipped+' already there)</span>':'');
+}
+function capAdd(){
+  if(!cap||!state) return;
+  var items=cap.items.filter(function(it){return !it.off;});
+  if(!items.length) return;
+  var out=A.addCaptured(state, items);
+  capStop(); cap=null;
+  gmFlash(out.ids);
+  persist(); closeModal(); render();
+  toast('🦉 '+capSummary(out));
+  if(out.total) SND.ach();
+  afterAction();
+}
+/* Rows created a moment ago get a short highlight so the eye finds them. The
+   ids are dropped after the animation: left in place, every later render of
+   the list would replay the highlight. */
+var flashIds={};
+function gmFlash(ids){
+  flashIds={}; (ids||[]).forEach(function(id){ flashIds[id]=1; });
+  setTimeout(function(){ flashIds={}; },2600);
+}
+
+/* ---------- the Daily Draft and today's plan ----------
+   Until a plan is locked today, Today opens with Sage's draft: the picks
+   RPG.dailyDraft made, each with its reason, each switchable. "Lock in my
+   day" stores the kept ones as the plan (A.setPlan) and the Now panel then
+   becomes the plan with a progress ring. "Not today" stores an empty plan,
+   which is how the draft knows not to come back until tomorrow.
+
+   draftOff holds which picks the user switched off. It is screen state, not
+   saved: a reload simply offers the full draft again. draftDay clears it at
+   midnight so yesterday's switches never apply to today's draft.
+
+   The draft is the one thing allowed above the Now panel (see the note on
+   renderToday). It earns that: it IS the list of what to do now, and it is
+   gone the moment the plan is locked. It is a .draft, not a .panel, so the
+   first .panel on Today is still Now, which the tour and a test rely on. */
+var draftOff={}, draftDay=null, planFresh=false;
+function draftCard(){
+  if(A.planStatus(state).active) return '';
+  var d=RPG.dailyDraft(state);
+  if(!d.items.length) return '';
+  if(draftDay!==RPG.todayKey()){ draftDay=RPG.todayKey(); draftOff={}; }
+  var kept=d.items.filter(function(it){return !draftOff[it.ref];}), mins=0;
+  kept.forEach(function(it){ mins+=it.minutes; });
+  return '<div class="draft" role="region" aria-label="Sage’s draft for today">'+
+    '<div class="dhead"><span class="sowl" aria-hidden="true">🦉</span><div class="grow"><div class="dtitle">Sage’s draft for today</div>'+
+      '<div class="dsub">'+(kept.length?kept.length+' pick'+(kept.length===1?'':'s')+', about '+fmtHm(mins):'Nothing picked yet')+'</div></div></div>'+
+    '<div class="drows">'+d.items.map(function(it,i){
+      var on=!draftOff[it.ref];
+      return '<button type="button" class="drow'+(on?' on':'')+'" aria-pressed="'+on+'" onclick="draftToggle('+i+')">'+
+        '<span class="dbox">'+svgIcon('check','sm')+'</span>'+
+        '<span class="grow"><span class="dt">'+esc(it.title)+'</span><span class="dw">'+esc(it.why)+'</span></span>'+
+        '<span class="dmin">'+it.minutes+'m</span></button>';
+    }).join('')+'</div>'+
+    '<div class="dact"><button class="btn go" id="draftLock" onclick="lockDraft()"'+(kept.length?'':' disabled')+'>Lock in my day</button>'+
+      '<button class="btn ghost" onclick="skipDraft()">Not today</button></div></div>';
+}
+function draftToggle(i){
+  var it=RPG.dailyDraft(state).items[i]; if(!it) return;
+  draftOff[it.ref]=!draftOff[it.ref];
+  render();
+  var b=document.querySelectorAll('#view .draft .drow')[i]; if(b&&b.focus){ try{ b.focus(); }catch(e){} }
+}
+function lockDraft(){
+  var refs=RPG.dailyDraft(state).items.filter(function(it){return !draftOff[it.ref];}).map(function(it){return it.ref;});
+  if(!refs.length) return;
+  var st=A.setPlan(state, refs);
+  draftOff={}; planFresh=true;
+  persist(); render();
+  SND.resume(); if(window.FX) FX.stamp('LOCKED IN');
+  toast('🧭 <span class="p">Locked in: '+st.total+' for today</span>');
+  /* the draft (and the button that had focus) is gone: focus the plan */
+  var first=$('#view .panel.now.plan .item .btn'); if(first&&first.focus){ try{ first.focus(); }catch(e){} }
+  afterAction();
+}
+function skipDraft(){
+  A.setPlan(state, []); draftOff={};
+  persist(); render();
+  toast('<span class="p">No plan today. The board is all yours.</span>');
+}
+/* "Change" on the plan, and "Plan today" after a Not today: both throw the
+   plan away so the draft is offered again. The engine refuses once the day
+   bonus has been paid. */
+function editPlan(){ if(A.clearPlan(state)){ persist(); render(); } }
+/* the plan as the Now panel: the locked items first, as the same rows the
+   rest of the app draws, then whatever else is due today under "Also today"
+   so the daily chest is still reachable from here */
+function planPanel(st, others){
+  var inPlan={}; st.items.forEach(function(it){ inPlan[it.ref]=1; });
+  var rows=st.items.map(function(it){
+    if(it.kind==='habit'){ var h=state.habits.find(function(x){return x.id===it.id;}); return h?goodHabitRow(h):''; }
+    var q=state.quests.find(function(x){return x.id===it.id;}); return q?questRow(q):'';
+  }).join('');
+  var rest=others.filter(function(q){ return !inPlan['q:'+q.id]; });
+  var anim=planFresh?' fresh':''; planFresh=false;
+  return '<div class="panel now plan'+(st.complete?' won':'')+anim+'"><h3>'+(st.complete?'Day won':'Today’s plan')+' <span class="cnt">'+st.done+'/'+st.total+'</span>'+
+    chestRing()+'</h3>'+rows+
+    (rest.length?'<div class="logday alsotoday">Also today</div>'+foldRows(rest.map(questRow),'also'):'')+
+    (st.won?'':'<div class="planfoot"><button class="btn ghost small planedit" onclick="editPlan()">Change the plan</button></div>')+'</div>';
+}
+
+/* ---------- after every action: did the day just get won, did something open? ----------
+   Called at the end of afterAction(). Both checks are cheap and return
+   nothing when there is nothing new, so running them after every tap is fine.
+   Anything found is queued behind whatever overlay is already showing. */
+function gmAfter(){
+  var won=A.claimDayWon(state);
+  var opened=RPG.checkUnlocks(state);
+  if(won||opened.length){ persist(); render(); }
+  if(won) cerQueue.push(function(){ dayWonScreen(won); });
+  /* the day bonus can itself cross a level: that level gets its own ceremony
+     (rank up when it is a rank level), which also announces whatever opens */
+  if(won && won.levelUps && won.levelUps.length){
+    var lv=won.levelUps[won.levelUps.length-1], rk=won.newRank;
+    cerQueue.push(function(){ if(rk) rankUp(rk,lv); else levelUp(lv); });
+  }
+  opened.forEach(function(st){ cerQueue.push(function(){ if(!RPG.isUnlocked(state,st.id)) return; unlockScreen(st); }); });
+  cerPump();
+}
+/* Two or more clears within twelve seconds of each other count as a combo.
+   It pays nothing (the economy lives in core.js); it is there because
+   clearing three things in a row should FEEL like something. */
+var comboAt=0, comboN=0;
+function comboHit(){
+  var t=Date.now();
+  comboN=(t-comboAt<12000)?comboN+1:1; comboAt=t;
+  if(comboN>=2){ if(window.FX) FX.combo(comboN); beep(620+Math.min(comboN,6)*90,.06,.12,'triangle',.06); }
+}
+function dayWonScreen(won){
+  SND.rankup(); confetti(true);
+  var s=state.hero.streak, today=RPG.todayKey();
+  var days=[], act={};
+  for(var i=6;i>=0;i--){ var d=new Date(); d.setDate(d.getDate()-i); days.push(RPG.todayKey(d)); }
+  state.log.forEach(function(e){ if(e.xp>0) act[e.day]=1; });
+  var active=days.filter(function(k){return act[k];}).length;
+  var dots='<span class="wkdots" role="img" aria-label="'+active+' of the last 7 days active">'+days.map(function(k){
+    return '<i class="'+(act[k]?'on':'')+(k===today?' today':'')+'"><b>'+dayLetter(k)+'</b></i>'; }).join('')+'</span>';
+  var rows=[
+    '<span class="ri" aria-hidden="true">✨</span><span class="rt"><b>Day bonus: +'+won.xp+' XP'+(sysOn('rewards')&&won.coins?' and +'+won.coins+' coins':'')+'</b></span>'];
+  var next=RPG.streakMult(s+1);
+  if(next>RPG.streakMult(s)+0.001) rows.push('<span class="ri" aria-hidden="true">🔥</span><span class="rt"><b>Come back tomorrow for XP ×'+next.toFixed(2)+'</b></span>');
+  rows.push(dots);
+  var logged=!!state.journal[today];
+  ceremony({
+    cls:'daywon',
+    badge:'<span class="cer-flame" aria-hidden="true">🔥</span><span class="cer-num" id="cerStreak">'+s+'</span>',
+    kicker:'DAY WON',
+    title:s+' day streak',
+    sub:'All '+won.total+' things you planned today, done.',
+    rows:rows,
+    primary:{label:'Continue',act:'closeOverlay()'},
+    secondary:logged?null:{label:'Close the day',act:'closeOverlay();closeTheDay()'}
+  });
+  if(window.FX && s>1) FX.count($('#cerStreak'), s-1, s, 700);
+}
+function unlockScreen(st){
+  SND.chest(); confetti(true);
+  var rows=[];
+  if(st.id==='rewards') rows.push('<span class="ri" aria-hidden="true">💰</span><span class="rt"><b>You already hold '+state.hero.coins+' coins</b><small>Every quest and habit so far has been paying you.</small></span>');
+  if(st.id==='stakes'){
+    var mons=state.habits.filter(function(h){return h.type==='bad';}).map(function(h){return h.title;});
+    if(mons.length) rows.push('<span class="ri" aria-hidden="true">👾</span><span class="rt"><b>'+esc(mons.slice(0,2).join(', '))+(mons.length>2?' and '+(mons.length-2)+' more':'')+'</b><small>Your monsters. A slip costs HP, rest heals it.</small></span>');
+  }
+  var nx=RPG.nextUnlock(state);
+  if(nx) rows.push('<span class="ri" aria-hidden="true">🔒</span><span class="rt"><b>Next: '+esc(nx.name)+'</b><small>'+esc(nx.how)+'</small></span>');
+  ceremony({
+    cls:'unlockcer',
+    badge:'<span class="cer-ring" aria-hidden="true"></span><span class="cer-ico" aria-hidden="true">'+st.icon+'</span>',
+    kicker:'NOW OPEN',
+    title:esc(st.name),
+    sub:esc(st.line),
+    rows:rows,
+    primary:{label:'Take a look',act:'closeOverlay();go(\''+st.tab+'\')'},
+    secondary:{label:'Later',act:'closeOverlay()'}
+  });
+}
+
+/* ---------- Evening Debrief ----------
+   RPG.debrief writes one line about today from the log. The chip drops it
+   into the note so the journal takes a tap instead of a sentence; the user
+   can still edit it or write their own. */
+function sageNoteChip(){
+  var d=RPG.debrief(state);
+  if(d.empty) return '';
+  return '<button type="button" class="chip sagechip" onclick="useSageLine()" title="'+esc(d.line)+'">🦉 Use Sage’s line</button>';
+}
+function useSageLine(){
+  var d=RPG.debrief(state); if(d.empty) return;
+  pendingNote=d.line; logOpen=true; render();
+  var n=$('#jNote'); if(n){ n.value=d.line; try{ n.focus(); }catch(e){} }
+}
+/* "Close the day" on the day-won screen: Today, the log card open, Sage's
+   line already in the note. What is left is a mood tap and Save. */
+function closeTheDay(){
+  tab='today'; logOpen=true; logAnim=true;
+  var d=RPG.debrief(state);
+  if(!d.empty && pendingNote==null && !(state.journal[RPG.todayKey()]||{}).note) pendingNote=d.line;
+  render();
+  var lc=$('#view .logcard'); if(lc&&lc.scrollIntoView){ try{ lc.scrollIntoView({block:'center'}); }catch(e){} }
+}
+/* the sleep quick buttons: 7, 8, 9 and, when it is none of those, the
+   duration logged most recently (the "same as usual" tap) */
+function sleepQuick(){
+  var q=[7,8,9], g=RPG.debrief(state).sleepGuess;
+  if(typeof g==='number' && g>0 && q.indexOf(g)<0){ q.push(g); q.sort(function(a,b){return a-b;}); }
+  return q;
+}
+
+/* ---------- what opens next ----------
+   nextLine is the slim teaser under Now on Today. lockedPanel is the body of
+   a screen (or a section) whose system is still closed: it says what the
+   system is and exactly what opens it, with the XP bar toward that level. */
+function nextLine(){
+  var nx=RPG.nextUnlock(state); if(!nx) return '';
+  var need=RPG.xpForLevel(state.hero.level), left=Math.max(0,need-state.hero.xp);
+  var how=nx.level<=state.hero.level+1?left+' XP to go':'at level '+nx.level;
+  return '<div class="nextline" title="'+esc(nx.how)+'">'+svgIcon('lock','sm')+
+    '<span class="grow">Next to open: <b>'+esc(nx.name)+'</b></span><span class="nlhow">'+how+'</span></div>';
+}
+function lockedPanel(id){
+  var st=RPG.stageById(id); if(!st) return '';
+  var h=state.hero, need=RPG.xpForLevel(h.level), pct=Math.min(100,h.xp/need*100);
+  var chest=A.chestStatus(state);
+  var steps=st.level-h.level;
+  return '<div class="panel lockedsys"><div class="lkico" aria-hidden="true">'+st.icon+'<span class="lkbadge">'+svgIcon('lock','sm')+'</span></div>'+
+    '<div class="lktitle">'+esc(st.name)+'</div>'+
+    '<div class="lkline">'+esc(st.tease)+'</div>'+
+    '<div class="lkhow">'+esc(st.how)+'</div>'+
+    '<div class="bar xp lkbar" role="img" aria-label="Level '+h.level+', '+h.xp+' of '+need+' XP"><i style="width:'+pct+'%"></i></div>'+
+    '<div class="lkmeta">Level '+h.level+' · '+Math.max(0,need-h.xp)+' XP to level '+(h.level+1)+(steps>1?' · '+steps+' levels to go':'')+
+      (id==='rewards'&&chest.total?' · chest '+chest.done+'/'+chest.total:'')+'</div>'+
+    '<button class="btn go" onclick="go(\'today\')">Back to today’s quests</button></div>';
+}
+/* the four systems as a ladder on Progress, for heroes still climbing it */
+function ladderPanel(){
+  if(!RPG.staged(state)) return '';
+  var calm=state.settings.intensity==='calm';
+  var rows=RPG.STAGES.filter(function(st){ return !(st.id==='stakes'&&calm); }).map(function(st){
+    var open=sysOn(st.id);
+    return '<div class="ladrow'+(open?' open':'')+'"><span class="ladico" aria-hidden="true">'+st.icon+'</span>'+
+      '<div class="grow"><div class="title">'+esc(st.name)+'</div><div class="meta">'+esc(open?st.line:st.how)+'</div></div>'+
+      (open?'<span class="ladstate ok">'+svgIcon('check','sm')+' Open</span>':'<span class="ladstate">'+svgIcon('lock','sm')+' Level '+st.level+'</span>')+'</div>';
+  }).join('');
+  return '<div class="panel ladder"><h3>What opens as you climb</h3>'+rows+'</div>';
+}
+function chroniclePanel(){
+  var c=RPG.chronicle(state);
+  return '<div class="chron"><div class="chk"><span aria-hidden="true">🦉</span> Sage’s chronicle</div>'+
+    '<div class="cht">'+esc(c.title)+'</div>'+c.lines.map(function(l){ return '<p>'+esc(l)+'</p>'; }).join('')+'</div>';
+}
+/* Sage's pick for the weekly boss, shown on the empty boss strip */
+function bossPick(){
+  var p=RPG.suggestBoss(state); if(!p) return '';
+  return '<button class="btn small sagepick" onclick="acceptBossPick()" title="'+esc(p.why)+'">🦉 Sage’s pick: <b>'+esc(p.title)+'</b></button>';
+}
+function acceptBossPick(){
+  var p=RPG.suggestBoss(state); if(!p) return;
+  A.setBoss(state,{title:p.title,due:p.due}); persist(); render(); SND.dmg();
+  toast('🐲 <span class="h">The weekly boss awaits</span>');
+}
+
+/* ---------- game intensity ----------
+   Calm, Classic or Hardcore, set from Settings (and from step 3 of the
+   wizard). The engine keeps the older hardcore flag in step, see
+   actions.setIntensity. Switching re-renders everything because Calm removes
+   HP and monsters from several screens at once. */
+var INTENSITY=[
+  ['calm','🌿','Calm','Just progress: tasks and habits earn XP and levels. Nothing can go wrong.'],
+  ['classic','⚔️','Classic','A health bar from level 3. Bad habits are monsters: a slip costs health, rest brings it back.'],
+  ['hardcore','💀','Hardcore','Classic, and running out of health also costs half your coins.']
+];
+function intensityControl(cur,fn){
+  var desc='';
+  var btns=INTENSITY.map(function(o){
+    var on=o[0]===cur; if(on) desc=o[3];
+    return '<button type="button" class="'+(on?'on':'')+'" aria-pressed="'+on+'" onclick="'+fn+'(\''+o[0]+'\')"><span aria-hidden="true">'+o[1]+'</span> '+o[2]+'</button>';
+  }).join('');
+  return '<div class="seg" role="group" aria-label="Game intensity">'+btns+'</div><div class="hint segdesc">'+desc+'</div>';
+}
+function setIntensity(v){
+  if(v===state.settings.intensity) return;
+  if(v==='hardcore' && !confirm('Turn on Hardcore? Being defeated will cost half your coins and revive you at just 10 HP. You can change it back any time.')) return;
+  A.setIntensity(state,v); persist(); render(); openSettings();
+  toast(v==='calm'?'🌿 <span class="p">Calm: no HP, no monsters</span>':v==='hardcore'?'💀 <span class="h">Hardcore: defeat bites hard now</span>':'⚔️ <span class="p">Classic: the full game</span>');
+  afterAction();
+}
+
 /* ---------- Sage the guide (mascot) ----------
    Phase 1: an animated companion that speaks a scripted daily briefing built
    from your save (RPG.briefing) - no network, no LLM.
@@ -3341,11 +4425,14 @@ var mascotView='brief', mascotChatLog=[], mascotChatBusy=false;
 function sageBrief(){
   var h=state.hero, today=RPG.todayKey();
   var chest=A.chestStatus(state);
-  var bits=['name '+h.name,'level '+h.level,'streak '+h.streak+'d',
-    'HP '+h.hp+'/'+RPG.maxHpOf(state),'coins '+h.coins,
-    'dailies '+chest.done+'/'+chest.total+' today'];
+  var bits=['name '+h.name,'level '+h.level,'streak '+h.streak+'d'];
+  /* only the systems this hero can see (staged heroes, Calm), so Sage never
+     brings up HP or coins the screen does not show yet */
+  if(sysOn('stakes')) bits.push('HP '+h.hp+'/'+RPG.maxHpOf(state));
+  if(sysOn('rewards')) bits.push('coins '+h.coins);
+  bits.push('dailies '+chest.done+'/'+chest.total+' today');
   if(state.boss&&!state.boss.doneOn) bits.push('weekly boss "'+state.boss.title+'" active');
-  if(state.hero.downed) bits.push('currently downed');
+  if(state.hero.downed&&sysOn('stakes')) bits.push('currently downed');
   return bits.join(', ');
 }
 function sageToday(state){
@@ -3545,7 +4632,99 @@ function toggleMascotSetting(){
 /* No save means a first run: the empty shell goes up behind the onboarding
    wizard. The five "How it works" slides (tut) are no longer the front door;
    they stay in Settings and, with no hero, still hand over to the wizard. */
-function boot(){ applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); } else { renderHUDShell(); if(!rec) onboarding(); } }
+/* The wordmark in the header is drawn in pixel tiles; the words stay in the
+   page as screen-reader text. PX.watch turns every emoji the app writes into
+   its pixel drawing from here on (see art.js). */
+function drawArt(){
+  if(!window.PX) return;
+  var b=$('.logo b');
+  if(b && !b.querySelector('.pxtext')) b.innerHTML='<span class="sr-only">SCALE MY LIFE</span>'+PX.text('SCALE MY LIFE','logotext');
+  PX.watch(document.body);
+}
+/* ---------- the opening ----------
+   The title assembles from pixel tiles that fly in from everywhere over the
+   mosaic, a few tiles catch the accent, then:
+   - a returning hero sees "Welcome back" and the intro clears itself after
+     about two seconds (any tap skips it). Once per browser session, so a
+     reload does not replay it; a cold start of the installed app does.
+   - a new player sees the one-line pitch and a Start button that opens the
+     wizard.
+   It is skipped entirely, and the app (or the wizard) shows at once, when
+   the device asks for less motion, when the browser cannot animate (and so in
+   the test harness), or when art.js or fx.js did not load. Nothing in the
+   game waits on it: the app is already rendered underneath. */
+function introPlay(returning, then){
+  function finish(){ if(then) then(); }
+  var ok=window.PX && window.FX && !FX.reduced() && document.body && typeof document.body.animate==='function';
+  var seen=false; try{ seen=sessionStorage.getItem('sml.intro')==='1'; }catch(e){}
+  if(!ok || (returning && seen)){ finish(); return; }
+  try{ sessionStorage.setItem('sml.intro','1'); }catch(e){}
+  var el=document.createElement('div');
+  el.id='intro';
+  if(returning) el.setAttribute('aria-hidden','true');
+  else { el.setAttribute('role','dialog'); el.setAttribute('aria-label','Welcome to ScaleMyLife'); }
+  el.innerHTML='<div class="introin">'+PX.text('SCALE MY LIFE','introtitle')+
+    (returning
+      ?'<div class="introsub"><span class="introav">'+avHtml(state.hero.avatar)+'</span>Welcome back, '+esc(state.hero.name)+'</div>'
+      :'<div class="introsub two"><b>Get more done.</b><span>Play your life like an RPG.</span></div><button type="button" class="btn go introgo">Start your adventure</button>')+
+    '</div>';
+  document.body.appendChild(el);
+  /* while the title plays, the app underneath is hidden so the mosaic sky is
+     the only thing behind it; leave() fades the app back in */
+  document.body.classList.add('introing');
+  /* the hidden app cannot be reached by Tab either while the intro shows */
+  var hidden=[].filter.call(document.body.children,function(c){ return c!==el && !c.hasAttribute('inert'); });
+  hidden.forEach(function(c){ c.setAttribute('inert',''); });
+  var px=[].slice.call(el.querySelectorAll('.introtitle .pp'));
+  function rnd(a,b){ return a+Math.random()*(b-a); }
+  px.forEach(function(p){
+    try{
+      p.animate([
+        { transform:'translate('+rnd(-40,40)+'px,'+rnd(-26,26)+'px) scale('+rnd(0,2.4)+')', opacity:0 },
+        { transform:'translate(0,0) scale(1)', opacity:1 }
+      ],{ duration:1300, delay:rnd(0,700), easing:'cubic-bezier(.16,1,.3,1)', fill:'backwards' });
+    }catch(e){}
+  });
+  var sub=el.querySelectorAll('.introsub,.introgo');
+  for(var i=0;i<sub.length;i++){ try{ sub[i].animate([{opacity:0,transform:'translateY(10px)'},{opacity:1,transform:'none'}],{duration:700,delay:900+i*140,easing:'cubic-bezier(.2,.9,.3,1)',fill:'backwards'}); }catch(e){} }
+  /* a few tiles catch the accent, the way the template's headline does */
+  var shimmer=setTimeout(function(){
+    px.slice().sort(function(){ return Math.random()-0.5; }).slice(0,9).forEach(function(p,k){
+      setTimeout(function(){ p.classList.add('lit'); setTimeout(function(){ p.classList.remove('lit'); },700); },k*80);
+    });
+  },1500);
+  var gone=false, auto=null;
+  function leave(){
+    if(gone) return; gone=true;
+    clearTimeout(auto); clearTimeout(shimmer);
+    [].forEach.call(el.querySelectorAll('.introtitle .pg'),function(g){
+      try{ g.animate([{transform:'none',opacity:1},{transform:'translate('+rnd(-3,3)+'px,'+rnd(-14,-4)+'px) rotate('+rnd(-30,30)+'deg)',opacity:0}],{duration:520,delay:rnd(0,180),easing:'cubic-bezier(.5,0,.75,0)',fill:'forwards'}); }catch(e){}
+    });
+    var a=null;
+    try{ a=el.animate([{opacity:1},{opacity:0}],{duration:420,delay:260,easing:'ease-in',fill:'forwards'}); }catch(e){}
+    document.body.classList.remove('introing');
+    hidden.forEach(function(c){ c.removeAttribute('inert'); });
+    document.body.classList.add('introout');
+    setTimeout(function(){ document.body.classList.remove('introout'); },900);
+    /* bye runs once: when the fade finishes, or after 900ms at the latest.
+       A browser that pauses animations (a background tab, the phone switching
+       apps mid-fade) never reports the fade as finished, and without the
+       timer a new player would be left on an empty screen with no wizard. */
+    var done=false;
+    var bye=function(){ if(done) return; done=true; if(el.parentNode) el.parentNode.removeChild(el); finish(); };
+    if(a) a.onfinish=bye;
+    setTimeout(bye, a?900:0);
+  }
+  if(returning){
+    el.addEventListener('pointerdown',leave);
+    auto=setTimeout(leave,2300);
+  } else {
+    var startBtn=el.querySelector('.introgo');
+    startBtn.addEventListener('click',function(){ if(SND.resume) SND.resume(); leave(); });
+    setTimeout(function(){ try{ startBtn.focus(); }catch(e){} },1100);
+  }
+}
+function boot(){ drawArt(); applyTheme(); var rec=handleRecoveryHash(); if(state){ seenDay=state.lastSeenDay; navAnim=true; render(); checkFocus(); if(!rec) cloudBootPull(); mascotMoodSync(); mascotDailyGreet(); if(!rec) introPlay(true); } else { renderHUDShell(); if(!rec) introPlay(false, function(){ onboarding(); }); } }
 function renderHUDShell(){ $('#hud').innerHTML='<div class="avatar">❔</div><div class="who"><div class="name">…</div></div><div></div>'; $('#tabs').innerHTML=''; $('#skillsRow').innerHTML=''; $('#view').innerHTML=''; }
 
 setInterval(function(){ if(state){ checkFocus(); if(state.lastSeenDay!==RPG.todayKey()){ render(); } } }, 1000);
