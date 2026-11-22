@@ -1524,5 +1524,66 @@ section('Release hygiene: service-worker cache freshness');
   ok(A.completeQuest(m, mQuest.id) !== null && mQuest.doneOn === RPG.todayKey(), 'the renamed quest can still be cleared by its new id');
 })();
 
+/* Numbers and dates from a save go into the page without esc() (the streak
+   pill, log deltas, due labels, journal dates). migrate() must leave only real
+   numbers and real YYYY-MM-DD dates there, so a crafted save can't use them
+   to inject markup. */
+(function () {
+  section('Save numbers and dates are safe to render');
+  var DAY = /^\d{4}-\d{2}-\d{2}$/, today = RPG.todayKey();
+  function deepEqual(a, b) { try { require('assert').deepStrictEqual(a, b); return true; } catch (e) { return false; } }
+  function build() {
+    var s = RPG.migrate(JSON.parse(JSON.stringify(RPG.newState('Fields'))));
+    RPG.seed(s);
+    A.addQuest(s, { title: 'Hand in essay', diff: 'hard', due: today });
+    A.completeQuest(s, s.quests[0].id);
+    RPG.checkAchievements(s);
+    A.logSleep(s, 7.5, 4);
+    A.logJournal(s, 'good', 'Fine day');
+    A.startFocus(s, { work: 25, brk: 5 });
+    s.redemption = { streak: 4, on: today };
+    return RPG.migrate(s);
+  }
+
+  var clean = build();
+  ok(clean.achievements.length > 0 && clean.log.length > 0 && clean.sleep[today] && clean.journal[today] && clean.activeFocus, 'the clean fixture has achievements, log, sleep, journal and a focus session');
+  ok(deepEqual(RPG.migrate(JSON.parse(JSON.stringify(clean))), JSON.parse(JSON.stringify(clean))), 'a clean save with every dated record migrates unchanged');
+
+  var P = '<img src=x onerror=alert(1)>';
+  var bad = build(), qi = bad.quests.length - 1, logN = bad.log.length, achN = bad.achievements.length;
+  ['level', 'xp', 'coins', 'hp', 'streak'].forEach(function (k) { bad.hero[k] = P; });
+  bad.skills[0].xp = P; bad.skills[0].level = P;
+  bad.habits[0].streak = P; bad.habits[0].slips = P;
+  bad.shop[0].price = P; bad.shop[0].hp = P;
+  bad.log[0].xp = P; bad.log[0].coins = P; bad.log[0].hp = P;
+  bad.log.push({ t: new Date().toISOString(), day: today + P, icon: '⚔️', text: 'x', xp: 1, coins: 0, hp: 0, min: 0 });
+  bad.sleep[today].quality = P;
+  bad.sleep[today + P] = { hours: 8, quality: 3 };
+  bad.journal[today + P] = { mood: 'good', note: 'x' };
+  bad.achievements[0].on = P;
+  bad.quests[qi].due = P; bad.quests[qi].diff = P;
+  bad.activeFocus.work = P;
+  bad.hero.boons = { fortune: P, vigor: 2 };
+  var badRedemption = JSON.parse(JSON.stringify(bad)); badRedemption.redemption.streak = P;
+
+  var m = RPG.migrate(JSON.parse(JSON.stringify(bad)));
+  ok(JSON.stringify(m).indexOf('onerror') < 0, 'no trace of the payload is left anywhere in the save');
+  ok(m.hero.level === 1 && m.hero.xp === 0 && m.hero.coins === 0 && m.hero.hp === RPG.MAX_HP && m.hero.streak === 0, 'hero level, XP, coins, HP and streak fall back to fresh-hero values');
+  ok(m.skills[0].xp === 0 && m.skills[0].level === 1 && m.skills[1].xp === clean.skills[1].xp, 'a life area’s XP and level fall back, the others are untouched');
+  ok(m.habits[0].streak === 0 && m.habits[0].slips === 0, 'a habit’s streak and slips fall back to 0');
+  ok(typeof m.shop[0].price === 'number' && m.shop[0].price >= 1 && m.shop[0].hp === 0, 'a reward’s price and HP become numbers');
+  ok(m.log[0].xp === 0 && m.log[0].coins === 0 && m.log[0].hp === 0, 'a log line’s XP, coins and HP become 0');
+  ok(m.log.length === logN && m.log.every(function (e) { return DAY.test(e.day); }), 'a log line with a fake date is dropped, the real ones stay');
+  ok(!m.sleep[today] && Object.keys(m.sleep).length === 0, 'a sleep entry with a non-number, or a fake date, is dropped');
+  ok(m.journal[today] && Object.keys(m.journal).length === 1, 'a journal entry under a fake date is dropped, today’s stays');
+  ok(m.achievements.length === achN - 1, 'an achievement with a fake unlock date is dropped (it unlocks again when earned)');
+  ok(m.quests[qi].due === null && m.quests[qi].diff === 'normal', 'a quest’s fake due date is cleared and an unknown difficulty becomes Normal');
+  ok(m.activeFocus === null, 'a focus session with a non-number length is stopped');
+  ok(!('fortune' in m.hero.boons) && m.hero.boons.vigor === 2, 'a boon count that is not a number is dropped, real counts stay');
+  ok(RPG.migrate(JSON.parse(JSON.stringify(badRedemption))).redemption === null, 'a streak-repair offer with a non-number streak is dropped');
+  ok(deepEqual(RPG.migrate(JSON.parse(JSON.stringify(m))), JSON.parse(JSON.stringify(m))), 'once fixed, migrating again changes nothing');
+  ok(typeof RPG.weekStats(m).tot.xp === 'number' && typeof RPG.weekStats(bad).tot.xp === 'string', 'weekly totals add up as numbers again (before migrate, the payload turned them into text)');
+})();
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

@@ -2488,6 +2488,67 @@ setTimeout(async function () {
     w.state = keep; w.persist(); w.render();
   })();
 
+  /* The same attack through numbers, dates and the log icon, which app.js
+     prints without esc(): the streak pill, log deltas, a due label, journal
+     dates, sleep stars. Without the checks in RPG.migrate (and esc() on the
+     log icon) each of these becomes a live <img onerror> on render. */
+  console.log('\nAn imported save cannot inject markup through numbers and dates');
+  await (async function () {
+    var keep = w.state, A = w.RPG.actions, today = w.RPG.todayKey();
+    var P = '<img class="pwn" src="x" onerror="window.__pwned=1">';
+    w.__pwned = undefined;
+    var s = w.RPG.newState('Mallory');
+    w.RPG.seed(s); w.RPG.unlockAll(s);
+    A.addQuest(s, { title: 'Essay', diff: 'hard', due: today });
+    A.addQuest(s, { title: 'Report', diff: 'normal', due: today });
+    A.completeQuest(s, s.quests[0].id); w.RPG.checkAchievements(s);
+    A.logSleep(s, 7, 4); A.logJournal(s, 'good', 'Fine');
+    ['streak', 'level', 'xp', 'coins', 'hp'].forEach(function (k) { s.hero[k] = P; });
+    s.skills.forEach(function (k) { k.level = P; k.xp = P; });
+    s.habits.forEach(function (h) { h.streak = P; h.slips = P; });
+    s.shop.forEach(function (it) { it.price = P; it.hp = P; });
+    s.log.forEach(function (e) { e.xp = P; e.coins = P; e.hp = P; e.icon = P; });
+    s.log.unshift({ t: new Date().toISOString(), day: today + P, icon: '⚔️', text: 'x', xp: 5, coins: 0, hp: 0, min: 0 });
+    s.quests.forEach(function (q) { if (q.due) q.due = 'x' + P; });
+    s.sleep[today].quality = P;
+    s.journal[today + P] = { mood: 'good', note: 'x' };
+    s.achievements.forEach(function (a) { a.on = P; });
+    s.redemption = { streak: P, on: today };
+    w.importSave({ files: [new w.File([JSON.stringify(s)], 'save.json', { type: 'application/json' })] });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var t0 = 0; t0 < 40 && w.state.hero.name !== 'Mallory'; t0++) await new Promise(function (r) { setTimeout(r, 25); });
+    ok(w.state.hero.name === 'Mallory' && w.state.hero.streak === 0 && typeof w.state.log[0].xp === 'number', 'the crafted save imports with its numbers and dates repaired');
+    var leaks = [];
+    function look(where) { if (d.querySelector('img.pwn')) leaks.push(where); }
+    w.logAll = true; w.achAll = true;
+    ['today', 'quests', 'habits', 'market', 'stats', 'focus', 'journal'].forEach(function (t) {
+      w.go(t); look(t);
+      Array.prototype.slice.call(d.querySelectorAll('button.more')).forEach(function (b) {
+        b.click(); look(t + ' (menu)');
+        var edit = Array.prototype.slice.call(d.querySelectorAll('#modal .rmact')).filter(function (x) { return x.textContent === 'Edit'; })[0];
+        if (edit) { edit.click(); look(t + ' (edit)'); }
+        w.closeModal();
+      });
+    });
+    w.go('today'); w.openLog(); look('daily log');
+    ok(leaks.length === 0, 'no tab, menu, edit sheet, log, journal or achievement list grows an injected element' + (leaks.length ? ' -> ' + leaks.join(', ') : ''));
+    ok(w.__pwned === undefined, 'and no injected script ran');
+    w.go('stats');
+    var logIcons = Array.prototype.slice.call(d.querySelectorAll('.logrow span:nth-child(2)')).map(function (x) { return x.textContent; });
+    ok(logIcons.some(function (t) { return t.indexOf('<img') >= 0; }), 'a log icon with markup in it shows as plain text');
+    // the Ascend sheet prints each boon count ("owned ×N"): a second file, at the ascension level
+    var s2 = w.RPG.newState('Ascender'); w.RPG.unlockAll(s2);
+    s2.hero.level = w.RPG.ASCEND_LEVEL; s2.hero.boons = { fortune: P };
+    w.importSave({ files: [new w.File([JSON.stringify(s2)], 'save.json', { type: 'application/json' })] });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var tries = 0; tries < 40 && w.state.hero.name !== 'Ascender'; tries++) await new Promise(function (r) { setTimeout(r, 25); });
+    w.openAscend();
+    ok(w.state.hero.name === 'Ascender' && d.querySelector('#modal .boonpick') !== null, 'a hero at the ascension level opens the Ascend sheet');
+    ok(d.querySelector('img.pwn') === null, 'and it prints no injected element from a boon count');
+    w.logAll = false; w.achAll = false; w.closeModal();
+    w.state = keep; w.persist(); w.render();
+  })();
+
   console.log('\nRuntime errors during session: ' + errors.length);
   ok(errors.length === 0, 'zero JS errors through entire flow' + (errors.length ? ' -> ' + errors.join(' | ') : ''));
 
