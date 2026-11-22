@@ -1563,6 +1563,7 @@ section('Release hygiene: service-worker cache freshness');
   bad.achievements[0].on = P;
   bad.quests[qi].due = P; bad.quests[qi].diff = P;
   bad.activeFocus.work = P;
+  bad.hero.boons = { fortune: P, vigor: 2 };
   var badRedemption = JSON.parse(JSON.stringify(bad)); badRedemption.redemption.streak = P;
 
   var m = RPG.migrate(JSON.parse(JSON.stringify(bad)));
@@ -1578,6 +1579,7 @@ section('Release hygiene: service-worker cache freshness');
   ok(m.achievements.length === achN - 1, 'an achievement with a fake unlock date is dropped (it unlocks again when earned)');
   ok(m.quests[qi].due === null && m.quests[qi].diff === 'normal', 'a quest’s fake due date is cleared and an unknown difficulty becomes Normal');
   ok(m.activeFocus === null, 'a focus session with a non-number length is stopped');
+  ok(!('fortune' in m.hero.boons) && m.hero.boons.vigor === 2, 'a boon count that is not a number is dropped, real counts stay');
   ok(RPG.migrate(JSON.parse(JSON.stringify(badRedemption))).redemption === null, 'a streak-repair offer with a non-number streak is dropped');
   ok(deepEqual(RPG.migrate(JSON.parse(JSON.stringify(m))), JSON.parse(JSON.stringify(m))), 'once fixed, migrating again changes nothing');
   ok(typeof RPG.weekStats(m).tot.xp === 'number' && typeof RPG.weekStats(bad).tot.xp === 'string', 'weekly totals add up as numbers again (before migrate, the payload turned them into text)');

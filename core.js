@@ -2295,6 +2295,10 @@
     ['level', 'xp', 'coins', 'hp', 'streak', 'bestStreak'].forEach(function (k) {
       num(s.hero, k, { level: 1, hp: MAX_HP }[k] || 0);
     });
+    /* boons: boon id -> how many owned, printed as "owned ×N" when ascending */
+    if (isObj(s.hero) && isObj(s.hero.boons)) Object.keys(s.hero.boons).forEach(function (k) {
+      if (!isNum(s.hero.boons[k])) delete s.hero.boons[k];
+    });
     each(s.skills, function (k) { num(k, 'xp', 0); num(k, 'level', 1); });
     each(s.habits, function (h) { num(h, 'streak', 0); num(h, 'slips', 0); });
     each(s.shop, function (it) { num(it, 'price', 10); num(it, 'hp', 0); });

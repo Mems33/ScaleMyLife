@@ -2515,7 +2515,8 @@ setTimeout(async function () {
     s.achievements.forEach(function (a) { a.on = P; });
     s.redemption = { streak: P, on: today };
     w.importSave({ files: [new w.File([JSON.stringify(s)], 'save.json', { type: 'application/json' })] });
-    await new Promise(function (r) { setTimeout(r, 50); });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var t0 = 0; t0 < 40 && w.state.hero.name !== 'Mallory'; t0++) await new Promise(function (r) { setTimeout(r, 25); });
     ok(w.state.hero.name === 'Mallory' && w.state.hero.streak === 0 && typeof w.state.log[0].xp === 'number', 'the crafted save imports with its numbers and dates repaired');
     var leaks = [];
     function look(where) { if (d.querySelector('img.pwn')) leaks.push(where); }
@@ -2535,6 +2536,15 @@ setTimeout(async function () {
     w.go('stats');
     var logIcons = Array.prototype.slice.call(d.querySelectorAll('.logrow span:nth-child(2)')).map(function (x) { return x.textContent; });
     ok(logIcons.some(function (t) { return t.indexOf('<img') >= 0; }), 'a log icon with markup in it shows as plain text');
+    // the Ascend sheet prints each boon count ("owned ×N"): a second file, at the ascension level
+    var s2 = w.RPG.newState('Ascender'); w.RPG.unlockAll(s2);
+    s2.hero.level = w.RPG.ASCEND_LEVEL; s2.hero.boons = { fortune: P };
+    w.importSave({ files: [new w.File([JSON.stringify(s2)], 'save.json', { type: 'application/json' })] });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var tries = 0; tries < 40 && w.state.hero.name !== 'Ascender'; tries++) await new Promise(function (r) { setTimeout(r, 25); });
+    w.openAscend();
+    ok(w.state.hero.name === 'Ascender' && d.querySelector('#modal .boonpick') !== null, 'a hero at the ascension level opens the Ascend sheet');
+    ok(d.querySelector('img.pwn') === null, 'and it prints no injected element from a boon count');
     w.logAll = false; w.achAll = false; w.closeModal();
     w.state = keep; w.persist(); w.render();
   })();
