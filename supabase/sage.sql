@@ -35,3 +35,15 @@ $$;
 
 revoke all on function public.increment_sage_usage(uuid, date) from public;
 grant execute on function public.increment_sage_usage(uuid, date) to service_role;
+
+-- fix (2026-11-21): the revoke above is not enough on Supabase. Its default
+-- privileges also grant EXECUTE on every new public function straight to the
+-- anon and authenticated roles, so the function stayed callable by anyone
+-- holding the publishable key, with ANY user id. Leaderboard rows show user
+-- ids publicly, so a stranger could burn another player's daily Sage chats.
+-- Only the Edge Function (service_role) calls this, so take it away from both.
+-- Safe to re-run. Check afterwards with:
+--   select grantee from information_schema.routine_privileges
+--   where routine_name = 'increment_sage_usage';
+-- which should list only postgres and service_role.
+revoke execute on function public.increment_sage_usage(uuid, date) from anon, authenticated;

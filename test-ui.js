@@ -723,17 +723,24 @@ setTimeout(async function () {
     var grandma = w.obPlate.findIndex(function (it) { return it.title === 'Call grandma'; });
     w.obPlateToggle(grandma);
     ok(w.obPlate[grandma].off === true && d.querySelectorAll('.obgroup')[2].querySelector('.obitem.on') !== null, 'a plate row toggles off right on the board');
-    w.obToggle('habits', 0);
-    ok(w.ob.habitsOff[habitTitles[0]] === true, 'a starter habit row toggles off');
-    w.obTarget(1, 5);
-    ok(w.ob.targets[habitTitles[1]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
+    // the packs bring habits for some life areas: the starter habits there start off, and say why
+    var covIdx = [], freeIdx = [];
+    w.obSug.habits.forEach(function (h, i) { (w.obCovers('habits', h) ? covIdx : freeIdx).push(i); });
+    ok(covIdx.length >= 1 && freeIdx.length >= 2 && covIdx.every(function (i) { return !w.obOn('habits', w.obSug.habits[i], i); }) && d.querySelector('#modal').textContent.indexOf('Off: you added') >= 0, 'a starter habit in a life area the plate already covers starts off, with a "you added" note');
+    w.obToggle('habits', covIdx[0]);
+    ok(w.obOn('habits', w.obSug.habits[covIdx[0]], covIdx[0]) === true, 'and one tap switches it back on');
+    w.obToggle('habits', freeIdx[0]);
+    ok(w.ob.habitsOff[habitTitles[freeIdx[0]]] === true, 'a starter habit row toggles off');
+    w.obTarget(freeIdx[1], 5);
+    ok(w.ob.targets[habitTitles[freeIdx[1]]] === 5 && d.querySelectorAll('.obchips.targets .chip.on').length >= 1, 'a target chip writes the weekly target');
     ok(d.querySelector('#obStart') !== null, 'the board step carries Start');
     d.querySelector('#obStart').click();
     var s = w.state;
     ok(s && s.hero.name === 'Wiz', 'Start creates the hero');
-    ok(!s.habits.some(function (h) { return h.title === habitTitles[0]; }), 'the habit toggled off on the board is absent');
+    ok(!s.habits.some(function (h) { return h.title === habitTitles[freeIdx[0]]; }), 'the habit toggled off on the board is absent');
+    ok(s.habits.some(function (h) { return h.title === habitTitles[covIdx[0]]; }) && covIdx.slice(1).every(function (i) { return !s.habits.some(function (h) { return h.title === habitTitles[i]; }); }), 'the covered habit switched back on exists, the ones left off do not');
     ok(!s.quests.some(function (q) { return q.title === 'Call grandma'; }), 'the plate task toggled off on the board is absent');
-    var targeted = s.habits.find(function (h) { return h.title === habitTitles[1]; });
+    var targeted = s.habits.find(function (h) { return h.title === habitTitles[freeIdx[1]]; });
     ok(targeted && targeted.target === 5, 'the picked weekly target is applied through editHabit');
     ok(s.habits.filter(function (h) { return h.type === 'bad' && h.title === 'Doomscrolling'; }).length === 1, 'the struggle monster exists as a bad habit, once (the plate named it again)');
     ok(s.quests.filter(function (q) { return q.recurring; }).length <= 2, 'with 15 minutes at most two dailies exist');
@@ -910,7 +917,7 @@ setTimeout(async function () {
   ok(w.SMLCloud.session() === null, 'no session until the user signs in');
   w.openSettings();
   var setTxt = d.querySelector('#modal').textContent;
-  ok(setTxt.indexOf('Cloud sync') >= 0 && d.querySelector('#cEmail') !== null && d.querySelector('#cPw') !== null, 'settings shows the sign-in form when configured');
+  ok(setTxt.indexOf('Cloud sync') >= 0 && setTxt.indexOf('Create account') >= 0 && setTxt.indexOf('Sign in') >= 0, 'settings offers Create account and Sign in when configured');
   ok(setTxt.indexOf('Reminders OFF') >= 0, 'reminders toggle present (off by default)');
   w.closeModal();
   w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.go('today');
@@ -1765,10 +1772,10 @@ setTimeout(async function () {
     ok(hp && hp.textContent.indexOf('this wk') >= 0 && hp.querySelector('.wkring') === null, 'a weekly-target habit shows its count in the meta line (the ring is gone: the week tiles show the same thing)');
     // quick actions
     var qa = d.querySelectorAll('#view .quick.qa button.qab:not(.potion)');
-    ok(qa.length === 3, 'quick actions row has three buttons (' + qa.length + ')');
+    ok(qa.length === 2, 'quick actions row has two buttons (' + qa.length + ')');
     var qaTxt = d.querySelector('#view .quick.qa').textContent;
-    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') >= 0, 'they read Add, Focus, Ask Sage');
-    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 3, 'each quick action carries a sprite icon');
+    ok(qaTxt.indexOf('Add') >= 0 && qaTxt.indexOf('Focus') >= 0 && qaTxt.indexOf('Ask Sage') < 0, 'they read Add and Focus; Sage is the owl in the corner, not a third button');
+    ok(d.querySelectorAll('#view .quick.qa button .i').length >= 2, 'each quick action carries a sprite icon');
     w.quickAdd();
     ok(w.tab === 'today' && d.querySelector('#modal.show .capsheet #capText') !== null && d.querySelector('#capGo') !== null && d.querySelector('#capGo').disabled === true, 'Add opens the capture sheet over Today, with nothing to add yet');
     w.capClose();
@@ -1815,12 +1822,15 @@ setTimeout(async function () {
     w.go('quests'); w.go('today');
     ok(d.querySelectorAll('#view .sageline').length === 1, 'the line survives navigation for the rest of the day');
     // empty Now
-    var keep = w.state.quests;
+    var keep = w.state.quests, keepPlan = w.state.plan;
     w.state.quests = w.state.quests.filter(function (q) { return !q.recurring && q.due !== today; });
-    w.render();
+    w.state.plan = null; w.render();
+    var hasPicks = w.RPG.dailyDraft(w.state).items.length > 0;
+    ok(hasPicks ? (d.querySelector('#view .panel.now.drafting .draft') !== null && d.querySelector('#view .panel.now .ebox') === null) : d.querySelector('#view .panel.now .ebox') !== null, 'while Sage has picks (habits count) the draft is the list, not an empty state');
+    w.A.setPlan(w.state, []); w.render();   // "Not today": the plain Now panel
     var nowEmpty = d.querySelector('#view .panel.now .ebox');
     ok(nowEmpty !== null && nowEmpty.textContent.indexOf('Nothing due right now') >= 0 && nowEmpty.querySelectorAll('.btn').length === 2, 'an empty Now offers Add a quest and Start focus');
-    w.state.quests = keep; w.render();
+    w.state.quests = keep; w.state.plan = keepPlan; w.render();
     // header carry-overs
     ok(d.querySelector('#hud .who .nm') !== null, 'the header name sits in its truncating element');
     var css = fs2.readFileSync(__dirname + '/styles.css', 'utf8');
@@ -1926,7 +1936,7 @@ setTimeout(async function () {
     w.go('today');
     var draft = d.querySelector('#view .draft');
     ok(draft !== null && draft.querySelectorAll('.drow').length === 4 && draft.querySelectorAll('.drow.on').length === 4, 'Today opens on a draft of four picks, all kept');
-    ok(d.querySelector('#view .panel').classList.contains('now') && d.querySelector('#view .panel.now.plan') === null, 'the draft is not a panel: Now is still the first panel, and it is not a plan yet');
+    ok(d.querySelector('#view .panel').classList.contains('now') && d.querySelector('#view .panel.now .draft') === draft && d.querySelector('#view .panel.now.plan') === null, 'the draft sits inside Now, still the first panel, and it is not a plan yet');
     ok(draft.querySelector('.dw') !== null && draft.querySelector('.dw').textContent.length > 3 && draft.querySelector('.dsub').textContent.indexOf('4 picks') >= 0, 'each pick carries its reason and the header totals the picks');
     w.draftToggle(3);
     ok(d.querySelectorAll('#view .draft .drow.on').length === 3 && d.querySelector('#view .draft .dsub').textContent.indexOf('3 picks') >= 0 && d.querySelectorAll('#view .draft .drow')[3].getAttribute('aria-pressed') === 'false', 'a pick can be switched off');
@@ -2134,6 +2144,7 @@ setTimeout(async function () {
     var keep = w.state, today = w.RPG.todayKey();
     var s = w.state = w.RPG.seedPreset(w.RPG.newState('Rows', '@knight'), ['student']);
     var q = w.A.addQuest(s, { title: 'Write the intro', diff: 'hard', due: today });
+    w.A.setPlan(s, []);   // no plan today ("Not today"), so Now lists full rows rather than Sage's picks
     w.go('today');
     var row = [].filter.call(d.querySelectorAll('#view .item'), function (it) { return it.textContent.indexOf('Write the intro') >= 0; })[0];
     ok(row && row.querySelectorAll('button').length === 2 && row.querySelector('.btn.tick') && row.querySelector('.btn.more'), 'a quest row has exactly two controls: the tick and the ⋯');
@@ -2219,6 +2230,323 @@ setTimeout(async function () {
     ok(w.cap.lines.length === 1 && w.cap.text === '' && d.querySelectorAll('#capList .capcard').length >= 1, 'when listening ends, what was said goes into the list');
     w.capClose(); delete w.webkitSpeechRecognition;
     w.state = keep; w.render();
+  })();
+
+  console.log('\nToday as one list');
+  (function () {
+    var keep = w.state, today = w.RPG.todayKey();
+    var s = w.state = w.RPG.seedPreset(w.RPG.newState('One', '🧙'), ['student']);
+    s.firstQuestCelebrated = true;
+    for (var i = 0; i < 8; i++) w.A.addQuest(s, { title: 'Errand ' + i, diff: 'easy', due: today });   // more than the draft can pick
+    w.go('today');
+    var now = d.querySelector('#view .panel.now');
+    ok(now.classList.contains('drafting') && now.querySelector('.draft') !== null && d.querySelectorAll('#view .draft').length === 1, 'Sage\'s draft is drawn inside the Now panel, once');
+    ok(now.querySelector('.dsub').textContent.indexOf('Untick what can wait') >= 0, 'the draft says what its ticks mean');
+    var picks = w.RPG.dailyDraft(s).items.map(function (it) { return it.title; });
+    var also = now.querySelector('details.alsotoday');
+    ok(also !== null && !also.open && also.querySelectorAll('.item').length > 0, 'what else is due today waits under one closed Also today line');
+    ok(now.querySelectorAll('.item').length === also.querySelectorAll('.item').length, 'no tickable row sits next to the picks before the day is planned');
+    ok([].every.call(also.querySelectorAll('.item .title'), function (t) { return picks.indexOf(t.textContent.trim()) < 0; }), 'nothing under Also today repeats a pick');
+    d.querySelector('#draftLock').click();
+    if (d.querySelector('#overlay.show')) w.closeOverlay();
+    var plan = d.querySelector('#view .panel.now.plan');
+    ok(plan !== null && d.querySelector('#view .draft') === null && plan.querySelector('details.alsotoday') !== null && !plan.querySelector('details.alsotoday').open, 'once locked, the plan is the list and the rest stays folded under Also today');
+    // Habits today: what can wait this week folds away
+    var hLater = w.A.addHabit(s, { title: 'Call a friend', type: 'good', target: 1 });
+    hLater.history = [today];   // this week's one time is already on the history, and it was not ticked today
+    w.A.addHabit(s, { title: 'Stretch', type: 'good', target: 7 });
+    w.render();
+    var hp = d.querySelector('#view .panel.habits');
+    var pace = hp.querySelector('details.onpace');
+    ok(pace !== null && !pace.open && pace.textContent.indexOf('Call a friend') >= 0, 'a habit on pace for the week folds under Later this week');
+    var inView = [].filter.call(hp.querySelectorAll('.item'), function (it) { return !it.closest('details'); }).map(function (it) { return it.textContent; }).join('|');
+    ok(inView.indexOf('Stretch') >= 0 && inView.indexOf('Call a friend') < 0, 'a daily habit stays in view');
+    // the plate: a pack form left open is kept, not dropped
+    w.state = null; w.ob = w.obFresh(); w.cap = null; w.renderHUDShell(); w.onboarding();
+    var nm = d.querySelector('#obName'); nm.value = 'Keeper'; w.obNameCheck();
+    nm.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    ok(w.obStep === 2, 'Enter in the hero name goes on to the next step');
+    w.obNext();
+    w.capPack('internship');
+    ok(d.querySelector('#pkDate') !== null && w.cap.packs.length === 0, 'Internship hunt opens its deadline form');
+    w.obNext();
+    ok(w.obStep === 4 && w.cap.packs.length === 1 && [].some.call(d.querySelectorAll('.obgroup .obghead'), function (g) { return g.textContent.indexOf('Internship hunt') >= 0; }), 'Build my board with the form still open keeps the pack');
+    w.closeModal(); w.cap = null; w.ob = w.obFresh();
+    // the capture sheet does the same with Add
+    w.state = w.RPG.seedPreset(w.RPG.newState('Sheet', '🧙'), ['student']);
+    w.openCapture(); w.capPack('internship');
+    w.capAdd();
+    ok(w.state.goals.some(function (g) { return g.title.indexOf('internship') >= 0 || g.title.indexOf('Internship') >= 0; }), 'Add on the sheet with the pack form open adds the pack');
+    w.state = keep; w.render();
+  })();
+
+  console.log('\nReady for testers: the account sheet, the owl, the install card, privacy');
+  await (async function () {
+    var keep = w.state, SESS = 'sml.cloud.session.v1';
+    var calls = [], cloudSave = null, failPull = false;
+    function reply(body, status) { status = status || 200; return Promise.resolve({ status: status, ok: status < 300, text: function () { return Promise.resolve(JSON.stringify(body)); } }); }
+    w.SMLCloud.configure({ fetch: function (url, opts) {
+      calls.push(((opts && opts.method) || 'GET') + ' ' + url);
+      if (url.indexOf('/auth/v1/token?grant_type=password') >= 0) return reply({ access_token: 'tt', refresh_token: 'rr', user: { id: 'u-1', email: 'tester@example.com' } });
+      if (url.indexOf('/auth/v1/signup') >= 0) return reply({});   // email confirmation on: no token yet
+      if (url.indexOf('/auth/v1/recover') >= 0) return reply({});
+      if (url.indexOf('/auth/v1/user') >= 0) return reply({ id: 'u-1', email: 'tester@example.com' });
+      if (url.indexOf('saves?select=data') >= 0) return failPull ? reply({ message: 'offline' }, 503) : reply(cloudSave ? [{ data: cloudSave, updated_at: cloudSave.updatedAt }] : []);
+      return reply({});
+    } });
+    function tick() { return new Promise(function (r) { setTimeout(r, 30); }); }
+    function fill(email, pw) { d.querySelector('#cEmail').value = email; d.querySelector('#cPw').value = pw; }
+    function btn(root, label) { return [].filter.call(root.querySelectorAll('button'), function (b) { return b.textContent.trim() === label; })[0]; }
+    var promptUsed = false; w.prompt = function () { promptUsed = true; return ''; };
+    w.localStorage.removeItem(SESS);
+    w.state = w.RPG.migrate(w.RPG.newState('Local')); w.state.hero.level = 6; w.persist();
+
+    // Settings, signed out: two buttons; the fields live in the sheet
+    w.openSettings();
+    var sm = d.querySelector('#modal');
+    ok(sm.querySelector('#cEmail') === null && btn(sm, 'Create account') && btn(sm, 'Sign in'), 'signed-out Settings shows two buttons, no inline form');
+    btn(sm, 'Sign in').click();
+    ok(d.querySelector('.authsheet form.authform') !== null && d.querySelector('#cEmail') !== null && d.querySelector('#cPw').getAttribute('autocomplete') === 'current-password', 'Sign in opens the account sheet: a real form with email and password');
+    d.querySelector('#cEmail').value = 'tester@example.com'; d.querySelector('#cEmail').dispatchEvent(new w.Event('input'));
+    btn(d.querySelector('.authlinks'), 'Forgot password?').click();
+    ok(d.querySelector('#cEmail').value === 'tester@example.com' && d.querySelector('#cPw') === null, 'Forgot password keeps the typed email and asks for nothing else');
+    d.querySelector('.authform').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    await tick();
+    ok(calls.some(function (c) { return c.indexOf('/auth/v1/recover') >= 0; }) && d.querySelector('#cMsg').textContent.indexOf('Link sent') >= 0, 'submitting the form sends the reset link');
+    d.querySelector('.authsheet .obnav .btn').click();
+    ok(d.querySelector('#modal').textContent.indexOf('SETTINGS') >= 0, 'Back from a sheet opened in Settings returns to Settings');
+
+    // sign-up waiting on the confirmation email
+    w.openAuth('signup', 'settings'); fill('new@example.com', 'longenough'); w.authSubmit(); await tick();
+    ok(w.authMode === 'signin' && d.querySelector('#cMsg').textContent.indexOf('Confirm the email') >= 0 && d.querySelector('#cEmail').value === 'new@example.com', 'a sign-up waiting on email confirmation lands on Sign in, email kept');
+
+    // a save on both sides: an in-app question replaces confirm()
+    cloudSave = w.RPG.migrate(w.RPG.newState('Cloudy')); cloudSave.hero.level = 2; cloudSave.updatedAt = '2026-01-01T00:00:00.000Z';
+    fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    var box = d.querySelector('.authsheet');
+    ok(box && box.classList.contains('locked') && box.textContent.indexOf('Two saves found') >= 0 && box.textContent.indexOf('Cloudy') >= 0 && box.textContent.indexOf('Local') >= 0, 'with a save on both sides, the sheet asks which to keep and names both');
+    ok(box.querySelector('.authpick .btn.go').textContent.indexOf('Keep this device') >= 0, 'the side further along is the recommended first choice');
+    d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    ok(d.querySelector('#modal.show .authsheet') !== null, 'Escape cannot dismiss that question');
+    calls = [];
+    box.querySelector('.authpick .btn.go').click(); await tick();
+    ok(w.state.hero.name === 'Local' && calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'Keep this device pushes it up');
+    ok(d.querySelector('#modal').textContent.indexOf('Synced as') >= 0, 'and lands back in Settings, signed in');
+    w.closeModal();
+
+    // the owl, signed out
+    w.localStorage.removeItem(SESS);
+    w.state.settings.mascot = true; w.toggleMascot(true);
+    var lock = d.querySelector('.mchat-lock');
+    ok(lock !== null && d.querySelector('.mchat-entry') === null && lock.textContent.indexOf('free account') >= 0, 'signed out, the owl says chat needs a free account');
+    lock.click();
+    ok(w.authMode === 'signup' && w.authFrom === 'owl' && d.querySelector('#cEmail') !== null, 'that line opens the sign-up sheet');
+    cloudSave = null;
+    w.openAuth('signin'); fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(!d.querySelector('#modal').classList.contains('show') && d.querySelector('#mChatInput') !== null, 'signing in from the owl opens the chat it promised');
+    w.toggleMascot(false);
+
+    // email links: a stranger's link never syncs anything by itself
+    w.localStorage.removeItem(SESS); w.localStorage.removeItem('sml.auth.pending');
+    calls = [];
+    w.location.hash = '#access_token=evil-tok&refresh_token=evil-rt&type=signup';
+    var rec = w.handleRecoveryHash(); await tick();
+    ok(rec === true && w.location.hash === '' && w.authMode === 'linkcheck' && d.querySelector('#modal.show').textContent.indexOf('tester@example.com') >= 0, 'a link this device did not ask for asks whose account it is, naming the email');
+    ok(w.SMLCloud.session() === null && !calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'while it asks, the link’s session is set aside and nothing is pushed');
+    btn(d.querySelector('.authpick'), 'No, cancel').click(); await tick();
+    ok(w.SMLCloud.session() === null && !calls.some(function (c) { return c.indexOf('POST') === 0 && c.indexOf('saves') >= 0; }), 'No, cancel leaves the device signed out with nothing synced');
+    // an existing session survives a stranger's link
+    var own = { access_token: 'own-tok', refresh_token: 'own-rt', user: { id: 'own-uid', email: 'me@example.com' } };
+    w.localStorage.setItem(SESS, JSON.stringify(own));
+    w.location.hash = '#access_token=evil-tok&type=signup';
+    w.handleRecoveryHash(); await tick();
+    ok(w.SMLCloud.session() && w.SMLCloud.session().access_token === 'own-tok', 'a signed-in player stays in their own account while the question is up');
+    w.authLinkReject(); w.localStorage.removeItem(SESS);
+    // a reset link this device asked for: straight to the new-password sheet
+    w.openAuth('forgot', 'settings'); d.querySelector('#cEmail').value = 'Tester@Example.com'; w.authSubmit(); await tick();
+    ok(JSON.parse(w.localStorage.getItem('sml.auth.pending')).email === 'tester@example.com', 'sending a reset link remembers which email this device asked for');
+    w.closeModal();
+    w.location.hash = '#access_token=rec-tok&refresh_token=rec-rt&type=recovery';
+    w.handleRecoveryHash(); await tick();
+    ok(w.authMode === 'newpw' && d.querySelector('#cPw2') !== null && d.querySelector('.authsheet.locked') !== null && d.querySelector('.authsheet').textContent.indexOf('tester@example.com') >= 0, 'the matching reset link opens the new-password sheet, naming the account');
+    ok(w.localStorage.getItem('sml.auth.pending') === null && w.SMLCloud.session().access_token === 'rec-tok', 'the marker is used once and the link’s session is now in use');
+    d.querySelector('#cPw').value = 'newpass123'; d.querySelector('#cPw2').value = 'different1'; w.authSubmit();
+    ok(d.querySelector('#cMsg').textContent.indexOf('different') >= 0, 'two different passwords are caught before anything is sent');
+    calls = [];
+    d.querySelector('#cPw2').value = 'newpass123'; w.authSubmit(); await tick();
+    ok(calls.some(function (c) { return c.indexOf('PUT') === 0 && c.indexOf('/auth/v1/user') >= 0; }) && !promptUsed, 'Save password sends it; prompt() is never used');
+    // a link opened in another browser (no marker): the player says yes, then it works
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.location.hash = '#access_token=conf-tok&type=signup';
+    w.handleRecoveryHash(); await tick();
+    btn(d.querySelector('.authpick'), 'Yes, it is mine').click(); await tick();
+    ok(d.querySelector('#modal.show #cPw2') === null && w.SMLCloud.session() !== null && w.SMLCloud.session().access_token === 'conf-tok', 'Yes, it is mine signs in, and a confirmation link asks for no new password');
+
+    // a new device: no hero yet, "I already have an account"
+    w.localStorage.removeItem(SESS);
+    w.state = null; w.ob = w.obFresh(); w.cap = null; w.renderHUDShell(); w.onboarding();
+    var acct = d.querySelector('.obacct .btn');
+    ok(acct !== null && acct.textContent.indexOf('already have an account') >= 0, 'step 1 of the wizard offers I already have an account');
+    acct.click();
+    ok(w.authMode === 'signin' && d.querySelector('#cEmail') !== null, 'which opens Sign in');
+    d.querySelector('.authsheet .obnav .btn').click();
+    ok(d.querySelector('#obName') !== null && w.obStep === 1, 'Back returns to step 1 of the wizard');
+    d.querySelector('.obacct .btn').click();
+    failPull = true; fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(w.state === null && d.querySelector('#cMsg') !== null && d.querySelector('#cMsg').textContent.indexOf('did not load') >= 0, 'a failed load keeps the player on Sign in instead of starting a hero that would overwrite the account');
+    failPull = false; cloudSave = w.RPG.migrate(w.RPG.newState('Returner')); cloudSave.hero.level = 7;
+    w.authSubmit(); await tick();
+    ok(w.state && w.state.hero.name === 'Returner' && w.state.hero.level === 7 && !d.querySelector('#modal').classList.contains('show') && d.querySelector('#hud').textContent.indexOf('Returner') >= 0, 'signing in on a new device loads the account’s hero, no question asked');
+    w.localStorage.removeItem(SESS);
+    w.state = null; w.renderHUDShell(); w.onboarding(); d.querySelector('.obacct .btn').click();
+    cloudSave = null; fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
+    ok(w.state === null && w.obStep === 1 && d.querySelector('#obName') !== null, 'an account with no save yet goes on to make a hero');
+
+    // the install card
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.state = w.RPG.migrate(w.RPG.newState('Installer')); w.persist(); w.go('today');
+    ok(d.querySelector('.installcard') === null, 'no install card on a desktop browser');
+    var ev = new w.Event('beforeinstallprompt', { cancelable: true }), prompted = false;
+    ev.prompt = function () { prompted = true; }; ev.userChoice = Promise.resolve({ outcome: 'accepted' });
+    w.dispatchEvent(ev);
+    ok(ev.defaultPrevented && d.querySelector('.installcard') === null, 'the browser’s install offer is held, and no card before the first XP');
+    w.state.hero.xp = 10; w.render();
+    var card = d.querySelector('.installcard');
+    ok(card !== null && card.textContent.indexOf('Home Screen') >= 0 && card.querySelector('.btn.go').textContent === 'Install', 'after the first XP, Android gets an Install card');
+    w.state.hero.level = 5; w.state.settings.cloudNudgeOff = false; w.render();
+    ok(d.querySelector('.installcard') !== null && d.querySelector('.nudgebar:not(.installcard)') === null, 'one reminder at a time: the install card holds the slot over the cloud nudge');
+    d.querySelector('.installcard .btn.go').click(); await tick();
+    ok(prompted && w.state.settings.installOff === true && d.querySelector('.installcard') === null, 'Install replays the browser prompt; accepting retires the card');
+    ok(d.querySelector('.nudgebar') !== null, 'and the cloud nudge gets its slot back');
+    w.state.settings.installOff = false;
+    Object.defineProperty(w.navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', configurable: true });
+    w.render();
+    card = d.querySelector('.installcard');
+    ok(card !== null && card.textContent.indexOf('Add to Home Screen') >= 0 && card.querySelector('.btn.go') === null, 'on iPhone the card spells out the Share steps instead');
+    card.querySelector('.ghost').click();
+    ok(w.state.settings.installOff === true && d.querySelector('.installcard') === null, 'Got it hides it for good');
+    delete w.navigator.userAgent;
+
+    // what the site runs, the privacy page says; the counter is server-only
+    var priv = fs.readFileSync(path.join(__dirname, 'privacy.html'), 'utf8');
+    ok(html.indexOf('/_vercel/insights/script.js') < 0 || (priv.indexOf('Web Analytics') >= 0 && priv.indexOf('Speed Insights') >= 0 && priv.indexOf('No analytics') < 0), 'the privacy page discloses the visit counts the site loads');
+    ok(priv.indexOf('Anthropic') >= 0, 'the privacy page says where Sage chat messages go');
+    var sageSql = fs.readFileSync(path.join(__dirname, 'supabase', 'sage.sql'), 'utf8');
+    ok(/revoke execute on function public\.increment_sage_usage\(uuid, date\) from anon, authenticated;/.test(sageSql), 'sage.sql takes the chat counter away from anon and authenticated');
+
+    w.localStorage.removeItem(SESS); w.closeModal();
+    w.state = keep; w.persist(); w.render();
+  })();
+
+  /* A crafted save file whose ids carry a quote or markup. Without the id check
+     in RPG.migrate, onclick="doQuest('<id>')" would run the payload the moment
+     a button is tapped, and value="<id>" would inject an <img onerror>. */
+  console.log('\nAn imported save cannot run script through its ids');
+  await (async function () {
+    var keep = w.state, A = w.RPG.actions;
+    w.__pwned = undefined;
+    var s = w.RPG.newState('Mallory');
+    w.RPG.seed(s); w.RPG.unlockAll(s);
+    A.addGoal(s, { title: 'Big goal' });
+    var g = s.goals[s.goals.length - 1];
+    A.addQuest(s, { title: 'First step', diff: 'normal', main: g.id });
+    A.addQuest(s, { title: 'Side task', diff: 'easy' });
+    var JS = "');window.__pwned=1;//", ATTR = '"><img id="pwnimg" src="x" onerror="window.__pwned=1">';
+    var oldSkill = s.skills[0].id;
+    s.skills[0].id = 'sk' + JS;
+    s.quests.concat(s.habits).forEach(function (x) { if (x.skillId === oldSkill) x.skillId = s.skills[0].id; });
+    g.id = 'g' + ATTR;
+    s.quests.forEach(function (q, i) { if (q.main) q.main = g.id; q.id = 'q' + i + JS; });
+    s.habits.forEach(function (h, i) { h.id = 'h' + i + (i % 2 ? ATTR : JS); });
+    s.shop.forEach(function (it, i) { it.id = 'r' + i + JS; });
+    w.importSave({ files: [new w.File([JSON.stringify(s)], 'save.json', { type: 'application/json' })] });
+    await new Promise(function (r) { setTimeout(r, 50); });
+    ok(w.state.hero.name === 'Mallory', 'the crafted save imports');
+    var SAFE = /^[A-Za-z0-9_-]{1,64}$/;
+    ok([].concat(w.state.skills, w.state.goals, w.state.quests, w.state.habits, w.state.shop).every(function (x) { return SAFE.test(x.id); }), 'every id in it was swapped for a safe one on the way in');
+    var step = w.state.quests.find(function (q) { return q.title === 'First step'; });
+    ok(step && step.main === w.state.goals[w.state.goals.length - 1].id, 'the step still belongs to its main quest');
+    var leaks = [];
+    ['today', 'quests', 'habits', 'market', 'stats', 'focus', 'journal'].forEach(function (t) {
+      w.go(t);
+      if (d.documentElement.innerHTML.indexOf('__pwned') >= 0 || d.getElementById('pwnimg')) leaks.push(t + ' (render)');
+      // tap every ⋯ (rowMenu) and its Edit sheet: the handlers that carry ids
+      Array.prototype.slice.call(d.querySelectorAll('button.more')).forEach(function (b) {
+        b.click();
+        var edit = Array.prototype.slice.call(d.querySelectorAll('#modal .rmact')).filter(function (x) { return x.textContent === 'Edit'; })[0];
+        if (edit) edit.click();
+        if (d.documentElement.innerHTML.indexOf('__pwned') >= 0 || d.getElementById('pwnimg')) leaks.push(t + ' (menu)');
+        w.closeModal();
+      });
+    });
+    w.go('quests');
+    var tick = d.querySelector('button.tick');
+    if (tick) tick.click();
+    ok(leaks.length === 0, 'no tab, ⋯ menu or edit sheet carries the payload' + (leaks.length ? ' -> ' + leaks.join(', ') : ''));
+    ok(w.__pwned === undefined, 'and no injected script ran (window.__pwned stays undefined)');
+    w.closeModal();
+    w.state = keep; w.persist(); w.render();
+  })();
+
+  /* The same attack through numbers, dates and the log icon, which app.js
+     prints without esc(): the streak pill, log deltas, a due label, journal
+     dates, sleep stars. Without the checks in RPG.migrate (and esc() on the
+     log icon) each of these becomes a live <img onerror> on render. */
+  console.log('\nAn imported save cannot inject markup through numbers and dates');
+  await (async function () {
+    var keep = w.state, A = w.RPG.actions, today = w.RPG.todayKey();
+    var P = '<img class="pwn" src="x" onerror="window.__pwned=1">';
+    w.__pwned = undefined;
+    var s = w.RPG.newState('Mallory');
+    w.RPG.seed(s); w.RPG.unlockAll(s);
+    A.addQuest(s, { title: 'Essay', diff: 'hard', due: today });
+    A.addQuest(s, { title: 'Report', diff: 'normal', due: today });
+    A.completeQuest(s, s.quests[0].id); w.RPG.checkAchievements(s);
+    A.logSleep(s, 7, 4); A.logJournal(s, 'good', 'Fine');
+    ['streak', 'level', 'xp', 'coins', 'hp'].forEach(function (k) { s.hero[k] = P; });
+    s.skills.forEach(function (k) { k.level = P; k.xp = P; });
+    s.habits.forEach(function (h) { h.streak = P; h.slips = P; });
+    s.shop.forEach(function (it) { it.price = P; it.hp = P; });
+    s.log.forEach(function (e) { e.xp = P; e.coins = P; e.hp = P; e.icon = P; });
+    s.log.unshift({ t: new Date().toISOString(), day: today + P, icon: '⚔️', text: 'x', xp: 5, coins: 0, hp: 0, min: 0 });
+    s.quests.forEach(function (q) { if (q.due) q.due = 'x' + P; });
+    s.sleep[today].quality = P;
+    s.journal[today + P] = { mood: 'good', note: 'x' };
+    s.achievements.forEach(function (a) { a.on = P; });
+    s.redemption = { streak: P, on: today };
+    w.importSave({ files: [new w.File([JSON.stringify(s)], 'save.json', { type: 'application/json' })] });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var t0 = 0; t0 < 40 && w.state.hero.name !== 'Mallory'; t0++) await new Promise(function (r) { setTimeout(r, 25); });
+    ok(w.state.hero.name === 'Mallory' && w.state.hero.streak === 0 && typeof w.state.log[0].xp === 'number', 'the crafted save imports with its numbers and dates repaired');
+    var leaks = [];
+    function look(where) { if (d.querySelector('img.pwn')) leaks.push(where); }
+    w.logAll = true; w.achAll = true;
+    ['today', 'quests', 'habits', 'market', 'stats', 'focus', 'journal'].forEach(function (t) {
+      w.go(t); look(t);
+      Array.prototype.slice.call(d.querySelectorAll('button.more')).forEach(function (b) {
+        b.click(); look(t + ' (menu)');
+        var edit = Array.prototype.slice.call(d.querySelectorAll('#modal .rmact')).filter(function (x) { return x.textContent === 'Edit'; })[0];
+        if (edit) { edit.click(); look(t + ' (edit)'); }
+        w.closeModal();
+      });
+    });
+    w.go('today'); w.openLog(); look('daily log');
+    ok(leaks.length === 0, 'no tab, menu, edit sheet, log, journal or achievement list grows an injected element' + (leaks.length ? ' -> ' + leaks.join(', ') : ''));
+    ok(w.__pwned === undefined, 'and no injected script ran');
+    w.go('stats');
+    var logIcons = Array.prototype.slice.call(d.querySelectorAll('.logrow span:nth-child(2)')).map(function (x) { return x.textContent; });
+    ok(logIcons.some(function (t) { return t.indexOf('<img') >= 0; }), 'a log icon with markup in it shows as plain text');
+    // the Ascend sheet prints each boon count ("owned ×N"): a second file, at the ascension level
+    var s2 = w.RPG.newState('Ascender'); w.RPG.unlockAll(s2);
+    s2.hero.level = w.RPG.ASCEND_LEVEL; s2.hero.boons = { fortune: P };
+    w.importSave({ files: [new w.File([JSON.stringify(s2)], 'save.json', { type: 'application/json' })] });
+    // the file is read asynchronously: wait for this hero to arrive, not a fixed time
+    for (var tries = 0; tries < 40 && w.state.hero.name !== 'Ascender'; tries++) await new Promise(function (r) { setTimeout(r, 25); });
+    w.openAscend();
+    ok(w.state.hero.name === 'Ascender' && d.querySelector('#modal .boonpick') !== null, 'a hero at the ascension level opens the Ascend sheet');
+    ok(d.querySelector('img.pwn') === null, 'and it prints no injected element from a boon count');
+    w.logAll = false; w.achAll = false; w.closeModal();
+    w.state = keep; w.persist(); w.render();
   })();
 
   console.log('\nRuntime errors during session: ' + errors.length);

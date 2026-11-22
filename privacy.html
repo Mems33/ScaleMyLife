@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy - ScaleMyLife</title>
-<meta name="description" content="ScaleMyLife privacy policy: your data stays on your device unless you opt into cloud sync. No ads, no analytics, no tracking.">
+<meta name="description" content="ScaleMyLife privacy policy: your data stays on your device unless you opt into cloud sync. No ads, no tracking cookies, anonymous visit counts only.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
 <style>
   body{max-width:680px;margin:0 auto;padding:28px 20px 60px;font:16px/1.65 Karla,system-ui,sans-serif;background:#12101f;color:#e8e4ff}
@@ -17,29 +17,35 @@
 <body>
 <p><a href="./">&larr; Back to ScaleMyLife</a></p>
 <h1>🏆 ScaleMyLife - Privacy Policy</h1>
-<p class="muted">Last updated: 16 November 2026</p>
+<p class="muted">Last updated: 21 November 2026</p>
 
-<p>ScaleMyLife is a personal habit and productivity game. The short version: <b>your data is yours, it stays on your device unless you opt into cloud sync, and we run no ads, no analytics and no tracking of any kind.</b></p>
+<p>ScaleMyLife is a personal habit and productivity game. The short version: <b>your data is yours, it stays on your device unless you opt into cloud sync, and we run no ads and no tracking cookies. We count anonymous visits to see whether the app is used, and nothing in that count can tell us who you are.</b></p>
 
 <h2>What the app stores, and where</h2>
-<p><b>On your device.</b> Everything you enter (quests, habits, journal entries, mood and sleep logs, focus sessions, character customization, settings) is saved in your browser's local storage. It never leaves your device unless you turn on cloud sync.</p>
+<p><b>On your device.</b> Everything you enter (quests, habits, journal entries, mood and sleep logs, focus sessions, character customization, settings) is saved in your browser's local storage. It never leaves your device unless you turn on cloud sync or chat with Sage, both described below.</p>
 <p><b>Cloud sync (optional).</b> If you create an account, your email address, a password hash and a copy of your game save are stored in our database (hosted by <a href="https://supabase.com" rel="noopener">Supabase</a>) so your progress follows you across devices. Your save is protected by row-level security: only your signed-in account can read it. Passwords are hashed with bcrypt; we never see or store them in plain text.</p>
-<p><b>Leaderboard and friends (optional).</b> Joining the leaderboard or enabling friends shares exactly six fields: your hero name, avatar, level, rank, weekly XP and best streak. Never your quests, habits, journal or any other content. Leaving the leaderboard deletes that row entirely.</p>
+<p><b>Leaderboard and friends (optional).</b> Joining the leaderboard or enabling friends shares a small public profile: your hero name, avatar, title, level, rank, weekly XP, best streak and ascension count, plus the friend code that lets friends find you. Never your quests, habits, journal or any other content. Leaving the leaderboard deletes that row entirely.</p>
 
 <p><b>Voice input (optional).</b> The microphone button in the Add sheet uses the speech recognition built into your browser. ScaleMyLife never receives or stores the audio: only the text your browser hands back appears in the box, and it is treated like anything else you type. Depending on the browser, the audio is sent to the browser maker's speech service to be turned into text (in Chrome, to Google). If you never tap the microphone, nothing is recorded, and typing or pasting does the same job without it.</p>
+
+<p><b>Chat with Sage (optional, needs an account).</b> When you send Sage a message, it goes to our server function on Supabase and on to <a href="https://www.anthropic.com" rel="noopener">Anthropic</a>, whose Claude model writes the reply. Each message carries what Sage needs to answer: your message and the last few lines of the chat, your hero's name, level and streak, and the titles of today's quests, habits and main quests. Anthropic processes this to write the reply under its API terms. We do not store the conversation: the only thing kept is how many messages you sent today, for the daily limit. The chat is not saved on your device either, and starts fresh each time you open the app. If you never open the chat, none of this is sent.</p>
+
+<p><b>Anonymous visit counts.</b> The site is hosted on <a href="https://vercel.com" rel="noopener">Vercel</a>, and we use its Web Analytics and Speed Insights to see how many people open the app and how fast it loads. They record which page was opened, the site you came from, your country and region, and your browser, operating system and device type. They set no third-party cookies. Visitors are counted with a hash of the request that is discarded after 24 hours, and none of it is linked to you, your account or your game save. Your quests, habits, journal and everything else you type never reach these tools.</p>
 
 <h2>What we don't do</h2>
 <ul>
 <li>No advertising, no ad networks.</li>
-<li>No analytics or telemetry - we cannot see how you use the app.</li>
-<li>No tracking cookies. The only browser storage used is what the game itself needs to function.</li>
+<li>No tracking cookies and no cross-site tracking. The only browser storage used is what the game itself needs to function.</li>
+<li>No content in the visit counts: they never include your quests, habits, journal or save.</li>
 <li>No selling, renting or sharing of data with anyone.</li>
 </ul>
 
 <h2>Third-party services</h2>
 <ul>
 <li><b>Supabase</b> - database and authentication, only if you enable cloud sync.</li>
+<li><b>Vercel</b> - hosts the app, and counts anonymous visits and page speed (see "Anonymous visit counts" above).</li>
 <li><b>Google Fonts</b> - loads the app's typefaces.</li>
+<li><b>Anthropic</b> - writes Sage's chat replies, only when you send Sage a message. See "Chat with Sage" above.</li>
 <li><b>Your browser's speech service</b> - only if you tap the microphone (in Chrome this is Google). See "Voice input" above.</li>
 <li><b>YouTube (privacy-enhanced mode)</b> - only if you choose focus music, the player is embedded from youtube-nocookie.com and only after you pick a station.</li>
 </ul>

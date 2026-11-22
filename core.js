@@ -1268,6 +1268,18 @@
     var m = state.settings && state.settings.onboard && state.settings.onboard.minutes;
     return m === 15 ? 3 : m === 60 ? 5 : 4;
   }
+  /* Where a good habit stands this week (Monday start). `pressing` is true
+     when it asks for today: a daily habit always does, a weekly one only once
+     the days left in the week are no more than the times still needed (a 3x
+     habit not done yet becomes pressing on Friday). The draft below and the
+     Habits today panel on the Today screen both read it, so the two never
+     disagree about what can wait. */
+  function habitWeek(h, now) {
+    now = now || new Date();
+    var done = actions.weekCount(h, todayKey(now)), need = h.target - done;
+    var daysLeft = 7 - (now.getDay() + 6) % 7;   // today included
+    return { done: done, need: need, daysLeft: daysLeft, pressing: h.target >= 7 || (need > 0 && need >= daysLeft) };
+  }
   /* The Daily Draft: the short list Sage proposes for today, most pressing
      first. Each candidate gets a score and a reason:
        100+  overdue          90  due today        70  next step of a main quest
@@ -1319,16 +1331,15 @@
           score: age >= 7 ? 30 : 20, why: age >= 7 ? 'Waiting ' + age + ' days' : 'On your list' });
       }
     });
-    var wdMon = (now.getDay() + 6) % 7, daysLeft = 7 - wdMon;   // days left this Monday-start week, today included
     (state.habits || []).forEach(function (h) {
       if (h.type !== 'good' || h.lastDoneOn === today) return;
       var ref = 'h:' + h.id, o = { kind: 'habit', id: h.id, title: h.title, diff: null, minutes: DRAFT_HABIT_MIN };
       if (h.target >= 7) { o.score = 45; o.why = h.streak > 0 ? 'Keeps a ' + h.streak + '-day streak' : 'Daily habit'; }
       else {
-        var doneWk = actions.weekCount(h, today), need = h.target - doneWk;
-        if (need <= 0) return;                     // this week's target is already met
-        o.score = need >= daysLeft ? 65 : 40;
-        o.why = need >= daysLeft ? 'Needed today to hit ' + h.target + ' this week' : doneWk + ' of ' + h.target + ' this week';
+        var wk = habitWeek(h, now);
+        if (wk.need <= 0) return;                  // this week's target is already met
+        o.score = wk.pressing ? 65 : 40;
+        o.why = wk.pressing ? 'Needed today to hit ' + h.target + ' this week' : wk.done + ' of ' + h.target + ' this week';
       }
       add(ref, o);
     });
@@ -2170,6 +2181,148 @@
   /* ---------- persistence + migration ---------- */
   var KEY = 'liferpg.save.v1';
 
+  /* ---------- safe ids ----------
+     app.js pastes ids straight into inline handlers, for example
+     onclick="doQuest('<id>')", and into attributes such as value="<id>".
+     esc() makes text safe as HTML, but not inside a JS string, so an id is
+     only safe there if it cannot hold anything that ends the string or the
+     attribute. Every id the engine makes comes from uid() above (lowercase
+     letters and digits), so a real save always passes this check.
+
+     SAFE_ID: 1 to 64 letters, digits, "_" or "-", and nothing else. The ^ and
+     $ make the whole id match, not just its start.
+     What breaks if you loosen it: allow a quote, a backslash, "<", ">", a
+     space, "(" or ";" and a crafted save file (Settings > Import) or a
+     tampered cloud save can run its own code the moment a button is tapped.
+     The quote ends doQuest('...') early and whatever follows runs as script,
+     with full access to the player's save and signed-in account. */
+  var SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+  function safeId(v) { return typeof v === 'string' && SAFE_ID.test(v); }
+
+  /* Called from migrate(), so it runs on every save that is loaded, imported,
+     restored or pulled from the cloud. Gives every quest, habit, main quest,
+     life area and reward whose id fails SAFE_ID a fresh uid(), then points
+     every link at the new id so nothing comes apart: a step stays under its
+     main quest, a habit keeps its life area, today's plan keeps its quest.
+     A link that is itself unsafe and matches nothing is dropped. A safe link
+     to something deleted is left alone: the app already ignores those, and
+     changing them would rewrite saves nobody tampered with. */
+  function fixIds(s) {
+    /* old id -> new id, one table per list. Object.create(null) has no
+       built-in keys, so an id such as "constructor" can't match by accident. */
+    function renew(list) {
+      var map = Object.create(null);
+      if (!Array.isArray(list)) return map;
+      list.forEach(function (it) {
+        if (!it || typeof it !== 'object' || safeId(it.id)) return;
+        var fresh = uid(), old = String(it.id);
+        if (!(old in map)) map[old] = fresh;
+        it.id = fresh;
+      });
+      return map;
+    }
+    /* null/undefined means "no link" and stays as it is; a safe link stays;
+       an unsafe one follows its item to the new id, or becomes null */
+    function relink(ref, map) {
+      if (ref == null || safeId(ref)) return ref;
+      var old = String(ref);
+      return old in map ? map[old] : null;
+    }
+    function each(list, fn) { if (Array.isArray(list)) list.forEach(function (x) { if (x && typeof x === 'object') fn(x); }); }
+
+    var skills = renew(s.skills), goals = renew(s.goals), quests = renew(s.quests), habits = renew(s.habits);
+    renew(s.shop);   // rewards: nothing links to them by id
+    each(s.quests, function (q) {
+      if ('skillId' in q) q.skillId = relink(q.skillId, skills);
+      if ('main' in q) q.main = relink(q.main, goals);   // a step's main quest
+    });
+    each(s.habits, function (h) { if ('skillId' in h) h.skillId = relink(h.skillId, skills); });
+    each(s.log, function (e) {   // the focus chart groups minutes by life area
+      if (!('sk' in e)) return;
+      var sk = relink(e.sk, skills);
+      if (sk == null) delete e.sk; else e.sk = sk;
+    });
+    if (s.activeFocus && typeof s.activeFocus === 'object') {
+      var f = s.activeFocus;
+      if ('skillId' in f) f.skillId = relink(f.skillId, skills);
+      if ('goalId' in f) f.goalId = relink(f.goalId, goals);
+      if ('questId' in f) f.questId = relink(f.questId, quests);
+    }
+    /* today's plan holds 'q:<quest id>' and 'h:<habit id>' (see setPlan).
+       Anything else is dropped: setPlan never makes it. */
+    if (s.plan && Array.isArray(s.plan.refs)) {
+      s.plan.refs = s.plan.refs.reduce(function (keep, ref) {
+        var kind = ref.slice(0, 2), id = ref.slice(2);
+        var map = kind === 'q:' ? quests : kind === 'h:' ? habits : null;
+        if (!map) return keep;
+        if (safeId(id)) keep.push(ref);
+        else if (id in map) keep.push(kind + map[id]);
+        return keep;
+      }, []);
+    }
+  }
+
+  /* ---------- safe numbers and dates ----------
+     app.js prints many save fields without esc() because they "can only be"
+     numbers or dates: level, coins, the streak pill, habit slips, log XP and
+     coins, a quest's due label, the day headers of the log and the journal,
+     sleep stars, achievement dates. A crafted save (Settings > Import) can put
+     markup in any of them, so migrate makes that promise true:
+     - a number that is not a real number gets its fresh-hero value;
+     - a quest due date that is not YYYY-MM-DD is cleared;
+     - a record that means nothing without its number or date (a log line, a
+       journal or sleep entry, an achievement, a streak-repair offer, a running
+       focus session) is dropped. An achievement unlocks again when earned.
+     Only fields that are there and wrong are touched, so a real save comes
+     out exactly as it went in.
+
+     What breaks if you loosen it: take a field out of these checks, or let DAY
+     accept anything but digits and dashes, and that field can carry an
+     <img onerror=...> into the page, which runs as script with the player's
+     save and signed-in account. If you make app.js print a new save number or
+     date without esc(), add it here. */
+  var DAY = /^\d{4}-\d{2}-\d{2}$/;
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function isDay(v) { return typeof v === 'string' && DAY.test(v); }
+
+  function fixFields(s) {
+    function each(list, fn) { if (Array.isArray(list)) list.forEach(function (x) { if (x && typeof x === 'object') fn(x); }); }
+    function isObj(v) { return !!v && typeof v === 'object'; }
+    // o has the field k, and it is not a real number
+    function badNum(o, k) { return k in o && !isNum(o[k]); }
+    function num(o, k, fresh) { if (isObj(o) && badNum(o, k)) o[k] = fresh; }
+
+    ['level', 'xp', 'coins', 'hp', 'streak', 'bestStreak'].forEach(function (k) {
+      num(s.hero, k, { level: 1, hp: MAX_HP }[k] || 0);
+    });
+    /* boons: boon id -> how many owned, printed as "owned ×N" when ascending */
+    if (isObj(s.hero) && isObj(s.hero.boons)) Object.keys(s.hero.boons).forEach(function (k) {
+      if (!isNum(s.hero.boons[k])) delete s.hero.boons[k];
+    });
+    each(s.skills, function (k) { num(k, 'xp', 0); num(k, 'level', 1); });
+    each(s.habits, function (h) { num(h, 'streak', 0); num(h, 'slips', 0); });
+    each(s.shop, function (it) { num(it, 'price', 10); num(it, 'hp', 0); });
+    each(s.quests, function (q) {
+      if (q.due != null && !isDay(q.due)) q.due = null;
+      /* the difficulty goes into a CSS class and picks the payout */
+      if ('diff' in q && !Object.prototype.hasOwnProperty.call(DIFF, q.diff)) q.diff = 'normal';
+    });
+    each(s.log, function (e) { num(e, 'xp', 0); num(e, 'coins', 0); num(e, 'hp', 0); });
+    if (Array.isArray(s.log)) s.log = s.log.filter(function (e) { return !isObj(e) || !('day' in e) || isDay(e.day); });
+    if (Array.isArray(s.achievements)) s.achievements = s.achievements.filter(function (a) { return isObj(a) && (!('on' in a) || isDay(a.on)); });
+    /* journal and sleep are keyed by day: the key itself is printed */
+    if (isObj(s.journal)) Object.keys(s.journal).forEach(function (d) { if (!isDay(d)) delete s.journal[d]; });
+    if (isObj(s.sleep)) Object.keys(s.sleep).forEach(function (d) {
+      var e = s.sleep[d];
+      if (!isDay(d) || !isObj(e) || badNum(e, 'hours') || badNum(e, 'quality')) delete s.sleep[d];
+    });
+    var r = s.redemption;
+    if (r && (!isObj(r) || badNum(r, 'streak') || ('on' in r && !isDay(r.on)))) s.redemption = null;
+    var f = s.activeFocus;
+    if (f && (!isObj(f) || ['work', 'brk', 'cycles', 'workedMs', 'phaseEnd'].some(function (k) { return badNum(f, k); }) ||
+        (f.pausedAt != null && !isNum(f.pausedAt)))) s.activeFocus = null;
+  }
+
   function migrate(s) {
     if (!s.goals) s.goals = [];
     if (!s.sleep) s.sleep = {};
@@ -2239,6 +2392,8 @@
     var iconFix = { '⚒️': '🔨', '🗣️': '🤝', '💰': '💎' };
     (s.skills || []).forEach(function (k) { if (iconFix[k.icon]) k.icon = iconFix[k.icon]; });
     s.log = (s.log || []).map(function (e) { if (typeof e.min !== 'number') e.min = 0; return e; });
+    fixFields(s);   // numbers and dates app.js prints raw: see DAY for why
+    fixIds(s);   // last, once every list above exists: see SAFE_ID for why
     s.schema = SCHEMA;
     return s;
   }
@@ -2333,7 +2488,7 @@
     BOONS: BOONS, FRAMES: FRAMES, PATHS: PATHS, ASCEND_LEVEL: ASCEND_LEVEL, POTION_XP_MULT: POTION_XP_MULT,
     uid: uid, todayKey: todayKey, clamp: clamp, parseTask: parseTask,
     parseDump: parseDump, captureItem: captureItem, captureDue: captureDue, CAPTURE_KINDS: CAPTURE_KINDS, PACKS: PACKS, packById: packById, buildPack: buildPack,
-    dailyDraft: dailyDraft, debrief: debrief, suggestBoss: suggestBoss, chronicle: chronicle, PLAN_XP: PLAN_XP, PLAN_COINS: PLAN_COINS,
+    dailyDraft: dailyDraft, habitWeek: habitWeek, debrief: debrief, suggestBoss: suggestBoss, chronicle: chronicle, PLAN_XP: PLAN_XP, PLAN_COINS: PLAN_COINS,
     STAGES: STAGES, stageById: stageById, staged: staged, isUnlocked: isUnlocked, checkUnlocks: checkUnlocks, unlockAll: unlockAll, nextUnlock: nextUnlock,
     xpForLevel: xpForLevel, skillXpForLevel: skillXpForLevel, rankFor: rankFor, nextRank: nextRank, streakMult: streakMult, buildICS: buildICS,
     progressKey: progressKey, compareProgress: compareProgress,
