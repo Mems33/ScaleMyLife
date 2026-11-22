@@ -79,6 +79,9 @@
     setKey: function (k) { var s = store(); if (s) { if (k) s.setItem(KEY_LS, k.trim()); else s.removeItem(KEY_LS); } },
     hasBakedKey: function () { return !!cfg.key; },
     session: getSession,
+    /* put a session back exactly as it was (or none). app.js uses it to set a
+       link's session aside until the player accepts it: see handleRecoveryHash */
+    restoreSession: function (sess) { setSession(sess || null); },
 
     signUp: function (email, password) {
       return req(cfg.url + '/auth/v1/signup', { method: 'POST', headers: authHeaders(),
