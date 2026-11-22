@@ -701,7 +701,7 @@ function questRow(q){
     var lbl=dueLabel(q.due,today);
     if(lbl==='late') chip='<span class="chip late">Late</span>';
     else if(lbl==='due today') chip='<span class="chip due">Due today</span>';
-    else bits.push(lbl);
+    else bits.push(esc(lbl));   // an unparseable date comes back as-is: migrate clears bad ones, esc() is the second guard
   }
   /* a step drawn on Today (the plan, Now) says which main quest it belongs to;
      on the Quests tab steps live inside their goal card and never come here.
@@ -2074,7 +2074,8 @@ function renderStats(){
         if(e.coins<0) dd.push('<span class="c">'+e.coins+'💰</span>');
         if(e.hp>0) dd.push('<span class="hg">+'+e.hp+'hp</span>');
         if(e.hp<0) dd.push('<span class="h">'+e.hp+'hp</span>');
-        return '<div class="logrow"><span class="tm">'+tm+'</span><span>'+e.icon+'</span>'+
+        /* the icon is text from the save like the line itself, so it is escaped too */
+        return '<div class="logrow"><span class="tm">'+tm+'</span><span>'+esc(e.icon)+'</span>'+
           '<span>'+esc(e.text)+'</span><span class="delta">'+dd.join(' ')+'</span></div>';
       }).join('');
   }).join('')||'<div class="empty">Nothing logged yet. Clear a quest and it lands here.</div>';
@@ -3408,7 +3409,7 @@ function editQuestModal(id){
     '<div class="flabel">Life area</div><select id="eqSkill">'+skillOptions(q.skillId)+'</select>'+
     (q.recurring
       ? '<div class="flabel">Repeat on <span class="hint">(none = every day)</span></div><div class="daysrow" id="editDaysRow">'+DOW.map(function(dn,idx){return '<button type="button" class="dow'+(editDays.indexOf(idx)>=0?' on':'')+'" onclick="toggleEditDow('+idx+')">'+dn[0]+'</button>';}).join('')+'</div>'
-      : '<div class="flabel">Due date</div><input type="date" id="eqDue" value="'+(q.due||'')+'">')+
+      : '<div class="flabel">Due date</div><input type="date" id="eqDue" value="'+esc(q.due||'')+'">')+
     '<div class="setrow" style="margin-top:14px"><button class="btn go" onclick="saveEditQuest(\''+id+'\')">Save</button>'+
     '<button class="btn" onclick="closeModal()">Cancel</button></div></div>';
   $('#eqTitle').focus();

@@ -2262,6 +2262,63 @@
     }
   }
 
+  /* ---------- safe numbers and dates ----------
+     app.js prints many save fields without esc() because they "can only be"
+     numbers or dates: level, coins, the streak pill, habit slips, log XP and
+     coins, a quest's due label, the day headers of the log and the journal,
+     sleep stars, achievement dates. A crafted save (Settings > Import) can put
+     markup in any of them, so migrate makes that promise true:
+     - a number that is not a real number gets its fresh-hero value;
+     - a quest due date that is not YYYY-MM-DD is cleared;
+     - a record that means nothing without its number or date (a log line, a
+       journal or sleep entry, an achievement, a streak-repair offer, a running
+       focus session) is dropped. An achievement unlocks again when earned.
+     Only fields that are there and wrong are touched, so a real save comes
+     out exactly as it went in.
+
+     What breaks if you loosen it: take a field out of these checks, or let DAY
+     accept anything but digits and dashes, and that field can carry an
+     <img onerror=...> into the page, which runs as script with the player's
+     save and signed-in account. If you make app.js print a new save number or
+     date without esc(), add it here. */
+  var DAY = /^\d{4}-\d{2}-\d{2}$/;
+  function isNum(v) { return typeof v === 'number' && isFinite(v); }
+  function isDay(v) { return typeof v === 'string' && DAY.test(v); }
+
+  function fixFields(s) {
+    function each(list, fn) { if (Array.isArray(list)) list.forEach(function (x) { if (x && typeof x === 'object') fn(x); }); }
+    function isObj(v) { return !!v && typeof v === 'object'; }
+    // o has the field k, and it is not a real number
+    function badNum(o, k) { return k in o && !isNum(o[k]); }
+    function num(o, k, fresh) { if (isObj(o) && badNum(o, k)) o[k] = fresh; }
+
+    ['level', 'xp', 'coins', 'hp', 'streak', 'bestStreak'].forEach(function (k) {
+      num(s.hero, k, { level: 1, hp: MAX_HP }[k] || 0);
+    });
+    each(s.skills, function (k) { num(k, 'xp', 0); num(k, 'level', 1); });
+    each(s.habits, function (h) { num(h, 'streak', 0); num(h, 'slips', 0); });
+    each(s.shop, function (it) { num(it, 'price', 10); num(it, 'hp', 0); });
+    each(s.quests, function (q) {
+      if (q.due != null && !isDay(q.due)) q.due = null;
+      /* the difficulty goes into a CSS class and picks the payout */
+      if ('diff' in q && !Object.prototype.hasOwnProperty.call(DIFF, q.diff)) q.diff = 'normal';
+    });
+    each(s.log, function (e) { num(e, 'xp', 0); num(e, 'coins', 0); num(e, 'hp', 0); });
+    if (Array.isArray(s.log)) s.log = s.log.filter(function (e) { return !isObj(e) || !('day' in e) || isDay(e.day); });
+    if (Array.isArray(s.achievements)) s.achievements = s.achievements.filter(function (a) { return isObj(a) && (!('on' in a) || isDay(a.on)); });
+    /* journal and sleep are keyed by day: the key itself is printed */
+    if (isObj(s.journal)) Object.keys(s.journal).forEach(function (d) { if (!isDay(d)) delete s.journal[d]; });
+    if (isObj(s.sleep)) Object.keys(s.sleep).forEach(function (d) {
+      var e = s.sleep[d];
+      if (!isDay(d) || !isObj(e) || badNum(e, 'hours') || badNum(e, 'quality')) delete s.sleep[d];
+    });
+    var r = s.redemption;
+    if (r && (!isObj(r) || badNum(r, 'streak') || ('on' in r && !isDay(r.on)))) s.redemption = null;
+    var f = s.activeFocus;
+    if (f && (!isObj(f) || ['work', 'brk', 'cycles', 'workedMs', 'phaseEnd'].some(function (k) { return badNum(f, k); }) ||
+        (f.pausedAt != null && !isNum(f.pausedAt)))) s.activeFocus = null;
+  }
+
   function migrate(s) {
     if (!s.goals) s.goals = [];
     if (!s.sleep) s.sleep = {};
@@ -2331,6 +2388,7 @@
     var iconFix = { '⚒️': '🔨', '🗣️': '🤝', '💰': '💎' };
     (s.skills || []).forEach(function (k) { if (iconFix[k.icon]) k.icon = iconFix[k.icon]; });
     s.log = (s.log || []).map(function (e) { if (typeof e.min !== 'number') e.min = 0; return e; });
+    fixFields(s);   // numbers and dates app.js prints raw: see DAY for why
     fixIds(s);   // last, once every list above exists: see SAFE_ID for why
     s.schema = SCHEMA;
     return s;
