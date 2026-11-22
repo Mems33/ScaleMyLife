@@ -137,6 +137,16 @@
     { id: 'mended',      icon: '🕯️', name: 'Keeper of the Flame', desc: 'Mend a broken streak',      cond: function (s) { return (s.counters.mends || 0) >= 1; } },
     { id: 'phoenix',     icon: '🔥', name: 'Phoenix',          desc: 'Rise from a defeat',            cond: function (s) { return (s.counters.comebacks || 0) >= 1; } }
   ];
+  /* Titles are earned, never typed: the hero wears the name of the most
+     prestigious achievement they hold (bestTitle below), so a title on the
+     leaderboard always means something. This list is that ranking, lowest
+     first. An achievement missing from it still gives a title, ranked below
+     all of these. Reordering it changes what every hero wears on their next
+     load (migrate recomputes it). */
+  var TITLE_RANK = ['first_blood', 'journal_7', 'sleep_7', 'spender_10', 'chest_7', 'level_5',
+    'quest_25', 'rich_500', 'streak_7', 'focus_5h', 'mended', 'phoenix', 'clean_14', 'boss_1',
+    'level_10', 'skill_master', 'quest_100', 'streak_30', 'focus_25h', 'boss_5', 'skill_sage',
+    'level_25', 'ascend_1', 'legend'];
 
   /* ---------- helpers ---------- */
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -990,6 +1000,18 @@
     return { buff: true, mult: POTION_XP_MULT };
   }
 
+  /* the name of the best achievement this hero holds, '' before the first */
+  function bestTitle(state) {
+    var best = null, bestRank = -2;
+    (state.achievements || []).forEach(function (u) {
+      var a = ACHIEVEMENTS.find(function (x) { return x.id === u.id; });
+      if (!a) return;
+      var r = TITLE_RANK.indexOf(a.id);
+      if (r >= bestRank) { best = a; bestRank = r; }   // >=: on a tie the later one wins
+    });
+    return best ? best.name : '';
+  }
+
   function checkAchievements(state) {
     var fresh = [];
     ACHIEVEMENTS.forEach(function (a) {
@@ -1002,6 +1024,7 @@
         fresh.push(a);
       }
     });
+    if (fresh.length) state.hero.title = bestTitle(state);
     return fresh;
   }
 
@@ -2371,7 +2394,6 @@
     if (['calm', 'classic', 'hardcore'].indexOf(s.settings.intensity) < 0) s.settings.intensity = s.settings.hardcore ? 'hardcore' : 'classic';
     if (!Array.isArray(s.settings.restDays)) s.settings.restDays = [];
     if (typeof s.settings.reminderHour !== 'number' || s.settings.reminderHour < 0 || s.settings.reminderHour > 23) s.settings.reminderHour = 18;
-    if (typeof s.hero.title !== 'string') s.hero.title = '';
     if (typeof s.hero.shields !== 'number') s.hero.shields = 0;
     if (!('woundedOn' in s.hero)) s.hero.woundedOn = null;
     (s.habits || []).forEach(function (h) {
@@ -2394,6 +2416,10 @@
     s.log = (s.log || []).map(function (e) { if (typeof e.min !== 'number') e.min = 0; return e; });
     fixFields(s);   // numbers and dates app.js prints raw: see DAY for why
     fixIds(s);   // last, once every list above exists: see SAFE_ID for why
+    /* titles are earned (bestTitle): a typed or outdated one is replaced.
+       After fixFields, which may drop a broken achievement, so a second
+       migrate gives the same title. */
+    s.hero.title = bestTitle(s);
     s.schema = SCHEMA;
     return s;
   }
@@ -2497,7 +2523,7 @@
     buyInfo: buyInfo, buyPrice: buyPrice, buyCount: buyCount,
     newState: newState, seed: seed, seedPreset: seedPreset, dailyReset: dailyReset, migrate: migrate,
     grant: grant, damage: damage, ascend: ascend, rise: rise, usePotion: usePotion, addLog: addLog,
-    checkAchievements: checkAchievements, weekStats: weekStats, weeklyReview: weeklyReview,
+    checkAchievements: checkAchievements, bestTitle: bestTitle, TITLE_RANK: TITLE_RANK, weekStats: weekStats, weeklyReview: weeklyReview,
     insights: insights, metricsByDay: metricsByDay, questActiveOn: questActiveOn, focusByDay: focusByDay,
     heatmap: heatmap, bossTrophies: bossTrophies, briefing: briefing,
     actions: actions, save: save, load: load

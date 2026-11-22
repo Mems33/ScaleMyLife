@@ -2106,3 +2106,78 @@ details.panel>summary{min-height:44px}
   background:linear-gradient(90deg,var(--brand-soft),transparent),color-mix(in srgb,var(--panel) 86%,transparent)}
 .nudgebar.installcard>.i{flex:none;margin-top:2px}
 .nudgebar.installcard .grow{white-space:normal;overflow:visible;line-height:1.4}
+
+/* ========== look A: hero banner and coloured tabs (Nov 2026) ========== */
+/* Every tab has its own colour, kept on its icon and label, and the open tab
+   fills with it. Light themes get darker shades so the labels stay readable.
+   The ids (#hud, #tabs) are there to win over the older .hud/.tabs rules. */
+#tabs button.t-today{--tc:#e8a07a} #tabs button.t-quests{--tc:#7fb2ee} #tabs button.t-habits{--tc:#8fd18a}
+#tabs button.t-market{--tc:#e5c25a} #tabs button.t-stats{--tc:#b9a6f0}
+body.light #tabs button.t-today{--tc:#b8602f} body.light #tabs button.t-quests{--tc:#2f6db3} body.light #tabs button.t-habits{--tc:#3c7f36}
+body.light #tabs button.t-market{--tc:#946d08} body.light #tabs button.t-stats{--tc:#6a54c0}
+#tabs button{color:var(--tc)}
+#tabs button .tl{color:var(--tc)}
+#tabs button.on,#tabs button.home.on{background:var(--tc);border-color:var(--tc);color:#1c120c;box-shadow:0 0 14px color-mix(in srgb,var(--tc) 35%,transparent)}
+#tabs button.on .tl,#tabs button.on .ti{color:#1c120c}
+#tabs button.locked{color:color-mix(in srgb,var(--tc) 55%,var(--text-2))}
+
+/* the hero banner: a bigger card, the avatar in front, the earned title
+   under the name, a thick XP bar */
+#hud{padding:14px 16px;border-color:color-mix(in srgb,var(--brand) 45%,var(--border));
+  background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 9%,var(--surface-1)),var(--surface-1))}
+#hud .hdrow{gap:14px}
+#hud .avatar{width:60px;height:60px;border-radius:14px;border-width:2px}
+#hud .name{font-size:19px}
+#hud .htitle{font:600 13px/1.3 var(--body);color:var(--brand);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hud .htitle .none{color:var(--text-2);font-weight:500}
+#hud .bars{margin-top:12px}
+#hud .bar.xp{height:22px}
+#hud .bar.xp b{font-size:12px}
+@media (max-width:720px){
+  #hud{padding:12px 12px}
+  #hud .avatar{width:52px;height:52px}
+  #hud .name{font-size:17px}
+  #hud .bar.xp{height:20px}
+}
+
+/* add rows that say what they add (addForm with an explanation) */
+details.addform.big{margin-top:10px}
+details.addform.big>summary{min-height:56px;padding:10px 12px;gap:12px;border:1.5px dashed color-mix(in srgb,var(--brand) 55%,var(--border));
+  border-radius:12px;color:var(--ink);background:color-mix(in srgb,var(--brand) 6%,transparent)}
+details.addform.big>summary:hover,details.addform.big[open]>summary{background:color-mix(in srgb,var(--brand) 12%,transparent)}
+details.addform.big .afplus{flex:none;width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  background:var(--brand);color:#1c120c}
+details.addform.big .aftext{display:flex;flex-direction:column;min-width:0}
+details.addform.big .aftext b{font:700 15px/1.3 var(--font-display)}
+details.addform.big .aftext small{font:500 12.5px/1.35 var(--body);color:var(--text-2)}
+
+/* Focus timer and Rewards: short numbered steps */
+.focussteps,.howsteps{margin:4px 0 12px;padding:0;list-style:none;counter-reset:st;display:grid;gap:8px}
+.focussteps li,.howsteps li{counter-increment:st;position:relative;padding-left:32px;font-size:13.5px;line-height:1.4;color:var(--text-2);text-align:left}
+.focussteps li::before,.howsteps li::before{content:counter(st);position:absolute;left:0;top:0;width:22px;height:22px;border-radius:50%;
+  background:color-mix(in srgb,var(--brand) 22%,transparent);color:var(--brand);font:700 12px/22px var(--mono);text-align:center}
+.focussteps b,.howsteps b{color:var(--ink)}
+.howsteps{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:12px}
+.howsteps li{padding:30px 0 0;text-align:center}
+.howsteps li::before{left:50%;transform:translateX(-50%)}
+.howsteps b{display:block;font-size:13px}
+.howsteps span{display:block;font-size:12px}
+
+/* life areas: what each is fed by */
+.lifeareas .lahint{margin:-2px 0 10px}
+.skillcard .skmeta{font-size:11.5px;color:var(--text-2);margin-top:5px}
+
+/* adventure log: week headings, one closed line per day */
+.logweek{display:flex;justify-content:space-between;align-items:baseline;font:700 12px var(--font-display);letter-spacing:.06em;
+  text-transform:uppercase;color:var(--text-2);margin:16px 2px 6px}
+.logweek:first-child{margin-top:4px}
+.logweek .lwxp{font:600 12px var(--mono);color:var(--ok);letter-spacing:0;text-transform:none}
+details.logfold{margin:0 0 6px}
+details.logfold>summary{gap:8px}
+details.logfold .lfname{font-weight:700;color:var(--ink)}
+details.logfold .lfmeta{margin-left:auto;font-size:12px;color:var(--text-2);white-space:nowrap}
+details.logfold .logrow{padding-left:8px;padding-right:8px}
+#hud .hlv{display:flex;align-items:center;gap:8px;margin-top:4px;min-width:0}
+#hud .hlv .lvl{font-size:15px;line-height:1}
+#hud .hlv .hrank{font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#hud .side{flex-direction:column;align-items:flex-end;gap:6px;align-self:flex-start}
