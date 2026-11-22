@@ -1585,5 +1585,22 @@ section('Release hygiene: service-worker cache freshness');
   ok(typeof RPG.weekStats(m).tot.xp === 'number' && typeof RPG.weekStats(bad).tot.xp === 'string', 'weekly totals add up as numbers again (before migrate, the payload turned them into text)');
 })();
 
+console.log('\nEarned titles (bestTitle, TITLE_RANK)');
+(function () {
+  var s = RPG.migrate(RPG.newState('Titled'));
+  ok(s.hero.title === '' && RPG.bestTitle(s) === '', 'a new hero has no title');
+  s.achievements.push({ id: 'first_blood', on: RPG.todayKey() });
+  ok(RPG.bestTitle(s) === 'First Blood', 'the first achievement gives its name as the title');
+  s.achievements.push({ id: 'boss_1', on: RPG.todayKey() }, { id: 'journal_7', on: RPG.todayKey() });
+  ok(RPG.bestTitle(s) === 'Dragonheart', 'the most prestigious one wins, whatever order they were earned in');
+  ok(RPG.TITLE_RANK.every(function (id) { return RPG.ACHIEVEMENTS.some(function (a) { return a.id === id; }); }), 'every ranked title is a real achievement');
+  var c = RPG.migrate(RPG.newState('Checker'));
+  c.counters.quests = 1;
+  var fresh = RPG.checkAchievements(c);
+  ok(fresh.some(function (a) { return a.id === 'first_blood'; }) && c.hero.title === 'First Blood', 'earning an achievement puts the title on by itself');
+  c.hero.title = 'Typed by hand';
+  ok(RPG.migrate(JSON.parse(JSON.stringify(c))).hero.title === 'First Blood', 'migrate replaces a typed title with the earned one');
+})();
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed ? 1 : 0);

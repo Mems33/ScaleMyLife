@@ -168,7 +168,9 @@ setTimeout(async function () {
   console.log('\nAdventure log (in stats tab)');
   w.go('stats');
   var logText = d.querySelector('#view').textContent;
-  ok(logText.indexOf('TODAY') >= 0, 'log grouped by day');
+  var todayFold = [].filter.call(d.querySelectorAll('#view details.logfold'), function (f) { return f.querySelector('.lfname').textContent === 'Today'; })[0];
+  ok(d.querySelector('#view .logweek') !== null && d.querySelector('#view .logweek').textContent.indexOf('This week') >= 0 && todayFold && !todayFold.open, 'log folded by week, with today as one closed line');
+  ok(todayFold && /\d+ entr(y|ies)/.test(todayFold.querySelector('.lfmeta').textContent), 'the closed day line says how many entries it holds');
   ok(logText.indexOf('Test the app') >= 0, 'quest completion in adventure log');
   ok(logText.indexOf('Bought') >= 0, 'purchase in adventure log');
 
@@ -300,7 +302,7 @@ setTimeout(async function () {
 
   console.log('\nProgress dashboard (revamp 8)');
   var heroCard = d.querySelector('#view .panel.herocard');
-  ok(heroCard !== null && heroCard.querySelector('.herotitle[onclick*="openTitlePicker"]') !== null, 'the hero card renders on Progress with the title picker');
+  ok(heroCard !== null && heroCard.querySelector('.herotitle') !== null && heroCard.querySelector('.herotitle[onclick]') === null, 'the hero card shows the earned title, with nothing to pick');
   ok(heroCard !== null && heroCard.querySelector('[onclick*="openCharacter"]') !== null, 'the hero card offers Customize');
   ok(heroCard !== null && heroCard.querySelector('.lvbig') !== null && heroCard.querySelector('.rank[role="button"]') !== null, 'big level number and rank chip on the card');
   ok(heroCard !== null && heroCard.querySelector('.ranknext[onclick]') !== null && heroCard.textContent.indexOf('HP') >= 0, 'rank progress button and the HP line come with it');
@@ -371,17 +373,17 @@ setTimeout(async function () {
   ok(d.querySelector('.avpick.svgrow button.t-legendary') !== null && d.querySelector('.avpick.svgrow button.t-rare') !== null, 'every hero card carries its rarity');
   ok(d.querySelector('#chCustomAv') === null && d.querySelector('.avpick.scroll') === null, 'no emoji grid and no typed-emoji field');
   d.querySelector('#chName').value = 'Mehmet';
-  d.querySelector('#chTitle').value = 'Essay Slayer';
+  ok(d.querySelector('#chTitle') === null && d.querySelector('#tpCustom') === null, 'no title box: titles are earned, not typed');
   var mageBtn = d.querySelector('.avpick.svgrow button[aria-label="Mage"]');
   ok(mageBtn !== null && mageBtn.querySelector('svg.pxhero use') !== null, 'heroes are pixel portraits from the shared sprite');
-  mageBtn.click();   // re-renders the sheet, keeping the typed name and title
+  mageBtn.click();   // re-renders the sheet, keeping the typed name
   ok(d.querySelector('#chName').value === 'Mehmet', 'typed name survives the avatar pick');
   w.saveCharacter();
-  ok(w.state.hero.name === 'Mehmet' && w.state.hero.title === 'Essay Slayer' && w.state.hero.avatar === '@mage', 'name, title and hero saved');
-  ok(/pxhero/.test(w.avHtml('🚀')) && w.avHtml('🧙') === w.avHtml('@mage'), 'an emoji avatar from an older save is drawn as a hero (the wizard as the Mage)');
-  // the worn title moved from the header into the Hero sheet (openCharacter)
+  ok(w.state.hero.name === 'Mehmet' && w.state.hero.avatar === '@mage' && w.state.hero.title === w.RPG.bestTitle(w.state), 'name and hero saved; the title stays the earned one');
+  ok(w.PX.forEmoji('🫥') === null && /pxhero/.test(w.avHtml('🫥')) && w.avHtml('🧙') === w.avHtml('@mage'), 'an old emoji avatar with no picture is drawn as a hero (the wizard as the Mage)');
+  ok(!/pxhero/.test(w.avHtml('🐲')) && w.avHtml('🐲') !== w.avHtml('@samurai') && w.avHtml('🐉') === w.avHtml('🐲'), 'old dragon avatars draw as the dragon, not as the Samurai');
   w.openCharacter();
-  ok(d.querySelector('#modal').textContent.indexOf('Essay Slayer') >= 0, 'title shown in the Hero sheet');
+  ok(!w.state.hero.title || d.querySelector('#modal').textContent.indexOf(w.state.hero.title) >= 0, 'the earned title shows in the Hero sheet');
   w.setTheme('synthwave');
   ok(w.state.settings.theme === 'synthwave', 'theme persisted');
   ok(d.documentElement.style.getPropertyValue('--gold') === '#ff5fa2', 'theme CSS variables applied');
@@ -566,20 +568,18 @@ setTimeout(async function () {
   ok(ovl2 && ovl2.textContent.indexOf('BOSS SLAIN') >= 0, 'kill screen shows');
   w.closeOverlay();
 
-  console.log('\nTitle unlocks');
-  w.openCharacter();
-  ok(d.querySelector('.titlechips') !== null, 'unlocked title chips in character modal');
-  var chipBtn = d.querySelector('.titlechips button');
-  ok(!!chipBtn, 'at least one earned title available');
+  console.log('\nEarned titles');
   var dragon = w.state.achievements.some(function (u) { return u.id === 'boss_1'; });
-  ok(dragon && d.querySelector('.titlechips').textContent.indexOf('Dragonheart') >= 0, 'Dragonheart wearable after boss kill');
-  w.wearTitle('boss_1');
-  ok(d.querySelector('#chTitle').value === 'Dragonheart', 'tapping a chip fills the title');
-  w.saveCharacter();
-  ok(w.state.hero.title === 'Dragonheart', 'earned title equipped');
+  ok(dragon && w.state.hero.title !== '' && w.state.hero.title === w.RPG.bestTitle(w.state), 'the boss kill re-picked the title by itself');
+  var rankOf = function (id) { return w.RPG.TITLE_RANK.indexOf(id); };
+  var worn = w.RPG.ACHIEVEMENTS.filter(function (a) { return a.name === w.state.hero.title; })[0];
+  ok(worn && w.state.achievements.every(function (u) { return rankOf(u.id) <= rankOf(worn.id); }), 'the title is the most prestigious achievement held');
   w.openCharacter();
-  ok(d.querySelector('#modal').textContent.indexOf('Dragonheart') >= 0, 'title shows in the Hero sheet');
+  ok(d.querySelector('.titlechips') === null && d.querySelector('#modal').textContent.indexOf(w.state.hero.title) >= 0, 'the Hero sheet shows the earned title and offers no picker');
   w.closeModal();
+  var typed = JSON.parse(JSON.stringify(w.state)); typed.hero.title = 'Typed by hand';
+  ok(w.RPG.migrate(typed).hero.title === w.state.hero.title, 'a typed title from an older save gives way to the earned one');
+  ok(d.querySelector('#hud .htitle').textContent.indexOf(w.state.hero.title) >= 0, 'the hero banner shows the title under the name');
 
   console.log('\nPWA wiring');
   ok(d.querySelector('link[rel=manifest]') !== null, 'manifest linked');
@@ -814,7 +814,8 @@ setTimeout(async function () {
   console.log('\nAnti-binge economy (v4)');
   w.go('market');
   w.shopTab = 'market'; w.state.hero.coins = 100000; w.render();
-  ok(d.querySelector('#view').textContent.indexOf('Surge ON') >= 0, 'surge toggle shown, on by default');
+  ok(d.querySelector('#view').textContent.indexOf('Price surge on') >= 0 && d.querySelector('#view').textContent.indexOf('costs more') >= 0, 'price surge toggle shown, on by default, and explained in a line');
+  ok(d.querySelectorAll('#view .howsteps li').length === 3, 'Rewards opens with three steps on how it works');
   var gm = w.A.addShopItem(w.state, { title: 'Gaming binge', price: 60, tab: 'market' });
   w.render();
   w.buy(gm.id); // 1st
@@ -1255,7 +1256,7 @@ setTimeout(async function () {
   ok(d.querySelector('#fWork') === null, 'focus work/break inputs hidden until Custom is picked');
   w.focusMode = { work: 40, brk: 8, custom: true }; w.render();
   ok(d.querySelector('#fWork') !== null && d.querySelector('#fBrk') !== null, 'Custom reveals the work/break inputs');
-  ok(d.querySelector('#view').textContent.indexOf('at least 5 minutes') >= 0, 'focus notes the 5-minute minimum');
+  ok(d.querySelector('#view').textContent.indexOf('Nothing is paid under 5 minutes') >= 0 && d.querySelectorAll('#view .focussteps li').length === 3, 'Focus explains itself in three steps, with the 5-minute minimum');
   w.focusMode = { work: 50, brk: 10, custom: false };
   // study music: in-view note always offers a pop-out; the real player is docked & persistent
   w.state.settings.music = 'lofi';
@@ -1401,6 +1402,14 @@ setTimeout(async function () {
   w.toggleMascotSetting();
   ok(w.state.settings.mascot === true && d.querySelector('#mascot').style.display !== 'none', 'mascot returns when toggled back on');
   w.closeModal();
+
+  console.log('\nSage chat is switched off (SAGE_CHAT)');
+  w.localStorage.setItem('sml.cloud.session.v1', JSON.stringify({ access_token: 'off-tok', refresh_token: 'off-rt', user: { id: 'off-uid', email: 's@b.c' } }));
+  w.toggleMascot(true);
+  ok(w.SAGE_CHAT === false && d.querySelector('.mchat-entry') === null && d.querySelector('.mchat-lock') === null, 'with the chat off, the owl offers no chat even when signed in');
+  w.toggleMascot(false); w.localStorage.removeItem('sml.cloud.session.v1');
+  /* the chat code stays, so the sections below switch it on to keep it working */
+  w.SAGE_CHAT = true;
 
   console.log('\nSage Phase 2: real chat (signed-in only)');
   w.toggleMascot(true);
@@ -1686,6 +1695,8 @@ setTimeout(async function () {
   w.localStorage.removeItem('sml.cloud.session.v1');
   w.mascotChatLog = []; w.mascotChatBusy = false;
   w.toggleMascot(false);
+
+  w.SAGE_CHAT = false;
 
   console.log('\nAccessibility (v16)');
   ok(d.querySelector('#modal').getAttribute('role') === 'dialog' && d.querySelector('#modal').getAttribute('aria-modal') === 'true', 'modal exposes dialog semantics');
@@ -2334,7 +2345,8 @@ setTimeout(async function () {
     ok(d.querySelector('#modal').textContent.indexOf('Synced as') >= 0, 'and lands back in Settings, signed in');
     w.closeModal();
 
-    // the owl, signed out
+    // the owl, signed out (with the chat switched on, as it would be)
+    w.SAGE_CHAT = true;
     w.localStorage.removeItem(SESS);
     w.state.settings.mascot = true; w.toggleMascot(true);
     var lock = d.querySelector('.mchat-lock');
@@ -2344,7 +2356,7 @@ setTimeout(async function () {
     cloudSave = null;
     w.openAuth('signin'); fill('tester@example.com', 'pw123456'); w.authSubmit(); await tick();
     ok(!d.querySelector('#modal').classList.contains('show') && d.querySelector('#mChatInput') !== null, 'signing in from the owl opens the chat it promised');
-    w.toggleMascot(false);
+    w.toggleMascot(false); w.SAGE_CHAT = false;
 
     // email links: a stranger's link never syncs anything by itself
     w.localStorage.removeItem(SESS); w.localStorage.removeItem('sml.auth.pending');
@@ -2430,7 +2442,7 @@ setTimeout(async function () {
     // what the site runs, the privacy page says; the counter is server-only
     var priv = fs.readFileSync(path.join(__dirname, 'privacy.html'), 'utf8');
     ok(html.indexOf('/_vercel/insights/script.js') < 0 || (priv.indexOf('Web Analytics') >= 0 && priv.indexOf('Speed Insights') >= 0 && priv.indexOf('No analytics') < 0), 'the privacy page discloses the visit counts the site loads');
-    ok(priv.indexOf('Anthropic') >= 0, 'the privacy page says where Sage chat messages go');
+    ok((priv.indexOf('Anthropic') >= 0) === w.SAGE_CHAT, 'the privacy page mentions Anthropic exactly when Sage chat is on');
     var sageSql = fs.readFileSync(path.join(__dirname, 'supabase', 'sage.sql'), 'utf8');
     ok(/revoke execute on function public\.increment_sage_usage\(uuid, date\) from anon, authenticated;/.test(sageSql), 'sage.sql takes the chat counter away from anon and authenticated');
 
@@ -2546,6 +2558,39 @@ setTimeout(async function () {
     ok(w.state.hero.name === 'Ascender' && d.querySelector('#modal .boonpick') !== null, 'a hero at the ascension level opens the Ascend sheet');
     ok(d.querySelector('img.pwn') === null, 'and it prints no injected element from a boon count');
     w.logAll = false; w.achAll = false; w.closeModal();
+    w.state = keep; w.persist(); w.render();
+  })();
+
+  console.log('\nLook and clarity (round 3)');
+  (function () {
+    var keep = w.state;
+    // an older save (made before staged unlocks) now earns heroes by level too
+    var old = w.RPG.migrate(w.RPG.newState('Oldtimer', '@samurai'));
+    old.hero.level = 3;
+    w.state = old;
+    ok(!w.RPG.staged(old) && w.skinLocked('@knight') === false, 'older save: the free heroes stay open');
+    var high = Object.keys(w.SVG_AVATARS).filter(function (k) { return w.skinNeed(k) > 3; });
+    ok(high.length > 0 && high.filter(function (k) { return k !== '@samurai'; }).every(function (k) { return w.skinLocked(k); }), 'older save: heroes above its level are locked');
+    ok(w.skinNeed('@samurai') <= 3 || w.skinLocked('@samurai') === false, 'older save: the hero it already wears stays wearable');
+    w.state = w.RPG.seedPreset(w.RPG.newState('Clear', '🧙'), ['student']); w.persist();
+    // tabs: each one carries its own colour class
+    w.render();
+    ok(['today', 'quests', 'habits', 'market', 'stats'].every(function (id) { return d.querySelector('#tabs button.t-' + id) !== null; }), 'every tab carries its own colour class');
+    // the add rows say what they add
+    w.go('quests');
+    var adds = [].map.call(d.querySelectorAll('#view details.addform.big'), function (x) { return x.textContent; }).join('|');
+    ok(adds.indexOf('New main quest') >= 0 && adds.indexOf('split into steps') >= 0, 'New main quest says what a main quest is');
+    ok(adds.indexOf('New daily') >= 0 && adds.indexOf('Repeats every day') >= 0 && adds.indexOf('New side quest') >= 0 && adds.indexOf('one-off') >= 0, 'New daily and New side quest say what they are');
+    w.go('habits');
+    ok([].some.call(d.querySelectorAll('#view details.addform.big'), function (x) { return x.textContent.indexOf('New habit') >= 0 && x.textContent.indexOf('few times a week') >= 0; }), 'New habit says what a habit is');
+    // Focus timer is named for what it is
+    w.go('today');
+    ok([].some.call(d.querySelectorAll('.quick .qab'), function (b) { return b.textContent.indexOf('Focus timer') >= 0; }), 'the quick bar says Focus timer');
+    // life areas say what they are and what feeds each
+    w.go('stats');
+    ok(d.querySelector('.lifeareas .lahint') !== null && d.querySelector('.lifeareas .lahint').textContent.indexOf('Every quest and habit') >= 0, 'Life areas explain themselves in one line');
+    ok(d.querySelectorAll('.skillcard .skmeta').length === w.state.skills.length && /quest|habit|Nothing feeds it yet/.test(d.querySelector('.skillcard .skmeta').textContent), 'each life area says what feeds it');
+    ok(d.querySelector('.addskill').textContent.indexOf('Add a life area') >= 0, 'the add button says Add a life area');
     w.state = keep; w.persist(); w.render();
   })();
 
